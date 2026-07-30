@@ -377,7 +377,7 @@ if (-not $SkipGitCommit) {
     if (-not $SkipGitPush) {
         Write-Step "Subiendo codigo y tags a GitHub"
         Invoke-Checked -File 'git' -Arguments @('push') -WorkingDirectory $RootDir
-        Invoke-Checked -File 'git' -Arguments @('push', '--tags') -WorkingDirectory $RootDir
+        Invoke-Checked -File 'git' -Arguments @('push', 'origin', $tag) -WorkingDirectory $RootDir
     } else {
         Write-Warn "Git push saltado por parametro"
     }

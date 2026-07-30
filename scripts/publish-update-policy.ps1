@@ -30,8 +30,8 @@ $temp = Join-Path $env:TEMP "stblock-policy-$Version.json"
 $jsonPolicy = $policy | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText($temp, $jsonPolicy)
 
-$releaseExists = $true
-try { gh release view $Tag --repo $Repo | Out-Null } catch { $releaseExists = $false }
+gh release view $Tag --repo $Repo | Out-Null
+$releaseExists = ($LASTEXITCODE -eq 0)
 if (-not $releaseExists) {
     gh release create $Tag --repo $Repo --title "STBlock $Version" --notes $Notes
 }
