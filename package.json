@@ -1,0 +1,42 @@
+{
+    "name":  "stblock",
+    "description":  "STBlock - Programacion visual, electronica, robotica y creacion de juegos.",
+    "version":  "0.1.10",
+    "workspaces":  [
+                       "scratch-gui",
+                       "scratch-vm"
+                   ],
+    "scripts":  {
+                    "install:all":  "pnpm install \u0026\u0026 pnpm --filter scratch-gui run prepublish \u0026\u0026 pnpm --dir backend install",
+                    "start:gui":  "pnpm --filter scratch-gui start",
+                    "start:backend":  "pnpm --dir backend dev",
+                    "tauri":  "tauri",
+                    "dev":  "tauri dev",
+                    "build":  "tauri build",
+                    "build:installer":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\build-installer.ps1",
+                    "deploy:all":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Level recommended",
+                    "deploy:recommended":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Level recommended",
+                    "deploy:mandatory":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Level mandatory",
+                    "deploy:test":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Bump none -SkipInstallerBuild -SkipGitCommit -SkipGitPush -SkipReleasePublish",
+                    "deploy:web":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Bump none -SkipInstallerBuild -SkipGitCommit -SkipGitPush -SkipReleasePublish"
+                },
+    "devDependencies":  {
+                            "@tauri-apps/api":  "^2.11.1",
+                            "@tauri-apps/cli":  "^2.11.3",
+                            "autoprefixer":  "^10.5.0",
+                            "postcss-import":  "^16.1.1",
+                            "postcss-simple-vars":  "^7.0.1"
+                        },
+    "dependencies":  {
+                         "@tauri-apps/plugin-dialog":  "^2.7.1",
+                         "@tauri-apps/plugin-fs":  "^2.5.1",
+                         "events":  "^3.3.0",
+                         "react":  "^16.14.0",
+                         "react-dom":  "^16.14.0",
+                         "react-redux":  "^5.1.2",
+                         "redux":  "^3.7.2",
+                         "regenerator-runtime":  "^0.14.1",
+                         "@tauri-apps/plugin-updater":  "^2.9.0",
+                         "@tauri-apps/plugin-process":  "^2.3.0"
+                     }
+}

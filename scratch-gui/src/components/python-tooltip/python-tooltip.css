@@ -1,0 +1,241 @@
+/* Python Tooltip - Muestra equivalencia Python de bloques */
+
+.tooltip-container {
+    position: fixed;
+    z-index: 10000;
+    min-width: 300px;
+    max-width: 400px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2),
+                0 2px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    animation: tooltip-appear 0.2s ease-out;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+@keyframes tooltip-appear {
+    0% {
+        opacity: 0;
+        transform: translateY(-5px) scale(0.98);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Header */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.category-badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: white;
+}
+
+.title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #212529;
+}
+
+.close-button {
+    background: transparent;
+    border: none;
+    font-size: 20px;
+    color: #868e96;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.close-button:hover {
+    color: #212529;
+}
+
+/* Código Python */
+.python-code {
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #19663d 0%, #00b359 100%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.python-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.code {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: #ffffff;
+    background: rgba(0, 0, 0, 0.15);
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+
+/* Descripción */
+.description {
+    padding: 12px 14px;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #495057;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* Parámetros */
+.params {
+    padding: 10px 14px;
+    background: #f8f9fa;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.params-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.params-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.param-item {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 12px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+
+.param-item:last-child {
+    margin-bottom: 0;
+}
+
+.param-name {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #19663d;
+    background: #e8f5e9;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.param-type {
+    font-size: 11px;
+    color: #868e96;
+    font-style: italic;
+}
+
+.param-desc {
+    font-size: 12px;
+    color: #495057;
+}
+
+/* Ejemplo */
+.example {
+    padding: 12px 14px;
+    background: #1e1e1e;
+}
+
+.example-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #00b359;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.example-code {
+    margin: 0;
+    padding: 10px 12px;
+    background: #2d2d2d;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #d4d4d4;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.example-code code {
+    color: inherit;
+    background: transparent;
+}
+
+/* Scrollbar del ejemplo */
+.example-code::-webkit-scrollbar {
+    height: 6px;
+}
+
+.example-code::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+.example-code::-webkit-scrollbar-thumb {
+    background: #3d3d3d;
+    border-radius: 3px;
+}
+
+/* Flecha decorativa */
+.arrow {
+    position: absolute;
+    top: -8px;
+    left: 20px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid #f8f9fa;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .tooltip-container {
+        min-width: 260px;
+        max-width: calc(100vw - 40px);
+    }
+
+    .example-code {
+        font-size: 11px;
+    }
+}

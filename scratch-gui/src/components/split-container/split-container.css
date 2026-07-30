@@ -1,0 +1,167 @@
+@import "../../css/units.css";
+@import "../../css/colors.css";
+@import "../../css/z-index.css";
+
+.container {
+    position: relative;
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+.horizontal {
+    flex-direction: row;
+}
+
+.vertical {
+    flex-direction: column;
+}
+
+/* Single stack holding ALL panels absolutely positioned */
+.panelStack {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+}
+
+.panelItem {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    min-width: 0;
+    min-height: 0;
+}
+
+.panelActive {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+}
+
+/* Slide-in animation when a panel becomes secondary */
+.panelSecondary {
+    animation: panelSlideIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.secondaryExit {
+    animation: panelSlideOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes panelSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(24px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes panelSlideOut {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(24px);
+    }
+}
+
+.vertical .panelSecondary {
+    animation-name: panelSlideInVertical;
+}
+
+.vertical .secondaryExit {
+    animation-name: panelSlideOutVertical;
+}
+
+@keyframes panelSlideInVertical {
+    from {
+        opacity: 0;
+        transform: translateY(24px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes panelSlideOutVertical {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(24px);
+    }
+}
+
+/* Positions the ResizeHandle at the primary/secondary boundary */
+.handleWrapper {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 10;
+    pointer-events: none;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+}
+
+.handleWrapper > * {
+    pointer-events: auto;
+}
+
+.closeButton {
+    position: absolute;
+    top: 0.25rem;
+    z-index: 20;
+    width: 1.25rem;
+    height: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.08);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    color: #575e75;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.container:hover .closeButton {
+    opacity: 1;
+}
+
+.closeButton:hover {
+    background: rgba(0, 0, 0, 0.18);
+}
+
+[dir="ltr"] .closeButton {
+    right: 0.25rem;
+}
+
+[dir="rtl"] .closeButton {
+    left: 0.25rem;
+}
+
+.splitActive {
+    /* placeholder for split mode styling */
+}

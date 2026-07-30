@@ -1,0 +1,69 @@
+@import "../../css/colors.css";
+
+.mode-toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+}
+
+.mode-toggle {
+    display: flex;
+    background: rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+}
+
+.mode-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.mode-button:hover:not(.active):not(.disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.mode-button.active {
+    background: white;
+    color: #19663d;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.mode-button.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.mode-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.mode-label {
+    white-space: nowrap;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .mode-label {
+        display: none;
+    }
+
+    .mode-button {
+        padding: 8px 10px;
+    }
+}

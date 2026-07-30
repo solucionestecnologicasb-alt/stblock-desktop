@@ -1,0 +1,75 @@
+{
+    "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
+    "productName":  "STBlock",
+    "version":  "0.1.10",
+    "identifier":  "com.stbacademy.stblock",
+    "build":  {
+                  "frontendDist":  "../scratch-gui/build",
+                  "devUrl":  "http://localhost:8601",
+                  "beforeDevCommand":  "pnpm --filter scratch-gui start",
+                  "beforeBuildCommand":  "pnpm --filter scratch-gui build"
+              },
+    "app":  {
+                "withGlobalTauri":  true,
+                "windows":  [
+                                {
+                                    "title":  "STBlock - www.stbacademy.net",
+                                    "width":  1280,
+                                    "height":  800,
+                                    "minWidth":  1024,
+                                    "minHeight":  700,
+                                    "center":  true,
+                                    "resizable":  true,
+                                    "fullscreen":  false
+                                }
+                            ],
+                "security":  {
+                                 "csp":  null
+                             }
+            },
+    "bundle":  {
+                   "active":  true,
+                   "targets":  "all",
+                   "publisher":  "STB Academy",
+                   "copyright":  "Copyright 2026 STB Academy",
+                   "shortDescription":  "Programacion visual, electronica y robotica educativa",
+                   "longDescription":  "STBlock es una plataforma educativa para programacion visual, electronica, robotica y creacion de juegos.",
+                   "icon":  [
+                                "icons/32x32.png",
+                                "icons/128x128.png",
+                                "icons/128x128@2x.png",
+                                "icons/icon.icns",
+                                "icons/icon.ico"
+                            ],
+                   "android":  {
+                                   "debugApplicationIdSuffix":  ".debug"
+                               },
+                   "resources":  [
+                                     "drivers/**/*",
+                                     "tools/Arduino/arduino-cli.exe",
+                                     "tools/Arduino/arduino-cli.yaml",
+                                     "backends/**/*"
+                                 ],
+                   "createUpdaterArtifacts":  false,
+                   "windows":  {
+                                   "nsis":  {
+                                                "headerImage":  "icons/nsis-header.bmp",
+                                                "sidebarImage":  "icons/nsis-sidebar.bmp",
+                                                "installerIcon":  "icons/icon.ico",
+                                                "displayLanguageSelector":  false,
+                                                "installMode":  "currentUser"
+                                            }
+                               }
+               },
+    "plugins":  {
+                    "updater":  {
+                                    "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI0NURERERERjdEQTE4RTcKUldUbkdOcjMzZDFkSkFCMVVPZGd6VFdGT3grZ3NKVTBmaytSYXp3bk1Lbm5mRHNGNGIwdlFGT00K",
+                                    "endpoints":  [
+                                                      "https://github.com/solucionestecnologicasb-alt/stblock-releases/releases/latest/download/latest.json"
+                                                  ],
+                                    "windows":  {
+                                                    "installMode":  "passive"
+                                                }
+                                }
+                }
+}

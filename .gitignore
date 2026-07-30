@@ -1,0 +1,47 @@
+node_modules/
+target/
+dist/
+build/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
+scratch-gui/.env
+scratch-gui/.env.local
+scratch-vm/.env
+
+# Dependencies
+.pnpm-store/
+
+# Build output
+scratch-gui/build/
+scratch-gui/dist/
+src-tauri/target/
+src-tauri/gen/
+updates/release-assets/
+
+# Local configuration and secrets
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+.tauri/
+
+# Logs and caches
+.cache/
+.webpack/
+.eslintcache
+
+# OS/editor temporary files
+nul
+*.tmp
+
+# Local one-off scripts
+_replace_mega.js
+# Local Arduino/toolchain installs
+/tools/Arduino/
+/src-tauri/tools/Arduino/
+/tools/
+/src-tauri/tools/

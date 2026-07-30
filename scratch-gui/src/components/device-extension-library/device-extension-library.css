@@ -1,0 +1,339 @@
+@import "../../css/colors.css";
+@import "../../css/units.css";
+
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50000;
+    background: $ui-modal-overlay;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal {
+    background: $ui-secondary;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 960px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideUp 0.25s ease-out;
+    overflow: hidden;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(24px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ── Header ── */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background: $extensions-primary;
+    flex-shrink: 0;
+}
+
+.title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: white;
+}
+
+.titleIcon {
+    width: 28px;
+    height: 28px;
+    color: white;
+}
+
+.closeButton {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+    color: white;
+}
+
+.closeButton:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.closeButton svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* ── Filter bar (search + categories) ── */
+.filterBar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 24px;
+    background: $extensions-light;
+    border-bottom: 1px solid $ui-black-transparent;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.searchBox {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 180px;
+    max-width: 320px;
+    background: white;
+    border: 1px solid $ui-black-transparent;
+    border-radius: 20px;
+    padding: 6px 14px;
+    gap: 8px;
+    transition: border-color 0.2s ease;
+}
+
+.searchBox:focus-within {
+    border-color: $extensions-primary;
+}
+
+.searchIcon {
+    width: 18px;
+    height: 18px;
+    color: $text-primary-transparent;
+    flex-shrink: 0;
+}
+
+.searchInput {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 0.85rem;
+    color: $text-primary;
+    background: transparent;
+}
+
+.searchInput::placeholder {
+    color: $text-primary-transparent;
+}
+
+/* Category pills */
+.categoryPills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.categoryPill {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 12px;
+    border: 1px solid $extensions-transparent;
+    border-radius: 20px;
+    background: white;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: $text-primary;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.categoryPill:hover {
+    background: $extensions-light;
+    border-color: $extensions-primary;
+}
+
+.categoryPill.active {
+    background: $extensions-primary;
+    border-color: $extensions-primary;
+    color: white;
+}
+
+.categoryPillIcon {
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.categoryPillIcon svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* ── Extensions grid ── */
+.extensionsGrid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    background: $ui-secondary;
+}
+
+/* ── Extension card ── */
+.extensionCard {
+    background: white;
+    border-radius: 8px;
+    border: 2px solid rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 20px;
+    transition: all 0.2s ease;
+}
+
+.extensionCard:hover {
+    border-color: #00b359;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.extensionCard.featured {
+    border-color: #00b359;
+}
+
+.extensionCard.loaded {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.extensionCard.loaded:hover {
+    border-color: rgba(0, 0, 0, 0.15);
+    box-shadow: none;
+}
+
+.cardIconArea {
+    width: 56px;
+    height: 56px;
+    background: #e8f5ec;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.extensionIconSvg {
+    width: 32px;
+    height: 32px;
+    color: #00b359;
+}
+
+.cardBody {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 100%;
+}
+
+.extensionName {
+    margin: 0 0 8px 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1f2937;
+    line-height: 1.3;
+}
+
+.extensionDescription {
+    margin: 0;
+    font-size: 0.78rem;
+    color: #6b7280;
+    line-height: 1.4;
+}
+
+.libraryTag {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 3px 8px;
+    background: #e8f5ec;
+    color: #008f47;
+    font-size: 0.68rem;
+    font-weight: 500;
+    border-radius: 4px;
+}
+
+.loadedBadge {
+    margin-top: 8px;
+    background: #00b359;
+    color: white;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 10px;
+}
+
+/* ── Empty state ── */
+.emptyState {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 40px;
+    color: $text-primary-transparent;
+}
+
+.emptyIcon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+}
+
+.emptyState p {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+/* ── Footer ── */
+.footer {
+    padding: 10px 24px;
+    border-top: 1px solid $ui-black-transparent;
+    background: $ui-secondary;
+    display: flex;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.extensionCount {
+    font-size: 0.8rem;
+    color: $text-primary-transparent;
+}
+
+@media (max-width: 640px) {
+    .modal {
+        width: 95%;
+        max-height: 90vh;
+    }
+    .extensionsGrid {
+        grid-template-columns: 1fr;
+        padding: 16px;
+    }
+}

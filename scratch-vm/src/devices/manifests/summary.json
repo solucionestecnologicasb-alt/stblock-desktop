@@ -1,0 +1,97 @@
+[
+  {
+    "deviceId": "arduinoUno",
+    "blockCount": 155,
+    "categories": 10
+  },
+  {
+    "deviceId": "stBoardExtension",
+    "blockCount": 193,
+    "categories": 11
+  },
+  {
+    "deviceId": "arduinoNano",
+    "blockCount": 155,
+    "categories": 10
+  },
+  {
+    "deviceId": "arduinoLeonardo",
+    "blockCount": 96,
+    "categories": 7
+  },
+  {
+    "deviceId": "arduinoMega2560",
+    "blockCount": 146,
+    "categories": 9
+  },
+  {
+    "deviceId": "stbBoardV2",
+    "blockCount": 315,
+    "categories": 23
+  },
+  {
+    "deviceId": "arduinoUnoR4Minima",
+    "blockCount": 96,
+    "categories": 7
+  },
+  {
+    "deviceId": "arduinoUnoR4Wifi",
+    "blockCount": 101,
+    "categories": 8
+  },
+  {
+    "deviceId": "arduinoEsp32",
+    "blockCount": 105,
+    "categories": 8
+  },
+  {
+    "deviceId": "arduinoEsp32S3",
+    "blockCount": 87,
+    "categories": 7
+  },
+  {
+    "deviceId": "arduinoEsp8266NodeMCU",
+    "blockCount": 113,
+    "categories": 8
+  },
+  {
+    "deviceId": "arduinoK210MaixDock",
+    "blockCount": 95,
+    "categories": 7
+  },
+  {
+    "deviceId": "arduinoK210Maixduino",
+    "blockCount": 95,
+    "categories": 7
+  },
+  {
+    "deviceId": "arduinoRaspberryPiPico",
+    "blockCount": 96,
+    "categories": 7
+  },
+  {
+    "deviceId": "arduinoRaspberryPiPicoW",
+    "blockCount": 96,
+    "categories": 7
+  },
+  {
+    "deviceId": "arduinoRaspberryPiPico2",
+    "blockCount": 96,
+    "categories": 7
+  },
+  {
+    "deviceId": "arduinoRaspberryPiPico2W",
+    "blockCount": 96,
+    "categories": 7
+  },
+  {
+    "deviceId": "microbit",
+    "blockCount": 38,
+    "categories": 5
+  },
+  {
+    "deviceId": "microbitV2",
+    "blockCount": 38,
+    "categories": 5
+  }
+]

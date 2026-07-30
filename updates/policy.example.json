@@ -1,0 +1,9 @@
+{
+  "latestVersion": "0.1.1",
+  "minimumVersion": "0.1.0",
+  "level": "recommended",
+  "title": "Nueva versión de STBlock disponible",
+  "message": "Hay mejoras disponibles para STBlock. Puedes instalarla ahora o continuar y actualizar más tarde.",
+  "releaseUrl": "https://github.com/STB-Academy/stblock-releases/releases/latest",
+  "notes": "Primer paquete de prueba del sistema de actualizaciones."
+}

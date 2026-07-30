@@ -1,0 +1,369 @@
+@import "../../css/units.css";
+@import "../../css/colors.css";
+@import "../../css/z-index.css";
+
+.page-wrapper {
+    height: 100%;
+}
+
+.body-wrapper {
+    height: calc(100% - $menu-bar-height);
+    background-color: $ui-primary;
+}
+
+.body-wrapper * {
+    box-sizing: border-box;
+}
+
+.flex-wrapper {
+    display: flex;
+    flex-direction: row;
+    height: 100%;
+    overflow-y: hidden;
+}
+
+.stage-and-target-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 320px;
+    flex-shrink: 0;
+    border-right: 1px solid rgba(0, 0, 0, 0.08);
+    background-color: $ui-primary;
+    height: 100%;
+    overflow: hidden;
+    transition: width 0.2s ease-in-out;
+}
+
+.stage-large {
+    width: 520px;
+}
+
+.target-wrapper {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.editor-wrapper {
+    flex-basis: calc(1024px - 408px - (($space + $stage-standard-border-width) * 2));
+    flex-grow: 1;
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.tabsBody {
+    position: relative;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.blocks-wrapper {
+    flex-grow: 1;
+    position: relative;
+}
+
+.extension-button-container {
+    width: 3.75rem;
+    height: 3.25rem;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: $z-index-extension-button;
+    background: $looks-secondary;
+    border: 1px solid $looks-secondary;
+    box-sizing: content-box;
+}
+
+$fade-out-distance: 15px;
+
+.extension-button-container:before {
+    content: "";
+    position: absolute;
+    top: calc(calc(-1 * $fade-out-distance) - 1px);
+    left: -1px;
+    background: linear-gradient(rgba(0, 0, 0, 0),rgba(0, 0, 0, 0.15));
+    height: $fade-out-distance;
+    width: calc(100% + 0.5px);
+}
+
+.extension-button {
+    background: none;
+    border: none;
+    outline: none;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+
+.extension-button-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+}
+
+[dir="rtl"] .extension-button-icon {
+    transform: scaleX(-1);
+}
+
+.extension-button > div {
+    margin-top: 0;
+}
+
+.watermark {
+    position: absolute;
+    top: 1.25rem;
+    pointer-events: none;
+}
+
+[dir="ltr"] .watermark {
+    right: 1.25rem;
+}
+
+[dir="rtl"] .watermark {
+    left: 1.25rem;
+}
+
+.menu-bar-position {
+    position: relative;
+    z-index: $z-index-menu-bar;
+}
+
+.alerts-container {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    z-index: $z-index-alerts;
+    position: absolute;
+    margin-top: 53px;
+    pointer-events: none;
+}
+
+:global(.ReactModal__Body--open) {
+    overflow: hidden;
+}
+
+/* Suppress ALL CSS animations/transitions when reduced-motion is active */
+:global(body.reduced-motion *),
+:global(body.reduced-motion *::before),
+:global(body.reduced-motion *::after) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+}
+
+.dropIndicator {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #00b359;
+    font-size: 0.85rem;
+    font-weight: 500;
+    pointer-events: none;
+    z-index: 5;
+    background: rgba(0, 179, 89, 0.06);
+}
+
+.dropLeft {
+    left: 0;
+    border-right: 2px dashed rgba(0, 179, 89, 0.25);
+    border-radius: 8px 0 0 8px;
+}
+
+.dropRight {
+    right: 0;
+    border-left: 2px dashed rgba(0, 179, 89, 0.25);
+    border-radius: 0 8px 8px 0;
+}
+
+[dir="rtl"] .dropLeft {
+    left: auto;
+    right: 0;
+    border-right: none;
+    border-left: 2px dashed rgba(0, 179, 89, 0.25);
+    border-radius: 0 8px 8px 0;
+}
+
+[dir="rtl"] .dropRight {
+    right: auto;
+    left: 0;
+    border-left: none;
+    border-right: 2px dashed rgba(0, 179, 89, 0.25);
+    border-radius: 8px 0 0 8px;
+}
+
+.ai-floating-btn {
+    position: fixed;
+    bottom: 17px;
+    right: 17px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #00b359, #008f47);
+    box-shadow: 0 4px 15px rgba(0, 179, 89, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 9999;
+    border: none;
+    outline: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.ai-floating-btn:hover {
+    transform: scale(1.08);
+    box-shadow: 0 6px 20px rgba(0, 179, 89, 0.45);
+}
+
+.ai-floating-btn-icon {
+    width: 28px;
+    height: 28px;
+}
+
+.ai-floating-window {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    width: 380px;
+    height: 550px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 10000;
+    transition: height 0.2s, transform 0.2s, opacity 0.2s;
+}
+
+.ai-floating-window.minimized {
+    height: 48px;
+}
+
+.ai-window-header {
+    height: 48px;
+    background: #19663d;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.ai-window-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ai-window-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ai-action-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    transition: color 0.15s;
+}
+
+.ai-action-btn:hover {
+    color: white;
+}
+
+.ai-window-body {
+    flex-grow: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    background: #f5f7fa;
+}
+
+/* ─── Python Edit Mode: Ocultar toolbox cuando el panel Python está desbloqueado ─── */
+/* Esto previene arrastrar bloques cuando el usuario está editando código Python */
+.python-edit-mode :global(.blocklyToolboxDiv) {
+    display: none !important;
+    width: 0 !important;
+}
+
+.python-edit-mode :global(.blocklyFlyout) {
+    display: none !important;
+}
+
+.python-edit-mode :global(.scratchCategoryMenu) {
+    display: none !important;
+}
+
+/* También ocultar el contenedor completo del toolbox en diferentes variantes de Scratch */
+.python-edit-mode :global(.blocklyToolboxWrapper) {
+    display: none !important;
+    width: 0 !important;
+}
+
+/* Ajustar el workspace para ocupar el espacio del toolbox oculto */
+.python-edit-mode :global(.blocklyWorkspace) {
+    margin-left: 0 !important;
+}
+
+
+
+/* Expandir el contenedor del workspace */
+.python-edit-mode :global(.injectionDiv) {
+    left: 0 !important;
+}
+
+/* Asegurar que el canvas principal llene el espacio */
+.python-edit-mode :global(.blocklySvg) {
+    width: 100% !important;
+}
+
+/* Ocultar el wrapper del flyout que creamos */
+.python-edit-mode :global([class*="blocklyToolboxHeader"]),
+.python-edit-mode :global([class*="flyout-wrapper"]) {
+    display: none !important;
+    width: 0 !important;
+}
+
+/* Indicador visual sutil de que está en modo Python */
+.python-edit-mode .blocks-wrapper::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #4CAF50, #8BC34A);
+    z-index: 100;
+    pointer-events: none;
+}
+
+/* Transición suave para los bloques */
+.python-edit-mode :global(.blocklyBlockCanvas) {
+    transition: transform 0.2s ease-out;
+}

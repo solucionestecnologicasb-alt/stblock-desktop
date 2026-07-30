@@ -1,0 +1,180 @@
+@import "../../css/units.css";
+@import "../../css/colors.css";
+
+.code-editor-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, #FEFEFE 0%, #F8F9FA 100%);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.code-wrapper {
+    display: flex;
+    flex: 1;
+    overflow: auto;
+    background: linear-gradient(135deg, #FAFBFC 0%, #F6F8FA 100%);
+}
+
+/* Line numbers column */
+.line-numbers {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 0;
+    background: linear-gradient(180deg, #F0F2F5 0%, #E8EAED 100%);
+    border-right: 1px solid #E1E4E8;
+    user-select: none;
+    flex-shrink: 0;
+    min-width: 40px;
+    text-align: right;
+}
+
+.line-number {
+    padding: 0 10px;
+    color: #8B949E;
+    font-size: 11px;
+    line-height: 19px;
+    height: 19px;
+    transition: color 0.15s ease;
+}
+
+.line-number:hover {
+    color: #57606A;
+}
+
+/* Code content area */
+.code-content {
+    flex: 1;
+    margin: 0;
+    padding: 10px 14px;
+    overflow-x: auto;
+    background: transparent;
+}
+
+.code-block {
+    display: block;
+    margin: 0;
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 19px;
+    color: #24292F;
+    white-space: pre;
+    word-wrap: normal;
+}
+
+/* Syntax highlighting colors - Vibrant theme */
+
+/* Keywords (void, int, if, else, for, while, etc.) */
+.code-block :global(.kw) {
+    color: #D73A49;
+    font-weight: 600;
+    text-shadow: 0 0 1px rgba(215, 58, 73, 0.3);
+}
+
+/* Functions (setup, loop, pinMode, digitalWrite, etc.) */
+.code-block :global(.fn) {
+    color: #6F42C1;
+    font-weight: 500;
+}
+
+/* Strings */
+.code-block :global(.st) {
+    color: #22863A;
+    background: rgba(34, 134, 58, 0.08);
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+/* Numbers */
+.code-block :global(.nu) {
+    color: #005CC5;
+    font-weight: 500;
+}
+
+/* Comments */
+.code-block :global(.cm) {
+    color: #6A737D;
+    font-style: italic;
+    opacity: 0.9;
+}
+
+/* Preprocessor directives (#include, #define) */
+.code-block :global(.pp) {
+    color: #E36209;
+    font-weight: 500;
+    background: linear-gradient(90deg, rgba(227, 98, 9, 0.1) 0%, transparent 100%);
+}
+
+/* Hover effects for syntax elements */
+.code-block :global(.kw):hover,
+.code-block :global(.fn):hover,
+.code-block :global(.st):hover,
+.code-block :global(.nu):hover,
+.code-block :global(.pp):hover {
+    filter: brightness(1.1);
+    transition: filter 0.15s ease;
+}
+
+/* Subtle animation for the code block */
+@keyframes codeAppear {
+    from {
+        opacity: 0;
+        transform: translateY(-2px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.code-block {
+    animation: codeAppear 0.3s ease-out;
+}
+
+/* Scrollbar styling */
+.code-wrapper::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.code-wrapper::-webkit-scrollbar-track {
+    background: #F0F0F0;
+}
+
+.code-wrapper::-webkit-scrollbar-thumb {
+    background: #C0C0C0;
+    border-radius: 4px;
+}
+
+.code-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #A0A0A0;
+}
+
+.code-wrapper::-webkit-scrollbar-corner {
+    background: #F0F0F0;
+}
+
+/* Horizontal scrollbar for code content */
+.code-content::-webkit-scrollbar {
+    height: 6px;
+}
+
+.code-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.code-content::-webkit-scrollbar-thumb {
+    background: #D0D0D0;
+    border-radius: 3px;
+}
+
+.code-content::-webkit-scrollbar-thumb:hover {
+    background: #B0B0B0;
+}

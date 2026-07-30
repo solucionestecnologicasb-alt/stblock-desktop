@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="icon" href="favicon-32.png" sizes="32x32">
+  <link rel="icon" href="favicon-128.png" sizes="128x128">
+  <link rel="icon" href="favicon-167.png" sizes="167x167">
+  <link rel="icon" href="favicon-192.png" sizes="192x192">
+
+  <link rel="stylesheet" href="css/main.css?v=9584d2b6">
+  <link rel="stylesheet" href="css/widgets.css?v=7d85fcde">
+
+  <script src="jquery/jquery-3.5.1.slim.min.js"></script>
+
+  <script src="ammo/ammo-20200613.js"></script>
+
+  <script>
+    (function () {
+      var originalLog = console.log;
+      console.log = function () {
+        if (arguments.length > 0 && typeof arguments[0] === 'string' &&
+            arguments[0].indexOf('Babylon.js v') === 0) {
+          return;
+        }
+        return originalLog.apply(console, arguments);
+      };
+    }());
+  </script>
+  <script src="babylon/4.2.1/babylon.js"></script>
+  <script src="babylon/4.2.1/babylon.gui.min.js"></script>
+  <script src="pep/0.4.3/pep.min.js"></script>
+
+  <script src="js/msg.js"></script>
+  <script src="js/common/widgets.js"></script>
+
+  <title>STBlock Arena</title>
+  <style>.botsPanel .botsRow{height:25%}.botsPanel .botsRow .bot{width:50%}</style>
+</head>
+
+<body>
+  <header>
+    <img class="gearsIcon" src="favicon-32.png">
+    <div>GearsBot Arena</div>
+  </header>
+
+  <main>
+    <nav>
+      <ul class="panelTabs">
+        <li id="navBots" class="active">Bots</li>
+        <li id="navArena">Arena</li>
+      </ul>
+      <div class="menuBar">
+        <div class="menuItem optionsMenu">Options</div>
+        <div class="menuItem worldsMenu">Worlds</div>
+      </div>
+    </nav>
+    <div class="panels">
+
+      <div class="panel botsPanel active" aria-labelledby="navBots"><div class="botsRow"><div class="bot"><iframe id="player0Frame" src="arenaFrame.html?stblock=1&player=0"></iframe></div><div class="bot"><iframe id="player1Frame" src="arenaFrame.html?stblock=1&player=1"></iframe></div></div><div class="botsRow"><div class="bot"><iframe id="player2Frame" src="arenaFrame.html?stblock=1&player=2"></iframe></div><div class="bot"><iframe id="player3Frame" src="arenaFrame.html?stblock=1&player=3"></iframe></div></div><div class="botsRow"><div class="bot"><iframe id="player4Frame" src="arenaFrame.html?stblock=1&player=4"></iframe></div><div class="bot"><iframe id="player5Frame" src="arenaFrame.html?stblock=1&player=5"></iframe></div></div><div class="botsRow"><div class="bot"><iframe id="player6Frame" src="arenaFrame.html?stblock=1&player=6"></iframe></div><div class="bot"><iframe id="player7Frame" src="arenaFrame.html?stblock=1&player=7"></iframe></div></div></div><div class="panel" aria-labelledby="navArena">
+        <canvas id="renderCanvas" touch-action="none"></canvas>
+        <div class="startSim"><span class="icon-play"></span></div>
+        <div class="stopSim"><span class="icon-stop"></span></div>
+        <div class="world"><span class="icon-globe"></div>
+        <div class="reset"><span class="icon-reset"></span></div>
+        <div class="cameraSelectorShort closed">
+          <div class="camera">
+            <span class="icon-cameraArc"></span>
+          </div>
+          <div class="cameraOptions cameraTop">
+            <span class="icon-cameraTop"></span>
+          </div>
+          <div class="cameraOptions cameraArc">
+            <span class="icon-cameraArc"></span>
+          </div>
+        </div>
+
+        <div class="worldInfo hide"></div>
+
+        <div class="fps"></div>
+
+        <div class="console">
+          <div class="chevron"></div>
+          <div class="clear">&#x239a;</div>
+          <pre class="content"></pre>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/worlds/World_Base.js?v=stblock-model-loader-v2"></script>
+  <script src="js/worlds/world_stblockUser.js?v=stblock-user-v14"></script>
+  <script src="js/worlds/world_Grid.js?v=3ed03b45"></script>
+  <script src="js/worlds/world_Maze.js?v=6571b2a6"></script>
+  <script src="js/worlds/world_Arena.js?v=c1828281"></script>
+  <script src="js/worlds/world_Custom.js?v=a56a2eb0"></script>
+  <script src="js/worlds/world_Football.js?v=ab1b9783"></script>
+  <script src="js/worlds/world_Missions.js?v=3d1cd9e0"></script>
+  <script src="js/worlds/extra/world_Image.js?v=571c26b3"></script>
+  <script src="js/robotComponents.js?v=c851c5ff"></script>
+  <script src="js/robotTemplates.js?v=c0f7f4a3"></script>
+  <script src="js/Wheel.js?v=bb27211a"></script>
+  <script src="js/Robot.js?v=742ebc7e"></script>
+  <script>
+    var robots = [];
+
+    for (let i=0; i<8; i++) {
+      var robot = new Robot();
+      robot.options = robotTemplates[0];
+      robot.player = i;
+      robot.disabled = true;
+      robots.push(robot);
+    }
+    robot = robots[0];
+
+    var playerFrames = [];
+    for (let i=0; i<8; i++) {
+      let ele = document.getElementById('player' + i + 'Frame');
+      if (ele) {
+        playerFrames.push(ele.contentWindow);
+      }
+    }
+  </script>
+  <script src="js/babylon.js?v=6061094f"></script>
+  <script src="js/botsPanel.js?v=dedf08f0"></script>
+  <script src="js/arenaPanel.js?v=3841fbe6"></script>
+  <script src="js/arena.js?v=f4ef5a72"></script>
+
+  <script>
+    (function () {
+      function readParameter(name) {
+        var match = new RegExp('[?&]' + name + '=([^&]*)').exec(location.search);
+        return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
+      }
+      var url = readParameter('worldJSON');
+      if (!url) return;
+      fetch(url).then(function (response) { return response.text(); }).then(function (json) {
+        var payload = JSON.parse(json);
+        var options = payload.options || {};
+        var count = Math.max(1, Math.min(8, Number(options.arenaRobotCount) || 1));
+        robots.forEach(function (arenaRobot, index) {
+          arenaRobot.disabled = index >= count;
+          var frame = document.getElementById('player' + index + 'Frame');
+          if (frame && index >= count) frame.parentElement.style.display = 'none';
+          if (options.arenaRobots && options.arenaTeams && options.arenaRobots[index]) {
+            var assignment = options.arenaRobots[index];
+            var team = options.arenaTeams.find(function (item) { return item.id === assignment.teamId; });
+            if (team) {
+              arenaRobot.name = team.name + ' - Robot ' + (index + 1);
+              arenaRobot.options = JSON.parse(JSON.stringify(robotTemplates[0]));
+              arenaRobot.playerTeamColors[index] = BABYLON.Color3.FromHexString(team.color);
+            }
+          }
+        });
+        arena.robotColorMode = 'team';
+        arenaPanel.loadWorld(json);
+        arena.tabClicked('navArena');
+      }).catch(function (error) {
+        console.error('No se pudo cargar la arena STBlock', error);
+      });
+    }());
+  </script>
+</body>
+</html>

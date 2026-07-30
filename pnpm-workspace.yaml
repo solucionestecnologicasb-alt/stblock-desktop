@@ -1,0 +1,7 @@
+packages:
+  - "scratch-gui"
+  - "scratch-vm"
+
+allowBuilds:
+  chromedriver: set this to true or false
+  core-js: true

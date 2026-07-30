@@ -1,0 +1,21 @@
+module.exports = {
+    arduinoUno: require('./manifests/arduinoUno.json'),
+    stBoardExtension: require('./manifests/stBoardExtension.json'),
+    arduinoNano: require('./manifests/arduinoNano.json'),
+    arduinoLeonardo: require('./manifests/arduinoLeonardo.json'),
+    arduinoMega2560: require('./manifests/arduinoMega2560.json'),
+    stbBoardV2: require('./manifests/stbBoardV2.json'),
+    arduinoUnoR4Minima: require('./manifests/arduinoUnoR4Minima.json'),
+    arduinoUnoR4Wifi: require('./manifests/arduinoUnoR4Wifi.json'),
+    arduinoEsp32: require('./manifests/arduinoEsp32.json'),
+    arduinoEsp32S3: require('./manifests/arduinoEsp32S3.json'),
+    arduinoEsp8266NodeMCU: require('./manifests/arduinoEsp8266NodeMCU.json'),
+    arduinoK210MaixDock: require('./manifests/arduinoK210MaixDock.json'),
+    arduinoK210Maixduino: require('./manifests/arduinoK210Maixduino.json'),
+    arduinoRaspberryPiPico: require('./manifests/arduinoRaspberryPiPico.json'),
+    arduinoRaspberryPiPicoW: require('./manifests/arduinoRaspberryPiPicoW.json'),
+    arduinoRaspberryPiPico2: require('./manifests/arduinoRaspberryPiPico2.json'),
+    arduinoRaspberryPiPico2W: require('./manifests/arduinoRaspberryPiPico2W.json'),
+    microbit: require('./manifests/microbit.json'),
+    microbitV2: require('./manifests/microbitV2.json')
+};

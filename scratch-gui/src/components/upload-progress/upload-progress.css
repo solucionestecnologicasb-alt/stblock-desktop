@@ -1,0 +1,351 @@
+@import "../../css/colors.css";
+@import "../../css/units.css";
+
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    width: 90%;
+    max-width: 480px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideUp 0.3s ease-out;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    transition: max-width 0.3s ease;
+}
+
+.modal.expanded {
+    max-width: 640px;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.close-button {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: #f3f4f6;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+}
+
+.close-button:hover {
+    background: #e5e7eb;
+}
+
+.close-button svg {
+    width: 16px;
+    height: 16px;
+    color: #6b7280;
+}
+
+/* State Icons */
+.spinner-icon,
+.success-icon,
+.error-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.spinner-icon {
+    color: #4C97FF;
+}
+
+.spinner {
+    width: 100%;
+    height: 100%;
+    animation: spin 1s linear infinite;
+}
+
+.spinner circle {
+    stroke-dasharray: 80;
+    stroke-dashoffset: 60;
+    stroke-linecap: round;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.success-icon {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.success-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.error-icon {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.error-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Device Info */
+.device-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+}
+
+.device-name {
+    font-weight: 600;
+    color: #374151;
+}
+
+.separator {
+    color: #9ca3af;
+}
+
+.port-name {
+    color: #6b7280;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Progress Bar */
+.progress-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 8px;
+    background: #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4C97FF 0%, #00b359 100%);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    min-width: 40px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #4b5563;
+    text-align: right;
+}
+
+/* Message */
+.message {
+    padding: 12px 16px;
+    background: #f3f4f6;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    color: #374151;
+    line-height: 1.5;
+}
+
+.message.error-message {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.message.success-message {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+/* Terminal Section */
+.terminal-section {
+    margin-bottom: 16px;
+}
+
+.expand-button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #4b5563;
+    transition: background 0.15s ease;
+}
+
+.expand-button:hover {
+    background: #f3f4f6;
+}
+
+.expand-icon {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.2s ease;
+}
+
+.expand-icon-rotated {
+    transform: rotate(180deg);
+}
+
+.log-count {
+    color: #9ca3af;
+    margin-left: auto;
+}
+
+.terminal {
+    margin-top: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #1e1e1e;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+}
+
+.terminal-empty {
+    color: #6b7280;
+    font-style: italic;
+}
+
+.log-line {
+    display: flex;
+    gap: 8px;
+    padding: 2px 0;
+    color: #e5e7eb;
+}
+
+.log-line.log-error {
+    color: #f87171;
+}
+
+.log-line.log-success {
+    color: #34d399;
+}
+
+.log-line.log-warning {
+    color: #fbbf24;
+}
+
+.log-timestamp {
+    color: #6b7280;
+    flex-shrink: 0;
+}
+
+.log-message {
+    word-break: break-all;
+}
+
+/* Actions */
+.actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.cancel-button,
+.retry-button,
+.close-btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: none;
+}
+
+.cancel-button {
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
+.cancel-button:hover {
+    background: #e5e7eb;
+}
+
+.retry-button {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.retry-button:hover {
+    background: #fde68a;
+}
+
+.close-btn {
+    background: linear-gradient(135deg, #4C97FF 0%, #3b82f6 100%);
+    color: white;
+}
+
+.close-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(76, 151, 255, 0.3);
+}

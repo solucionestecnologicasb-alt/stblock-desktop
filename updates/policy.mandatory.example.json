@@ -1,0 +1,9 @@
+{
+  "latestVersion": "0.1.1",
+  "minimumVersion": "0.1.1",
+  "level": "mandatory",
+  "title": "Actualización obligatoria",
+  "message": "Esta versión es necesaria para continuar usando STBlock de forma segura.",
+  "releaseUrl": "https://github.com/STB-Academy/stblock-releases/releases/latest",
+  "notes": "Prueba de flujo obligatorio."
+}

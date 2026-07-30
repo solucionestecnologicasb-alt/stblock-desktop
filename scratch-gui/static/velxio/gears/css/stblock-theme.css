@@ -1,0 +1,448 @@
+:root {
+  --stb-blue: #4c6fff;
+  --stb-blue-dark: #314cc9;
+  --stb-green: #1ebb58;
+  --stb-green-dark: #12833e;
+  --stb-red: #e5484d;
+  --stb-surface: rgba(10, 15, 29, 0.9);
+  --stb-border: rgba(255, 255, 255, 0.3);
+}
+
+html,
+body,
+main,
+.panels,
+#simPanel {
+  background: #0d1424;
+}
+
+body.stblock-gears > header,
+body.stblock-gears > main > nav,
+body.stblock-gears .blocklyEditor,
+body.stblock-gears .panel[aria-labelledby="navPython"] {
+  display: none !important;
+}
+
+body.stblock-gears main {
+  height: 100%;
+}
+
+body.stblock-gears .panels,
+body.stblock-gears #simPanel {
+  height: 100%;
+  width: 100%;
+}
+
+body.stblock-gears #simPanel {
+  z-index: 0;
+}
+
+body.stblock-gears #simPanel::after {
+  content: none;
+}
+
+body.stblock-gears .stblockDock {
+  position: absolute;
+  z-index: 20;
+  left: 18px;
+  right: 18px;
+  bottom: 14px;
+  min-height: 64px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  gap: clamp(8px, 1.5vw, 22px);
+  padding: 8px clamp(10px, 2vw, 24px);
+  border: 1px solid var(--stb-border);
+  border-radius: 20px;
+  background: var(--stb-surface);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(12px);
+  overflow: visible;
+}
+
+body.stblock-gears .runSim,
+body.stblock-gears .world,
+body.stblock-gears .reset,
+body.stblock-gears .sensors,
+body.stblock-gears .cameraSelector.closed,
+body.stblock-gears .ruler.closed,
+body.stblock-gears .joystick.closed,
+body.stblock-gears .hubButtons.closed,
+body.stblock-gears .stblockRobot {
+  position: relative;
+  inset: auto;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  opacity: 1;
+  font-size: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 15px;
+  background: linear-gradient(145deg, #6684ff, var(--stb-blue-dark));
+  box-shadow: 0 7px 16px rgba(49, 76, 201, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+  transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+  overflow: visible;
+}
+
+body.stblock-gears .runSim:hover,
+body.stblock-gears .world:hover,
+body.stblock-gears .reset:hover,
+body.stblock-gears .sensors:hover,
+body.stblock-gears .cameraSelector.closed:hover,
+body.stblock-gears .ruler.closed:hover,
+body.stblock-gears .joystick.closed:hover,
+body.stblock-gears .hubButtons.closed:hover,
+body.stblock-gears .stblockRobot:hover {
+  transform: translateY(-4px) scale(1.05);
+  filter: brightness(1.12);
+  box-shadow: 0 12px 24px rgba(49, 76, 201, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+body.stblock-gears .runSim:active,
+body.stblock-gears .world:active,
+body.stblock-gears .reset:active,
+body.stblock-gears .sensors:active,
+body.stblock-gears .cameraSelector.closed:active,
+body.stblock-gears .ruler.closed:active,
+body.stblock-gears .joystick.closed:active,
+body.stblock-gears .hubButtons.closed:active,
+body.stblock-gears .stblockRobot:active {
+  transform: translateY(0) scale(0.96);
+}
+
+body.stblock-gears .runSim {
+  background: linear-gradient(145deg, #39d97c, var(--stb-green-dark));
+  box-shadow: 0 7px 16px rgba(18, 131, 62, 0.44);
+}
+
+body.stblock-gears .reset {
+  background: linear-gradient(145deg, #ff767a, #bd3237);
+  box-shadow: 0 7px 16px rgba(189, 50, 55, 0.42);
+}
+
+body.stblock-gears .cameraSelector.closed .cameraOptions,
+body.stblock-gears .ruler.closed .measurements,
+body.stblock-gears .joystick.closed .keyboard,
+body.stblock-gears .joystick.closed .virtualJoystick,
+body.stblock-gears .hubButtons.closed .controls {
+  display: none !important;
+}
+
+body.stblock-gears .cameraSelector.closed .camera,
+body.stblock-gears .ruler.closed > .icon,
+body.stblock-gears .joystick.closed > .icon,
+body.stblock-gears .hubButtons.closed > .icon {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.stblock-gears .stblockRobot svg {
+  width: 27px;
+  height: 27px;
+  fill: currentColor;
+}
+
+body.stblock-gears [data-stblock-label]::after {
+  content: attr(data-stblock-label);
+  position: absolute;
+  left: 50%;
+  bottom: 57px;
+  transform: translateX(-50%) translateY(4px);
+  padding: 5px 8px;
+  color: white;
+  background: rgba(7, 11, 22, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  font: 600 11px/1 sans-serif;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+body.stblock-gears [data-stblock-label]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+body.stblock-gears .cameraSelector:not(.closed) {
+  top: auto;
+  right: 20px;
+  bottom: 88px;
+  color: #1f2a44;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(76, 111, 255, 0.35);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+body.stblock-gears .ruler:not(.closed),
+body.stblock-gears .joystick:not(.closed),
+body.stblock-gears .hubButtons:not(.closed) {
+  top: auto;
+  bottom: 88px;
+  left: 18px;
+  color: #18213a;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(76, 111, 255, 0.35);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+body.stblock-gears .sensorReadings {
+  top: auto;
+  right: 18px;
+  bottom: 88px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(76, 111, 255, 0.35);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+body.stblock-gears .console {
+  left: 16px;
+  right: 16px;
+  bottom: 92px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(7, 11, 22, 0.88);
+}
+
+body.stblock-gears .fps {
+  top: 12px;
+  right: 16px;
+  color: #8ba0ff;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  body.stblock-gears .stblockDock {
+    left: 8px;
+    right: 8px;
+    gap: 5px;
+    padding: 8px;
+  }
+
+  body.stblock-gears .runSim,
+  body.stblock-gears .world,
+  body.stblock-gears .reset,
+  body.stblock-gears .sensors,
+  body.stblock-gears .cameraSelector.closed,
+  body.stblock-gears .ruler.closed,
+  body.stblock-gears .joystick.closed,
+  body.stblock-gears .hubButtons.closed,
+  body.stblock-gears .stblockRobot {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+    font-size: 20px;
+  }
+}
+
+/* ==========================================================================
+   VENTANAS EMERGENTES (DIALOGS/MODALS) - ESTILO MODERNO STBLOCK
+   ========================================================================== */
+
+/* Fondo desenfocado premium (Glassmorphism Backdrop) */
+body.stblock-gears .dialogScreen {
+  background: rgba(4, 7, 15, 0.72) !important;
+  backdrop-filter: blur(8px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 99999 !important;
+}
+
+/* Contenedor principal de la ventana emergente */
+body.stblock-gears .dialogWindow {
+  background: #0d1424 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65) !important;
+  color: #f3f4f6 !important;
+  font-family: system-ui, -apple-system, sans-serif !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  min-width: 460px !important;
+  max-width: 90vw !important;
+  animation: stbDialogShow 280ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+body.stblock-gears .dialogWindow.animatedHide {
+  animation: stbDialogHide 200ms ease-in forwards !important;
+}
+
+@keyframes stbDialogShow {
+  from { transform: scale(0.9) translateY(12px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes stbDialogHide {
+  from { transform: scale(1) translateY(0); opacity: 1; }
+  to { transform: scale(0.95) translateY(8px); opacity: 0; }
+}
+
+/* Titulo del Dialog */
+body.stblock-gears .dialogTitle {
+  background: #111a2e !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 16px !important;
+  padding: 16px 20px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  text-transform: none !important;
+  letter-spacing: 0.4px !important;
+}
+
+/* Cuerpo del Dialog */
+body.stblock-gears .dialogBody {
+  padding: 20px !important;
+  color: #d1d5db !important;
+  max-height: 58vh !important;
+  overflow-y: auto !important;
+}
+
+/* Inputs, Selects y Textareas dentro del modal */
+body.stblock-gears .dialogBody select,
+body.stblock-gears .dialogBody input[type=text],
+body.stblock-gears .dialogBody input[type=number],
+body.stblock-gears .dialogBody input[type=file] {
+  background: #162033 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  padding: 10px 12px !important;
+  font-size: 13px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin-bottom: 16px !important;
+  outline: none !important;
+  transition: border-color 150ms ease, box-shadow 150ms ease !important;
+}
+
+body.stblock-gears .dialogBody select:focus,
+body.stblock-gears .dialogBody input[type=text]:focus,
+body.stblock-gears .dialogBody input[type=number]:focus {
+  border-color: var(--stb-blue) !important;
+  box-shadow: 0 0 0 3px rgba(76, 111, 255, 0.25) !important;
+}
+
+/* Fila inferior de botones */
+body.stblock-gears .dialogButtonsRow {
+  background: #111a2e !important;
+  padding: 14px 20px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+}
+
+/* Estilo general para todos los botones en los modales */
+body.stblock-gears .dialogButtonsRow button {
+  border-radius: 8px !important;
+  padding: 9px 18px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  border: none !important;
+  outline: none !important;
+  transition: background 160ms ease, transform 100ms ease, filter 160ms ease !important;
+}
+
+body.stblock-gears .dialogButtonsRow button:active {
+  transform: scale(0.97) !important;
+}
+
+/* Boton Cancel / Secundario */
+body.stblock-gears .dialogButtonsRow .btn-light,
+body.stblock-gears .dialogButtonsRow .cancel,
+body.stblock-gears .dialogButtonsRow .save,
+body.stblock-gears .dialogButtonsRow .load,
+body.stblock-gears .dialogButtonsRow .default {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #e5e7eb !important;
+  box-shadow: none !important;
+}
+
+body.stblock-gears .dialogButtonsRow .btn-light:hover,
+body.stblock-gears .dialogButtonsRow .cancel:hover,
+body.stblock-gears .dialogButtonsRow .save:hover,
+body.stblock-gears .dialogButtonsRow .load:hover,
+body.stblock-gears .dialogButtonsRow .default:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+}
+
+/* Boton Confirm / Primario (Aceptar) */
+body.stblock-gears .dialogButtonsRow .btn-success,
+body.stblock-gears .dialogButtonsRow .confirm {
+  background: linear-gradient(145deg, #6684ff, var(--stb-blue-dark)) !important;
+  color: white !important;
+  box-shadow: 0 4px 10px rgba(49, 76, 201, 0.3) !important;
+}
+
+body.stblock-gears .dialogButtonsRow .btn-success:hover,
+body.stblock-gears .dialogButtonsRow .confirm:hover {
+  filter: brightness(1.1) !important;
+}
+
+/* Descripcion y miniaturas de mapas/robots en dialogos */
+body.stblock-gears .dialogWindow .selectWorld .description,
+body.stblock-gears .dialogWindow .selectRobot .description {
+  display: flex !important;
+  gap: 15px !important;
+  margin-bottom: 20px !important;
+  background: #111a2e !important;
+  padding: 12px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+body.stblock-gears .dialogWindow .selectWorld .description .thumbnail,
+body.stblock-gears .dialogWindow .selectRobot .description .thumbnail {
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  object-fit: cover !important;
+}
+
+body.stblock-gears .dialogWindow .selectWorld .description .text,
+body.stblock-gears .dialogWindow .selectRobot .description .text {
+  color: #9ca3af !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+body.stblock-gears .dialogWindow .selectWorld .configurations .configurationTitle {
+  color: #e5e7eb !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  margin-bottom: 6px !important;
+}
+
+body.stblock-gears .dialogWindow .selectWorld .configurations .configuration {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  padding-bottom: 12px !important;
+  margin-bottom: 12px !important;
+}
+
+body.stblock-gears .dialogWindow .selectWorld .configurations .configuration:last-child {
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+body.stblock-gears .joystick .virtualJoystick {
+  width: 150px;
+  min-width: 150px;
+  height: 150px;
+  touch-action: none;
+}

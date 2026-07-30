@@ -1,0 +1,252 @@
+@import "../../css/colors.css";
+@import "../../css/z-index.css";
+
+.background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: $z-index-loader;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(145deg, #f8fdf9 0%, #e8f5ec 50%, #d4ede0 100%);
+    font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+    text-align: center;
+    color: #2d3748;
+    overflow: hidden;
+}
+
+.background::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 30% 20%, rgba(0, 179, 89, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 70% 80%, rgba(0, 140, 70, 0.06) 0%, transparent 40%);
+    animation: backgroundShift 15s ease-in-out infinite;
+}
+
+@keyframes backgroundShift {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    50% { transform: translate(-2%, -2%) rotate(1deg); }
+}
+
+.fullscreen {
+    position: fixed;
+    z-index: $z-index-stage-wrapper-overlay;
+}
+
+/* Card container */
+.container {
+    position: relative;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(0, 179, 89, 0.12);
+    border-radius: 28px;
+    padding: 40px 60px 45px;
+    box-shadow:
+        0 4px 24px rgba(0, 100, 50, 0.08),
+        0 12px 48px rgba(0, 100, 50, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    z-index: 1;
+}
+
+/* ── Mascot Animation Container ── */
+.mascot-container {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    margin: 0 auto 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Orbits container */
+.orbits-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+}
+
+.orbit1, .orbit2, .orbit3 {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.orbit1 {
+    width: 160px;
+    height: 160px;
+    border-top-color: rgba(0, 179, 89, 0.4);
+    border-right-color: rgba(0, 179, 89, 0.2);
+    animation: orbitSpin 3s linear infinite;
+}
+
+.orbit2 {
+    width: 140px;
+    height: 140px;
+    border-bottom-color: rgba(0, 140, 70, 0.35);
+    border-left-color: rgba(0, 140, 70, 0.15);
+    animation: orbitSpin 2.5s linear infinite reverse;
+}
+
+.orbit3 {
+    width: 120px;
+    height: 120px;
+    border-top-color: rgba(0, 200, 100, 0.3);
+    animation: orbitSpin 4s linear infinite;
+}
+
+.orbit-dot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: linear-gradient(135deg, #00b359, #00d468);
+    border-radius: 50%;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    box-shadow: 0 0 12px rgba(0, 179, 89, 0.6);
+}
+
+.orbit2 .orbit-dot {
+    top: auto;
+    bottom: -4px;
+    background: linear-gradient(135deg, #008f47, #00b359);
+}
+
+.orbit3 .orbit-dot {
+    width: 6px;
+    height: 6px;
+    top: -3px;
+    background: linear-gradient(135deg, #00d468, #00ff80);
+}
+
+@keyframes orbitSpin {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Glow effect behind mascot */
+.glow-ring {
+    position: absolute;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0, 179, 89, 0.25) 0%, rgba(0, 179, 89, 0.08) 50%, transparent 70%);
+    animation: pulseGlow 2.5s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+    0%, 100% {
+        transform: scale(0.95);
+        opacity: 0.6;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+}
+
+/* Mascot wrapper */
+.mascot-wrapper {
+    position: relative;
+    z-index: 2;
+    animation: floatMascot 3.5s ease-in-out infinite;
+}
+
+.mascot {
+    width: 90px;
+    height: auto;
+    filter: drop-shadow(0 8px 24px rgba(0, 100, 50, 0.2));
+    transition: transform 0.3s ease;
+}
+
+@keyframes floatMascot {
+    0%, 100% {
+        transform: translateY(0) scale(1);
+    }
+    50% {
+        transform: translateY(-8px) scale(1.02);
+    }
+}
+
+/* Title */
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 20px 0;
+    color: #19663d;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #19663d 0%, #00b359 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Progress bar */
+.progress-container {
+    width: 200px;
+    margin: 0 auto 18px;
+}
+
+.progress-bar {
+    height: 4px;
+    background: rgba(0, 179, 89, 0.15);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 30%;
+    background: linear-gradient(90deg, #00b359, #00d468, #00b359);
+    background-size: 200% 100%;
+    border-radius: 4px;
+    animation: progressMove 2s ease-in-out infinite, progressShimmer 1.5s linear infinite;
+}
+
+@keyframes progressMove {
+    0% { width: 15%; margin-left: 0; }
+    50% { width: 45%; margin-left: 25%; }
+    100% { width: 15%; margin-left: 85%; }
+}
+
+@keyframes progressShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Message */
+.message-container-outer {
+    height: 24px;
+    overflow: hidden;
+}
+
+.message {
+    font-size: 0.9rem;
+    color: #4a9d6d;
+    font-weight: 500;
+    animation: fadeInMessage 0.4s ease-out;
+}
+
+@keyframes fadeInMessage {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

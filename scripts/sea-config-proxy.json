@@ -1,0 +1,5 @@
+{
+    "main": "../scratch-gui/compile-proxy.mjs",
+    "output": "../src-tauri/backends/compile-proxy.blob",
+    "disableExperimentalSEAWarning": true
+}

@@ -1,0 +1,1390 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Editor de escenarios STBlock</title>
+  <link rel="stylesheet" href="editor.css">
+  <script>
+    // Electron 15 can expose an unstable WebGL2 context that loses UBOs.
+    // Return null for WebGL2 so Babylon falls back to the WebGL1 engine.
+    (function () {
+      var originalGetContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (type) {
+        if (type === 'webgl2') return null;
+        return originalGetContext.apply(this, arguments);
+      };
+    }());
+  </script>
+  <script>
+    (function () {
+      var originalLog = console.log;
+      console.log = function () {
+        if (arguments.length > 0 && typeof arguments[0] === 'string' &&
+            arguments[0].indexOf('Babylon.js v') === 0) {
+          return;
+        }
+        return originalLog.apply(console, arguments);
+      };
+    }());
+  </script>
+  <script src="../babylon/4.2.1/babylon.js"></script>
+  <script src="../babylon/4.2.1/babylonjs.loaders.min.js"></script>
+</head>
+<body>
+  <div id="adminLock" class="admin-lock">
+    <form id="adminLogin" class="login-card">
+      <div class="login-brand">STBlock</div>
+      <h1>Administracion de escenarios</h1>
+      <p>Introduce la clave para abrir el editor.</p>
+      <label>Clave administrativa
+        <input id="adminPassword" type="password" autocomplete="current-password" autofocus>
+      </label>
+      <div id="loginError" class="login-error" aria-live="polite"></div>
+      <button class="primary" type="submit">Entrar</button>
+    </form>
+  </div>
+  <header class="topbar">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <strong>STBlock</strong>
+      <div style="display: flex; background: #0d1424; border-radius: 6px; padding: 2px;">
+        <button id="switchToMaps" class="primary" style="padding: 4px 12px; font-size: 11px;">Escenarios</button>
+        <button id="switchToRobots" class="ghost" style="padding: 4px 12px; font-size: 11px;">Robots</button>
+        <button id="switchToParts" class="ghost" style="padding: 4px 12px; font-size: 11px;">Piezas</button>
+        <button id="switchToEvaluaciones" class="ghost" style="padding: 4px 12px; font-size: 11px;">Evaluaciones</button>
+      </div>
+    </div>
+    <div class="actions" id="mapActions">
+      <button id="newMap">Nuevo</button>
+      <button id="importMap">Importar JSON</button>
+      <button id="exportMap">Exportar JSON</button>
+      <button id="saveMap" class="primary">Guardar</button>
+      <button id="testMap" class="success">Probar en simulador</button>
+    </div>
+    <div class="actions" id="robotActions" style="display: none;">
+      <button id="newRobot">Nuevo Robot</button>
+      <button id="importRobot">Importar JSON</button>
+      <button id="exportRobot">Exportar JSON</button>
+      <button id="saveRobot" class="primary">Guardar</button>
+      <button id="testRobot" class="success">Probar en simulador</button>
+    </div>
+    <div class="actions" id="pieceActions" style="display: none;">
+      <button id="newPiece">Nueva Pieza</button>
+      <button id="importPiece">Importar JSON</button>
+      <button id="exportPiece">Exportar JSON</button>
+      <button id="copyPieceJson">Copiar JSON</button>
+      <button id="savePiece" class="primary">Guardar preset</button>
+      <button id="testPiece" class="success">Probar movimiento</button>
+    </div>
+    <div class="actions" id="evaluacionesActions" style="display: none;">
+      <button id="newEvaluacion">Nueva Evaluación</button>
+      <button id="importEvaluacion">Importar JSON</button>
+      <button id="exportEvaluacion">Exportar JSON</button>
+      <button id="saveEvaluacion" class="primary">Guardar</button>
+      <button id="previewEvaluacion" class="success">Vista Previa</button>
+    </div>
+  </header>
+
+  <main class="workspace" id="mapWorkspace">
+    <aside class="sidebar left">
+      <section>
+        <h2>Escenario</h2>
+        <label>Nombre<input id="mapName" value="Nuevo escenario"></label>
+        <label>ID<input id="mapId" value="nuevo-escenario"></label>
+        <label>Descripcion<textarea id="mapDescription"></textarea></label>
+      </section>
+
+      <section>
+        <h2>Agregar objetos</h2>
+        <div class="tool-grid">
+          <div class="tool-group-label">Formas</div>
+          <button data-add="box">Caja</button>
+          <button data-add="cylinder">Cilindro</button>
+          <button data-add="sphere">Esfera</button>
+          <button data-add="line">Linea</button>
+
+          <div class="tool-group-label">Estructurales</div>
+          <button data-add="wall">Pared</button>
+          <button data-add="ramp">Rampa</button>
+          <button data-add="terrain">Zona de terreno</button>
+          <button data-add="door">Puerta</button>
+          <button data-add="elevator">Ascensor</button>
+
+          <div class="tool-group-label">Interactivos</div>
+          <button data-add="zone">Zona</button>
+          <button data-add="button">Boton</button>
+          <button data-add="conveyor">Cinta</button>
+          <button data-add="goal">Porteria</button>
+
+          <div class="tool-group-label">Objetos</div>
+          <button data-add="ball">Balon</button>
+          <button data-add="light">Luz</button>
+          <button data-add="sound">Sonido</button>
+          <button data-add="teleporter">TP</button>
+          <button id="addModel">Modelo 3D</button>
+        </div>
+      </section>
+
+      <section class="layers-section">
+        <div class="section-title">
+          <h2>Objetos</h2>
+          <span id="objectCount">0</span>
+        </div>
+        <div id="layers" class="layers"></div>
+      </section>
+
+      <section>
+        <h2>Mapas guardados</h2>
+        <button id="refreshMaps">Actualizar</button>
+        <div id="savedMaps" class="saved-maps"></div>
+      </section>
+    </aside>
+
+    <section class="canvas-shell">
+      <div class="canvas-toolbar">
+        <span id="canvasInfo">300 x 300 cm</span>
+        <label><input id="snapEnabled" type="checkbox" checked> Cuadricula</label>
+        <label><input id="gridSize" type="number" value="10" min="1" max="100"> cm</label>
+        <button id="duplicateObject">Duplicar</button>
+        <button id="deleteObject" class="danger">Eliminar</button>
+      </div>
+      <canvas id="editorCanvas"></canvas>
+      <div class="legend">
+        Arrastra objetos para moverlos. Circulo verde = inicio del robot.
+      </div>
+    </section>
+
+    <aside class="sidebar right">
+      <nav class="tabs">
+        <button class="active" data-tab="terrain">Terreno</button>
+        <button data-tab="object">Objeto</button>
+        <button data-tab="environment">Ambiente</button>
+        <button data-tab="robot">Robot</button>
+        <button data-tab="game">Juego</button>
+        <button data-tab="rules">Acciones</button>
+      </nav>
+
+      <!-- PESTANA: TERRENO -->
+      <section class="tab active" data-panel="terrain">
+        <h2>Piso y paredes</h2>
+        <div class="two-cols">
+          <label>Ancho (cm)<input id="groundLength" type="number" value="300" min="50" max="5000"></label>
+          <label>Largo (cm)<input id="groundWidth" type="number" value="300" min="50" max="5000"></label>
+        </div>
+        <label>Superficie
+          <select id="surfaceType">
+            <option value="smooth">Lisa</option>
+            <option value="rough">Rugosa</option>
+            <option value="earth">Tierra</option>
+            <option value="sand">Arena</option>
+            <option value="grass">Cesped</option>
+            <option value="ice">Hielo</option>
+            <option value="water">Agua</option>
+            <option value="custom">Personalizada</option>
+          </select>
+        </label>
+        <label>Textura del piso<input id="groundTexture" type="file" accept="image/png,image/jpeg,image/webp"></label>
+        <div class="two-cols">
+          <label>Friccion<input id="groundFriction" type="number" value="0.8" min="0" max="5" step="0.05"></label>
+          <label>Rebote<input id="groundRestitution" type="number" value="0.05" min="0" max="1" step="0.05"></label>
+        </div>
+        <label class="check"><input id="wallEnabled" type="checkbox" checked> Pared perimetral</label>
+        <div class="two-cols">
+          <label>Altura<input id="wallHeight" type="number" value="18" min="0" max="200"></label>
+          <label>Grosor<input id="wallThickness" type="number" value="5" min="1" max="100"></label>
+        </div>
+        <label>Color pared<input id="wallColor" type="color" value="#162033"></label>
+        <h3>Laberinto</h3>
+        <div class="three-cols">
+          <label>Col<input id="mazeColumns" type="number" value="6" min="2" max="12"></label>
+          <label>Filas<input id="mazeRows" type="number" value="6" min="2" max="12"></label>
+          <label>Margen<input id="mazeMargin" type="number" value="15" min="0" max="100"></label>
+        </div>
+        <button id="generateMaze">Generar laberinto</button>
+        <button id="clearMaze" class="danger">Limpiar paredes</button>
+      </section>
+
+      <!-- PESTANA: OBJETO -->
+      <section class="tab" data-panel="object">
+        <h2>Propiedades del objeto</h2>
+        <div id="noSelection" class="empty">Selecciona un objeto en el plano.</div>
+        <div id="objectInspector" hidden>
+
+          <!-- Tipo y nombre -->
+          <div class="type-badge" id="objectTypeDisplay"></div>
+          <label>Nombre<input id="objectName"></label>
+
+          <!-- Posicion y tamano -->
+          <details class="inspect-section" open>
+            <summary>Posicion y tamano</summary>
+            <div class="section-body">
+              <div class="three-cols">
+                <label>X<input id="objectX" type="number"></label>
+                <label>Y<input id="objectY" type="number"></label>
+                <label>Altura Z<input id="objectZ" type="number" min="0"></label>
+              </div>
+              <div class="three-cols">
+                <label>Ancho<input id="objectW" type="number" min="0.1"></label>
+                <label>Largo<input id="objectD" type="number" min="0.1"></label>
+                <label>Alto<input id="objectH" type="number" min="0.1"></label>
+              </div>
+            </div>
+          </details>
+
+          <!-- Rotacion y color -->
+          <details class="inspect-section" open>
+            <summary>Rotacion y color</summary>
+            <div class="section-body">
+              <div class="three-cols">
+                <label>Rot X<input id="objectRX" type="number"></label>
+                <label>Rot Y<input id="objectRY" type="number"></label>
+                <label>Rot Z<input id="objectRZ" type="number"></label>
+              </div>
+              <label>Color<input id="objectColor" type="color"></label>
+            </div>
+          </details>
+
+          <!-- Fisica -->
+          <details class="inspect-section" open>
+            <summary>Fisica</summary>
+            <div class="section-body">
+              <label>Comportamiento
+                <select id="objectPhysics">
+                  <option value="fixed">Fijo</option>
+                  <option value="moveable">Movible</option>
+                  <option value="kinematic">Movimiento programado</option>
+                  <option value="sensor" hidden>Zona sin colision</option>
+                </select>
+              </label>
+              <div class="two-cols">
+                <label>Masa<input id="objectMass" type="number" min="0.1" max="10000" step="0.1"></label>
+                <label>Friccion<input id="objectFriction" type="number" min="0" max="5" step="0.05"></label>
+                <label>Rebote<input id="objectBounce" type="number" min="0" max="1" step="0.05"></label>
+                <label>Escala 3D<input id="objectScale" type="number" min="0.001" max="1000" step="0.1"></label>
+              </div>
+              <p class="hint">STL usa mm, OBJ usa cm y GLB/GLTF usa metros automaticamente</p>
+              <label class="check"><input id="objectMagnetic" type="checkbox"> Magnetico</label>
+              <label class="check"><input id="objectUltrasonic" type="checkbox" checked> Visible ultrasonido</label>
+              <label class="check"><input id="objectLaser" type="checkbox" checked> Visible laser</label>
+            </div>
+          </details>
+
+          <details class="inspect-section" id="kinematicPanel" hidden>
+            <summary>Movimiento programado</summary>
+            <div class="section-body">
+              <div class="three-cols">
+                <label>Inicio X<input id="motionStartX" type="number"></label>
+                <label>Inicio Y<input id="motionStartY" type="number"></label>
+                <label>Inicio Z<input id="motionStartZ" type="number" min="0"></label>
+                <label>Destino X<input id="motionEndX" type="number"></label>
+                <label>Destino Y<input id="motionEndY" type="number"></label>
+                <label>Destino Z<input id="motionEndZ" type="number" min="0"></label>
+              </div>
+              <div class="two-cols">
+                <label>Activacion
+                  <select id="motionTrigger">
+                    <option value="always">Al iniciar</option>
+                    <option value="touch">Al tocarlo el robot</option>
+                  </select>
+                </label>
+                <label>Recorrido
+                  <select id="motionCycle">
+                    <option value="once">Una vez</option>
+                    <option value="returnOnce">Ida y vuelta una vez</option>
+                    <option value="pingpong">Vaiven continuo</option>
+                    <option value="loop">Reinicio continuo</option>
+                  </select>
+                </label>
+                <label>Velocidad (cm/s)<input id="motionSpeed" type="number" value="20" min="0.1" max="1000" step="0.1"></label>
+                <label>Retraso inicial (s)<input id="motionDelay" type="number" value="0" min="0" max="300" step="0.1"></label>
+                <label>Pausa en extremos (s)<input id="motionWait" type="number" value="0" min="0" max="300" step="0.1"></label>
+              </div>
+              <label class="check"><input id="motionRetrigger" type="checkbox"> Reactivar con un nuevo contacto</label>
+            </div>
+          </details>
+
+          <!-- Propiedades especiales (tipo-especifico) -->
+          <div id="typePropertiesArea"></div>
+
+          <!-- Destructible -->
+          <details class="inspect-section">
+            <summary>Destructible</summary>
+            <div class="section-body">
+              <div class="two-cols">
+                <label>HP (0=indestructible)<input id="destructibleHP" type="number" value="0" min="0" max="100000"></label>
+                <label>Respawn (s)<input id="destructibleRespawn" type="number" value="0" min="0" max="300"></label>
+              </div>
+            </div>
+          </details>
+
+          <!-- Animacion -->
+          <details class="inspect-section">
+            <summary>Animacion por fotogramas</summary>
+            <div class="section-body">
+              <label>Modo
+                <select id="animMode">
+                  <option value="none">Ninguna</option>
+                  <option value="loop">Bucle</option>
+                  <option value="alternate">Alternar</option>
+                </select>
+              </label>
+              <div id="animationEditor">
+                <div id="animationKeyList"></div>
+                <div style="display:flex;gap:4px;margin-top:6px">
+                  <button id="addAnimKey" class="primary" style="flex:1">+ Agregar</button>
+                  <button id="clearAnimKeys" class="danger">Limpiar</button>
+                </div>
+              </div>
+            </div>
+          </details>
+
+        </div>
+      </section>
+
+      <!-- PESTANA: AMBIENTE -->
+      <section class="tab" data-panel="environment">
+        <h2>Ambiente</h2>
+        <label>Color del cielo<input id="skyColor" type="color" value="#dbeafe"></label>
+        <label>Color de luz global<input id="lightColor" type="color" value="#ffffff"></label>
+        <div class="two-cols">
+          <label>Luz ambiental<input id="ambientLight" type="number" value="0.65" min="0" max="2" step="0.05"></label>
+          <label>Luz direccional<input id="directionalLight" type="number" value="0.8" min="0" max="3" step="0.05"></label>
+        </div>
+        <label>Gravedad (cm/s2)<input id="gravity" type="number" value="-98.1" min="-300" max="0" step="0.1"></label>
+        <h3>Viento</h3>
+        <div class="three-cols">
+          <label>Dir X<input id="windX" type="number" value="0" min="-1" max="1" step="0.1"></label>
+          <label>Dir Z<input id="windZ" type="number" value="0" min="-1" max="1" step="0.1"></label>
+          <label>Fuerza<input id="windStrength" type="number" value="0" min="0" max="100"></label>
+        </div>
+        <label class="check"><input id="fogEnabled" type="checkbox"> Niebla</label>
+        <div class="two-cols">
+          <label>Densidad<input id="fogDensity" type="number" value="0.002" min="0" max="0.05" step="0.001"></label>
+          <label>Color<input id="fogColor" type="color" value="#dbeafe"></label>
+        </div>
+      </section>
+
+      <!-- PESTANA: ROBOT -->
+      <section class="tab" data-panel="robot">
+        <h2>Inicio del robot</h2>
+        <div class="three-cols">
+          <label>X<input id="robotX" type="number" value="0"></label>
+          <label>Y<input id="robotY" type="number" value="0"></label>
+          <label>Rotacion<input id="robotRotation" type="number" value="0"></label>
+        </div>
+        <label class="check"><input id="protectStart" type="checkbox" checked> Mantener zona libre</label>
+        <label>Radio libre (cm)<input id="startClearance" type="number" value="35" min="10" max="200"></label>
+      </section>
+
+      <!-- PESTANA: JUEGO -->
+      <section class="tab" data-panel="game">
+        <h2>Juego y competicion</h2>
+
+        <details class="inspect-section" open>
+          <summary>Modalidad arena / multi-robot</summary>
+          <div class="section-body">
+            <label class="check"><input id="arenaMode" type="checkbox"> Activar modo arena</label>
+            <label>Robots
+              <select id="arenaRobotCount">
+                <option value="1">1 robot</option>
+                <option value="2">2 robots</option>
+                <option value="3">3 robots</option>
+                <option value="4">4 robots</option>
+                <option value="5">5 robots</option>
+                <option value="6">6 robots</option>
+                <option value="7">7 robots</option>
+                <option value="8">8 robots</option>
+              </select>
+            </label>
+            <label>Equipos
+              <select id="arenaTeamCount">
+                <option value="2">2 equipos</option>
+                <option value="3">3 equipos</option>
+                <option value="4">4 equipos</option>
+              </select>
+            </label>
+            <label>Ubicacion inicial
+              <select id="arenaSpawnMode">
+                <option value="individual">Posicion por robot</option>
+                <option value="teamZones">Zona por equipo</option>
+              </select>
+            </label>
+            <div id="arenaTeamsConfig" class="arena-config"><div class="arena-config-card"><strong>Equipo A</strong><div class="arena-config-grid"><label>Nombre<input id="arenaTeamName1" value="Equipo A"></label><label>Color<input id="arenaTeamColor1" type="color" value="#ef4444"></label><label>Centro X<input id="arenaTeamX1" type="number" value="-90"></label><label>Centro Y<input id="arenaTeamY1" type="number" value="-90"></label><label>Ancho<input id="arenaTeamW1" type="number" min="40" value="80"></label><label>Alto<input id="arenaTeamD1" type="number" min="40" value="80"></label><label>Orientacion<input id="arenaTeamRot1" type="number" value="0"></label></div></div><div class="arena-config-card"><strong>Equipo B</strong><div class="arena-config-grid"><label>Nombre<input id="arenaTeamName2" value="Equipo B"></label><label>Color<input id="arenaTeamColor2" type="color" value="#3b82f6"></label><label>Centro X<input id="arenaTeamX2" type="number" value="90"></label><label>Centro Y<input id="arenaTeamY2" type="number" value="-90"></label><label>Ancho<input id="arenaTeamW2" type="number" min="40" value="80"></label><label>Alto<input id="arenaTeamD2" type="number" min="40" value="80"></label><label>Orientacion<input id="arenaTeamRot2" type="number" value="180"></label></div></div><div class="arena-config-card"><strong>Equipo C</strong><div class="arena-config-grid"><label>Nombre<input id="arenaTeamName3" value="Equipo C"></label><label>Color<input id="arenaTeamColor3" type="color" value="#22c55e"></label><label>Centro X<input id="arenaTeamX3" type="number" value="-90"></label><label>Centro Y<input id="arenaTeamY3" type="number" value="90"></label><label>Ancho<input id="arenaTeamW3" type="number" min="40" value="80"></label><label>Alto<input id="arenaTeamD3" type="number" min="40" value="80"></label><label>Orientacion<input id="arenaTeamRot3" type="number" value="0"></label></div></div><div class="arena-config-card"><strong>Equipo D</strong><div class="arena-config-grid"><label>Nombre<input id="arenaTeamName4" value="Equipo D"></label><label>Color<input id="arenaTeamColor4" type="color" value="#f59e0b"></label><label>Centro X<input id="arenaTeamX4" type="number" value="90"></label><label>Centro Y<input id="arenaTeamY4" type="number" value="90"></label><label>Ancho<input id="arenaTeamW4" type="number" min="40" value="80"></label><label>Alto<input id="arenaTeamD4" type="number" min="40" value="80"></label><label>Orientacion<input id="arenaTeamRot4" type="number" value="180"></label></div></div></div>
+            <div id="arenaRobotsConfig" class="arena-config"><div class="arena-config-card"><strong>Robot 1</strong><div class="arena-config-grid"><label>Equipo<select id="arenaRobotTeam1"><option value="A">Equipo A</option><option value="B">Equipo B</option><option value="C">Equipo C</option><option value="D">Equipo D</option></select></label><label>X<input id="arenaRobotX1" type="number" value="0"></label><label>Y<input id="arenaRobotY1" type="number" value="0"></label><label>Orientacion<input id="arenaRobotRot1" type="number" value="0"></label></div></div><div class="arena-config-card"><strong>Robot 2</strong><div class="arena-config-grid"><label>Equipo<select id="arenaRobotTeam2"><option value="A">Equipo A</option><option value="B">Equipo B</option><option value="C">Equipo C</option><option value="D">Equipo D</option></select></label><label>X<input id="arenaRobotX2" type="number" value="0"></label><label>Y<input id="arenaRobotY2" type="number" value="0"></label><label>Orientacion<input id="arenaRobotRot2" type="number" value="0"></label></div></div><div class="arena-config-card"><strong>Robot 3</strong><div class="arena-config-grid"><label>Equipo<select id="arenaRobotTeam3"><option value="A">Equipo A</option><option value="B">Equipo B</option><option value="C">Equipo C</option><option value="D">Equipo D</option></select></label><label>X<input id="arenaRobotX3" type="number" value="0"></label><label>Y<input id="arenaRobotY3" type="number" value="0"></label><label>Orientacion<input id="arenaRobotRot3" type="number" value="0"></label></div></div><div class="arena-config-card"><strong>Robot 4</strong><div class="arena-config-grid"><label>Equipo<select id="arenaRobotTeam4"><option value="A">Equipo A</option><option value="B">Equipo B</option><option value="C">Equipo C</option><option value="D">Equipo D</option></select></label><label>X<input id="arenaRobotX4" type="number" value="0"></label><label>Y<input id="arenaRobotY4" type="number" value="0"></label><label>Orientacion<input id="arenaRobotRot4" type="number" value="0"></label></div></div><div class="arena-config-card"><strong>Robot 5</strong><div class="arena-config-grid"><label>Equipo<select id="arenaRobotTeam5"><option value="A">Equipo A</option><option value="B">Equipo B</option><option value="C">Equipo C</option><option value="D">Equipo D</option></select></label><label>X<input id="arenaRobotX5" type="number" value="0"></label><label>Y<input id="arenaRobotY5" type="number" value="0"></label><label>Orientacion<input id="arenaRobotRot5" type="number" value="0"></label></div></div><div class="arena-config-card"><strong>Robot 6</strong><div class="arena-config-grid"><label>Equipo<select id="arenaRobotTeam6"><option value="A">Equipo A</option><option value="B">Equipo B</option><option value="C">Equipo C</option><option value="D">Equipo D</option></select></label><label>X<input id="arenaRobotX6" type="number" value="0"></label><label>Y<input id="arenaRobotY6" type="number" value="0"></label><label>Orientacion<input id="arenaRobotRot6" type="number" value="0"></label></div></div><div class="arena-config-card"><strong>Robot 7</strong><div class="arena-config-grid"><label>Equipo<select id="arenaRobotTeam7"><option value="A">Equipo A</option><option value="B">Equipo B</option><option value="C">Equipo C</option><option value="D">Equipo D</option></select></label><label>X<input id="arenaRobotX7" type="number" value="0"></label><label>Y<input id="arenaRobotY7" type="number" value="0"></label><label>Orientacion<input id="arenaRobotRot7" type="number" value="0"></label></div></div><div class="arena-config-card"><strong>Robot 8</strong><div class="arena-config-grid"><label>Equipo<select id="arenaRobotTeam8"><option value="A">Equipo A</option><option value="B">Equipo B</option><option value="C">Equipo C</option><option value="D">Equipo D</option></select></label><label>X<input id="arenaRobotX8" type="number" value="0"></label><label>Y<input id="arenaRobotY8" type="number" value="0"></label><label>Orientacion<input id="arenaRobotRot8" type="number" value="0"></label></div></div></div>
+          </div>
+        </details>
+
+        <details class="inspect-section" open>
+          <summary>Marcador / Puntuacion</summary>
+          <div class="section-body">
+            <label class="check"><input id="scoreboardEnabled" type="checkbox"> Activar marcador</label>
+            <div class="two-cols">
+              <label>Equipo A<input id="scoreboardTeamA" value="Equipo Rojo"></label>
+              <label>Equipo B<input id="scoreboardTeamB" value="Equipo Azul"></label>
+            </div>
+            <label>Puntos para ganar<input id="scoreboardWinScore" type="number" value="5" min="1" max="100"></label>
+          </div>
+        </details>
+
+        <details class="inspect-section" open>
+          <summary>Condiciones de victoria</summary>
+          <div class="section-body">
+            <label>Tipo
+              <select id="winCondition">
+                <option value="none">Ninguna</option>
+                <option value="score">Al alcanzar puntuacion</option>
+                <option value="firstTo">Primero en llegar</option>
+              </select>
+            </label>
+            <label>Puntuacion objetivo<input id="winTargetScore" type="number" value="5" min="1" max="100"></label>
+            <label>Duracion temporizador (s)<input id="winTimerDuration" type="number" value="60" min="5" max="600"></label>
+            <label>Al completar
+              <select id="winOnComplete">
+                <option value="stopAll">Detener todo</option>
+                <option value="continue">Continuar</option>
+              </select>
+            </label>
+          </div>
+        </details>
+      </section>
+
+      <!-- PESTANA: ACCIONES -->
+      <section class="tab" data-panel="rules">
+        <h2>Eventos y acciones</h2>
+        <p class="hint">Una zona o boton detecta al robot/objeto y ejecuta una accion.</p>
+
+        <details class="inspect-section" open>
+          <summary>Configurar regla</summary>
+          <div class="section-body">
+            <label>Zona / Boton activador<select id="ruleTrigger"></select></label>
+            <label>Quien activa<select id="ruleActor"></select></label>
+            <label>Objeto objetivo<select id="ruleTarget"></select></label>
+            <label>Accion
+              <select id="ruleAction">
+                <optgroup label="Basicas">
+                  <option value="move">Mover o elevar</option>
+                  <option value="toggleVisibility">Mostrar / ocultar</option>
+                  <option value="show">Mostrar</option>
+                  <option value="hide">Ocultar</option>
+                  <option value="color">Cambiar color</option>
+                </optgroup>
+                <optgroup label="Luces">
+                  <option value="lightOn">Encender luces (global)</option>
+                  <option value="lightOff">Apagar luces (global)</option>
+                  <option value="objectLightOn">Encender luz (objeto)</option>
+                  <option value="objectLightOff">Apagar luz (objeto)</option>
+                  <option value="setLightColor">Cambiar color de luz</option>
+                </optgroup>
+                <optgroup label="Puertas">
+                  <option value="openDoor">Abrir puerta</option>
+                  <option value="closeDoor">Cerrar puerta</option>
+                  <option value="toggleDoor">Alternar puerta</option>
+                </optgroup>
+                <optgroup label="Cintas">
+                  <option value="startConveyor">Iniciar cinta</option>
+                  <option value="stopConveyor">Detener cinta</option>
+                  <option value="reverseConveyor">Invertir cinta</option>
+                </optgroup>
+                <optgroup label="Ascensor / Rampa">
+                  <option value="raiseElevator">Elevar ascensor</option>
+                  <option value="lowerElevator">Bajar ascensor</option>
+                  <option value="moveRamp">Mover rampa</option>
+                </optgroup>
+                <optgroup label="Puntuacion">
+                  <option value="scoreGoal">Anotar punto</option>
+                  <option value="resetScore">Reiniciar puntuacion</option>
+                </optgroup>
+                <optgroup label="Temporizador">
+                  <option value="startTimer">Iniciar temporizador</option>
+                  <option value="stopTimer">Detener temporizador</option>
+                  <option value="resetTimer">Reiniciar temporizador</option>
+                  <option value="addTime">Anadir/restar tiempo</option>
+                </optgroup>
+                <optgroup label="Destructibles">
+                  <option value="damage">Danar</option>
+                  <option value="heal">Curar</option>
+                  <option value="destroy">Destruir</option>
+                  <option value="repair">Reparar</option>
+                </optgroup>
+                <optgroup label="Botones">
+                  <option value="pressButton">Presionar boton</option>
+                  <option value="releaseButton">Liberar boton</option>
+                </optgroup>
+                <optgroup label="Teletransporte">
+                  <option value="teleport">Teletransportar</option>
+                </optgroup>
+                <optgroup label="Sonido">
+                  <option value="playSound">Reproducir sonido</option>
+                  <option value="stopSound">Detener sonido</option>
+                  <option value="pauseSound">Pausar sonido</option>
+                  <option value="setVolume">Ajustar volumen</option>
+                </optgroup>
+              </select>
+            </label>
+            <div class="three-cols">
+              <label>Mover X<input id="ruleX" type="number" value="0"></label>
+              <label>Mover Y<input id="ruleY" type="number" value="0"></label>
+              <label>Elevar Z<input id="ruleZ" type="number" value="20"></label>
+            </div>
+            <div class="three-cols">
+              <label>Duracion (s)<input id="ruleDuration" type="number" value="1" min="0" max="30" step="0.1"></label>
+              <label>Color<input id="ruleColor" type="color" value="#ffd43b"></label>
+              <label>Equipo
+                <select id="ruleTeam">
+                  <option value="A">Equipo A</option>
+                  <option value="B">Equipo B</option>
+                </select>
+              </label>
+            </div>
+            <label class="check"><input id="ruleOnce" type="checkbox" checked> Una sola vez</label>
+            <button id="addRule" class="primary" style="width:100%;margin-top:6px">Agregar accion</button>
+          </div>
+        </details>
+
+        <h3>Reglas creadas</h3>
+        <div id="rulesList" class="saved-maps"></div>
+      </section>
+    </aside>
+  </main>
+
+  <main class="workspace" id="robotWorkspace" style="display: none;">
+    <aside class="sidebar left">
+      <section>
+        <h2>Robot Base</h2>
+        <label>Nombre<input id="robotNameInput" value="Nuevo Robot"></label>
+        <label>Identificador<input id="robotIdInput" value="nuevo-robot"></label>
+        <label>Tipo de Chasis
+          <select id="robotChassisType">
+            <option value="box">Caja Paramétrica</option>
+            <option value="custom">Modelo 3D (.STL/.OBJ/.GLB)</option>
+          </select>
+        </label>
+        <div id="customChassisUploadSection" hidden>
+          <button id="btnLoadChassisModel" class="primary" style="width: 100%;">Cargar 3D Chasis</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Agregar Partes</h2>
+        <div class="tool-grid">
+          <div class="tool-group-label">Estructura</div>
+          <button data-add-part="struct_box">Pieza Caja</button>
+          <button data-add-part="struct_cylinder">Pieza Cilindro</button>
+          <button data-add-part="struct_sphere">Pieza Esfera</button>
+          <button data-add-part="struct_model">Diseño 3D</button>
+
+          <div class="tool-group-label">Actuadores</div>
+          <button data-add-part="wheel">Rueda Pasiva</button>
+          <button data-add-part="caster_wheel">Rueda Loca</button>
+          <button data-add-installed-piece="servo-sg90">Servo SG90</button>
+          <button data-add-installed-piece="servo-sg90-360">Servo SG90 360</button>
+          <button data-add-installed-piece="servo-mg996">Servo MG996</button>
+          <button data-add-installed-piece="servo-mg996-360">Servo MG996 360</button>
+          <button data-add-part="linear">Actuador Lineal</button>
+          <button data-add-part="magnet">Electroimán</button>
+          <button data-add-part="paintball">Lanzador Paintball</button>
+          
+          <div class="tool-group-label">Piezas personalizadas</div>
+          <div id="customRobotPieces" class="tool-grid" style="grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px;"></div>
+          <button id="refreshCustomRobotPieces" type="button" style="grid-column: 1 / -1;">Actualizar piezas</button>
+
+          <div class="tool-group-label">Sensores</div>
+          <button data-add-part="ultrasonic">Ultrasonido</button>
+          <button data-add-part="color">Sensor Color</button>
+          <button data-add-part="touch">Contacto</button>
+          <button data-add-part="gyro">Giroscopio</button>
+          <button data-add-part="laser">Láser Distancia</button>
+          <button data-add-part="lidar">LIDAR 360</button>
+          <button data-add-part="gps">Sensor GPS</button>
+          <button data-add-part="pen">Lápiz Trazador</button>
+          <button data-add-part="linefollower">Seguidor de Línea</button>
+          <button data-add-part="gas">Sensor de Gas</button>
+          <button data-add-part="temperature">Sensor Temperatura</button>
+          <button data-add-part="humidity">Sensor Humedad</button>
+        </div>
+      </section>
+
+      <section class="layers-section">
+        <div class="section-title">
+          <h2>Piezas Instaladas</h2>
+          <span id="robotPartCount">0</span>
+        </div>
+        <div id="robotPartsList" class="layers"></div>
+      </section>
+
+      <section>
+        <h2>Robots del Docente</h2>
+        <button id="refreshAdminRobots">Actualizar lista</button>
+        <div id="savedAdminRobots" class="saved-maps"></div>
+      </section>
+
+      <section>
+        <h2>Mis Robots Personalizados</h2>
+        <div class="robot-sync-actions">
+          <button id="refreshCustomRobots" title="Actualizar lista">🔄</button>
+          <button id="syncToCustom" class="success" title="Guardar robot actual en Mis Robots">💾 Guardar en Mis Robots</button>
+        </div>
+        <div id="savedCustomRobots" class="saved-maps"></div>
+        <p class="hint" style="font-size: 11px; color: #666; margin-top: 8px;">
+          Estos robots se guardan localmente y aparecen en el menú principal de Gearbot.
+        </p>
+      </section>
+    </aside>
+
+    <section class="canvas-shell">
+      <div class="canvas-toolbar">
+        <span>Visor de Robot 3D</span>
+        <button id="duplicateRobotPart">Duplicar</button>
+        <button id="deleteRobotPartBtn" class="danger">Eliminar</button>
+      </div>
+      <canvas id="robotCanvas" style="cursor: default;"></canvas>
+      <div class="legend">
+        Usa clic derecho para rotar la cámara y la rueda para el zoom. Selecciona piezas para editarlas.
+      </div>
+    </section>
+
+    <aside class="sidebar right">
+      <nav class="tabs">
+        <button class="active" id="btnTabChassis" data-tab-r="chassis" style="width: 50%;">Chasis</button>
+        <button id="btnTabPart" data-tab-r="part" style="width: 50%;">Propiedades Pieza</button>
+      </nav>
+
+      <section class="tab active" id="panel-r-chassis" data-panel-r="chassis">
+        <h2>Parámetros del Chasis</h2>
+        <div class="three-cols">
+          <label>Ancho (W)<input id="chassisW" type="number" value="15" min="2" max="100"></label>
+          <label>Largo (D)<input id="chassisD" type="number" value="20" min="2" max="100"></label>
+          <label>Alto (H)<input id="chassisH" type="number" value="8" min="1" max="100"></label>
+        </div>
+        <label>Altura desde suelo (Z)<input id="chassisYOffset" type="number" value="0" min="0" max="100" step="0.1"></label>
+        <div class="two-cols">
+          <label>Masa (g)<input id="chassisMass" type="number" value="120" min="10" max="5000"></label>
+          <label>Fricción<input id="chassisFriction" type="number" value="0.5" min="0" max="5" step="0.05"></label>
+        </div>
+        <label>Color Chasis<input id="chassisColor" type="color" value="#f09c0d"></label>
+        
+        <hr>
+        <h2>Movimiento Irregular</h2>
+        <label class="check">
+          <input id="chassisDriftEnabled" type="checkbox"> Activar movimiento irregular (desviación)
+        </label>
+        <label id="labelChassisDriftLeft" style="display: flex; flex-direction: column; gap: 4px;">
+          <span>Desviación rueda izquierda (%)</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <input id="chassisDriftLeft" type="range" min="0" max="50" value="10" style="flex: 1;">
+            <span id="chassisDriftValue" style="min-width: 32px; font-weight: bold;">10%</span>
+          </div>
+        </label>
+
+        <hr>
+        <h2>Tarjeta Controladora</h2>
+        <label>Tarjetas compatibles
+          <select id="robotBoardType" multiple size="9">
+            <optgroup label="STBlock / STBoard">
+              <option value="stbBoardV2">STBoard V2</option>
+              <option value="stBoardExtension">STBoard Extension</option>
+            </optgroup>
+            <optgroup label="Arduino">
+              <option value="arduinoUno">Arduino Uno</option>
+              <option value="arduinoNano">Arduino Nano</option>
+              <option value="arduinoLeonardo">Arduino Leonardo</option>
+              <option value="arduinoMega2560">Arduino Mega 2560</option>
+              <option value="arduinoUnoR4Minima">Arduino Uno R4 Minima</option>
+              <option value="arduinoUnoR4Wifi">Arduino Uno R4 WiFi</option>
+              <option value="makeyMakey">Makey Makey</option>
+            </optgroup>
+            <optgroup label="ESP32 / ESP8266">
+              <option value="arduinoEsp32">ESP32</option>
+              <option value="arduinoEsp32S3">ESP32-S3</option>
+              <option value="arduinoEsp8266NodeMCU">NodeMCU (ESP8266)</option>
+            </optgroup>
+            <optgroup label="Raspberry Pi Pico">
+              <option value="arduinoRaspberryPiPico">Raspberry Pi Pico</option>
+              <option value="arduinoRaspberryPiPicoW">Raspberry Pi Pico W</option>
+              <option value="arduinoRaspberryPiPico2">Raspberry Pi Pico 2</option>
+              <option value="arduinoRaspberryPiPico2W">Raspberry Pi Pico 2 W</option>
+            </optgroup>
+            <optgroup label="Micro:bit">
+              <option value="microbit">Micro:bit</option>
+              <option value="microbitV2">Micro:bit V2</option>
+            </optgroup>
+            <optgroup label="K210 (RISC-V)">
+              <option value="arduinoK210MaixDock">MaixDock</option>
+              <option value="arduinoK210Maixduino">Maixduino</option>
+            </optgroup>
+            <optgroup label="Otros">
+              <option value="ev3">LEGO MINDSTORMS EV3</option>
+            </optgroup>
+          </select>
+        </label>
+        <p class="hint">Selecciona una o varias tarjetas. La primera seleccionada será la principal para previsualizar y guardar compatibilidad antigua.</p>
+      </section>
+
+      <section class="tab" id="panel-r-part" data-panel-r="part">
+        <h2>Propiedades de la Pieza</h2>
+        <div id="noPartSelected" class="empty">Selecciona una pieza instalada.</div>
+        <div id="robotPartInspector" hidden>
+          <label>Nombre pieza<input id="partNameInput"></label>
+          <label>Tipo pieza<input id="partTypeDisplay" disabled></label>
+          <label id="labelPartParentSelect">Pieza Padre
+            <select id="partParentSelect"></select>
+          </label>
+          <div id="panel-part-activation" style="margin-top: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
+            <label class="check" style="display: flex; align-items: center; gap: 6px;">
+              <input id="partDefaultActive" type="checkbox" checked> Activo por defecto (instalado)
+            </label>
+            <label id="labelPartExclusionGroup" style="display: flex; flex-direction: column; gap: 4px;">
+              <span>Grupo de Exclusión (ej. palas)</span>
+              <input id="partExclusionGroup" type="text" placeholder="Ninguno" style="width: 100%;">
+            </label>
+          </div>
+          <label id="labelPartConnectionBoard">Configurar conexiones para
+            <select id="partConnectionBoard"></select>
+          </label>
+          <label id="labelPartPortSelect">Puerto de conexión
+            <select id="partPortSelect"></select>
+          </label>
+          
+          <!-- Arduino H-Bridge Options -->
+          <div id="panel-part-arduino-motor" hidden>
+            <hr>
+            <h3>Conexión Puente H (L293)</h3>
+            <div class="three-cols">
+              <label>Pin Dir 1
+                <select id="partArduinoDir1"></select>
+              </label>
+              <label>Pin Dir 2
+                <select id="partArduinoDir2"></select>
+              </label>
+              <label>Pin PWM (Vel)
+                <select id="partArduinoPWM"></select>
+              </label>
+            </div>
+          </div>
+
+          <!-- Panel dinámico de pines múltiples -->
+          <div id="panel-part-multi-pins" hidden>
+            <hr>
+            <h3 id="multiPinsTitle">Pines de conexión</h3>
+            <div id="multiPinsContainer" class="two-cols"></div>
+          </div>
+
+          <h3>Posición Relativa (cm)</h3>
+          <div class="three-cols">
+            <label>X (Lado)<input id="partX" type="number" step="0.1"></label>
+            <label>Y (Altura)<input id="partY" type="number" step="0.1"></label>
+            <label>Z (Frente)<input id="partZ" type="number" step="0.1"></label>
+          </div>
+
+          <div id="panel-part-rotation">
+            <h3>Rotación (Grados)</h3>
+            <div class="three-cols">
+              <label>Rot X<input id="partRX" type="number"></label>
+              <label>Rot Y<input id="partRY" type="number"></label>
+              <label>Rot Z<input id="partRZ" type="number"></label>
+            </div>
+          </div>
+
+          <div id="panel-part-structure" hidden>
+            <h3>Pieza estructural</h3>
+            <label>Modo físico
+              <select id="partAttachMode">
+                <option value="free">Libre con física</option>
+                <option value="fixed">Fija al padre</option>
+              </select>
+            </label>
+            <div id="panel-part-box-size" class="three-cols">
+              <label>Ancho<input id="partStructW" type="number" step="0.1" min="0.1"></label>
+              <label>Alto<input id="partStructH" type="number" step="0.1" min="0.1"></label>
+              <label>Largo<input id="partStructD" type="number" step="0.1" min="0.1"></label>
+            </div>
+            <div id="panel-part-round-size" class="two-cols">
+              <label>Diámetro<input id="partStructDiameter" type="number" step="0.1" min="0.1"></label>
+              <label>Alto<input id="partStructRoundH" type="number" step="0.1" min="0.1"></label>
+            </div>
+            <div class="two-cols">
+              <label>Masa<input id="partStructMass" type="number" step="1" min="0"></label>
+              <label>Fricción<input id="partStructFriction" type="number" step="0.05" min="0"></label>
+            </div>
+            <label>Color<input id="partStructColor" type="color" value="#A3CF0D"></label>
+          </div>
+
+          <div id="panel-part-joint" hidden>
+            <h3>Unión mecánica</h3>
+            <label class="check" style="display:flex;align-items:center;gap:6px;">
+              <input id="partJointEnabled" type="checkbox"> Unir esta pieza a otra por punto
+            </label>
+            <label>Tipo de unión
+              <select id="partJointType">
+                <option value="point">Punto libre</option>
+                <option value="hinge">Bisagra</option>
+              </select>
+            </label>
+            <label>Unir a
+              <select id="partJointTarget"></select>
+            </label>
+            <h4>Punto en esta pieza</h4>
+            <div class="three-cols">
+              <label>X<input id="partJointAX" type="number" step="0.1"></label>
+              <label>Y<input id="partJointAY" type="number" step="0.1"></label>
+              <label>Z<input id="partJointAZ" type="number" step="0.1"></label>
+            </div>
+            <h4>Punto en pieza destino</h4>
+            <div class="three-cols">
+              <label>X<input id="partJointBX" type="number" step="0.1"></label>
+              <label>Y<input id="partJointBY" type="number" step="0.1"></label>
+              <label>Z<input id="partJointBZ" type="number" step="0.1"></label>
+            </div>
+            <div id="panel-part-joint-axis">
+              <h4>Eje bisagra</h4>
+              <div class="three-cols">
+                <label>X<input id="partJointAxisX" type="number" step="0.1"></label>
+                <label>Y<input id="partJointAxisY" type="number" step="0.1"></label>
+                <label>Z<input id="partJointAxisZ" type="number" step="0.1"></label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Wheel Options (Radius and Width) -->
+          <div id="panel-part-wheel" hidden>
+            <hr>
+            <h3>Parámetros de la Rueda</h3>
+            <div class="two-cols">
+              <label>Radio (cm)<input id="partWheelRadius" type="number" step="0.1" value="4.0"></label>
+              <label>Ancho (cm)<input id="partWheelWidth" type="number" step="0.1" value="2.0"></label>
+            </div>
+          </div>
+
+          <!-- Actuator Hinge Option (Servo limit/properties) -->
+          <div id="panel-part-servo" hidden>
+            <hr>
+            <h3>Límites del Servo</h3>
+            <div class="two-cols">
+              <label>Ángulo Mín<input id="partServoMin" type="number" value="-15"></label>
+              <label>Ángulo Máx<input id="partServoMax" type="number" value="90"></label>
+            </div>
+            <div class="two-cols">
+              <label>Velocidad<input id="partServoSpeed" type="number" value="90"></label>
+              <label>Fuerza Máx<input id="partServoForce" type="number" value="150"></label>
+            </div>
+          </div>
+
+          <!-- Component Mesh Customization (Part sets) -->
+          <div id="panel-part-mesh" hidden>
+            <hr>
+            <h3>Modelos 3D (Conjunto de Mallas)</h3>
+            <p class="hint">El docente carga alternativas (ej. 3 tipos de palas) y el alumno selecciona una.</p>
+            <div id="partMeshSetList" style="margin-bottom: 6px;"></div>
+            <button id="btnAddMeshToPart" class="primary" style="width: 100%; font-size: 11px;">Cargar modelo 3D alternativo (.STL)</button>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+
+  <main class="workspace" id="pieceWorkspace" style="display: none;">
+    <aside class="sidebar left">
+      <section>
+        <h2>Preset de Pieza</h2>
+        <label>Nombre<input id="pieceNameInput" value="Servo SG90"></label>
+        <label>Identificador<input id="pieceIdInput" value="servo-sg90"></label>
+        <label>Categoria
+          <select id="pieceCategoryInput">
+            <option value="actuator">Actuador</option>
+            <option value="motor">Motor</option>
+            <option value="sensor">Sensor</option>
+            <option value="tool">Herramienta</option>
+            <option value="structure">Estructura</option>
+            <option value="custom">Personalizada</option>
+          </select>
+        </label>
+        <label>Tipo funcional
+          <select id="pieceTypeInput">
+            <option value="rotary-servo">Servo rotativo</option>
+            <option value="continuous-motor">Motor continuo</option>
+            <option value="linear-actuator">Actuador lineal</option>
+            <option value="solenoid">Solenoide</option>
+            <option value="passive-tool">Herramienta pasiva</option>
+            <option value="free-physics">Pieza fisica libre</option>
+          </select>
+        </label>
+        <label>Descripcion<textarea id="pieceDescriptionInput"></textarea></label>
+        <label>Número de pines
+          <select id="piecePinCountInput">
+            <option value="1">1 pin (Servo, Sensor simple)</option>
+            <option value="2">2 pines (Motor DC, Sensor digital)</option>
+            <option value="3">3 pines (Motor con PWM, Sensor I2C)</option>
+            <option value="4">4 pines (Stepper, Display)</option>
+          </select>
+        </label>
+      </section>
+
+      <section>
+        <h2>Subpiezas 3D</h2>
+        <div class="tool-grid">
+          <button data-add-piece-segment="fixed">Fija</button>
+          <button data-add-piece-segment="rotary">Rotacion</button>
+          <button data-add-piece-segment="continuous">Giro continuo</button>
+          <button data-add-piece-segment="linear">Lineal</button>
+          <button data-add-piece-segment="free">Fisica libre</button>
+          <button id="btnLoadPieceSegmentModel">Cargar modelo 3D</button>
+        </div>
+      </section>
+
+      <section class="layers-section">
+        <div class="section-title">
+          <h2>Partes del preset</h2>
+          <span id="pieceSegmentCount">0</span>
+        </div>
+        <div id="pieceSegmentsList" class="layers"></div>
+      </section>
+
+      <section>
+        <h2>Presets guardados</h2>
+        <button id="refreshPiecePresets">Actualizar</button>
+        <div id="savedPiecePresets" class="saved-maps"></div>
+      </section>
+    </aside>
+
+    <section class="canvas-shell">
+      <div class="canvas-toolbar">
+        <span>Constructor de piezas</span>
+        <button id="duplicatePieceSegment">Duplicar</button>
+        <button id="deletePieceSegment" class="danger">Eliminar</button>
+      </div>
+      <canvas id="pieceCanvas" style="cursor: default;"></canvas>
+      <div class="legend">
+        Crea la pieza como conjunto: carcasa fija, eje rotativo, pistones lineales y colisionadores simples.
+      </div>
+    </section>
+
+    <aside class="sidebar right">
+      <section>
+        <h2>Propiedades de subpieza</h2>
+        <div id="noPieceSegmentSelected" class="empty">Selecciona o agrega una subpieza.</div>
+        <div id="pieceSegmentInspector" hidden>
+          <label>Nombre<input id="segmentNameInput"></label>
+          <label>Funcion
+            <select id="segmentRoleInput">
+              <option value="fixed">Fija</option>
+              <option value="rotary">Rotativa</option>
+              <option value="continuous">Rotacion continua</option>
+              <option value="linear">Lineal</option>
+              <option value="free">Fisica libre</option>
+            </select>
+          </label>
+          <label>Padre / referencia
+            <select id="segmentParentInput"></select>
+          </label>
+          <div class="three-cols">
+            <label>X<input id="segmentX" type="number" step="0.1"></label>
+            <label>Y<input id="segmentY" type="number" step="0.1"></label>
+            <label>Z<input id="segmentZ" type="number" step="0.1"></label>
+          </div>
+          <div class="three-cols">
+            <label>Rot X<input id="segmentRX" type="number" step="1"></label>
+            <label>Rot Y<input id="segmentRY" type="number" step="1"></label>
+            <label>Rot Z<input id="segmentRZ" type="number" step="1"></label>
+          </div>
+          <label>Escala general<input id="segmentScale" type="number" min="0.01" step="0.01" value="1"></label>
+          <div class="three-cols">
+            <label>Eje X<input id="segmentAxisX" type="number" step="0.1"></label>
+            <label>Eje Y<input id="segmentAxisY" type="number" step="0.1"></label>
+            <label>Eje Z<input id="segmentAxisZ" type="number" step="0.1"></label>
+          </div>
+          <div class="three-cols">
+            <label>Pivote X<input id="segmentPivotX" type="number" step="0.1"></label>
+            <label>Pivote Y<input id="segmentPivotY" type="number" step="0.1"></label>
+            <label>Pivote Z<input id="segmentPivotZ" type="number" step="0.1"></label>
+          </div>
+          <button id="centerPiecePivot" type="button" style="width:100%;margin:6px 0 4px;">Centrar pivote en modelo</button>
+          <div class="three-cols">
+            <label>Min<input id="segmentMin" type="number" step="1"></label>
+            <label>Max<input id="segmentMax" type="number" step="1"></label>
+            <label>Velocidad<input id="segmentSpeed" type="number" step="1"></label>
+          </div>
+          <div class="two-cols">
+            <label>Masa<input id="segmentMass" type="number" step="1" min="0"></label>
+            <label>Friccion<input id="segmentFriction" type="number" step="0.05" min="0"></label>
+          </div>
+          <label>Color preview<input id="segmentColor" type="color" value="#2f8cff"></label>
+          <label class="check"><input id="segmentCollider" type="checkbox" checked> Usar como colisionador</label>
+          <label>Modelo cargado<input id="segmentModelName" disabled></label>
+          <div style="margin-top:8px;padding:8px;border:1px solid rgba(148,163,184,.25);border-radius:6px;background:rgba(15,23,42,.45);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+              <h3 style="margin:0;font-size:12px;">Medidas reales</h3>
+              <button id="measurePieceSegment" type="button" style="padding:3px 8px;font-size:11px;">Recalcular</button>
+            </div>
+            <div class="three-cols">
+              <label>Ancho mm<input id="segmentMeasureW" disabled></label>
+              <label>Alto mm<input id="segmentMeasureH" disabled></label>
+              <label>Largo mm<input id="segmentMeasureD" disabled></label>
+            </div>
+            <p id="segmentMeasureHint" class="hint" style="margin:4px 0 0;">Selecciona una subpieza para medirla.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Prueba rapida</h2>
+        <label>Valor de movimiento<input id="pieceTestValue" type="range" min="0" max="180" value="90"></label>
+        <div class="two-cols">
+          <button id="pieceTestMin">Min</button>
+          <button id="pieceTestMax">Max</button>
+        </div>
+        <button id="pieceTestReset" style="width:100%;margin-top:6px">Reset</button>
+        <p class="hint">La prueba anima rotaciones y desplazamientos segun el eje, limites y pivote configurados.</p>
+      </section>
+    </aside>
+  </main>
+
+  <!-- WORKSPACE: EVALUACIONES -->
+  <main class="workspace" id="evaluacionesWorkspace" style="display: none;">
+    <aside class="sidebar left">
+      <section>
+        <h2>Nueva Evaluación</h2>
+        <label>Título<input id="evalTitulo" value="Nueva Evaluación"></label>
+        <label>Identificador<input id="evalId" value="nueva-evaluacion"></label>
+        <label>Descripción<textarea id="evalDescripcion" rows="2"></textarea></label>
+        <label>Nivel
+          <select id="evalNivel">
+            <option value="basico">Básico</option>
+            <option value="intermedio">Intermedio</option>
+            <option value="avanzado">Avanzado</option>
+          </select>
+        </label>
+        <label>Tiempo límite (min)
+          <input id="evalTiempo" type="number" value="15" min="1" max="120">
+        </label>
+        <label>Tags (separados por coma)
+          <input id="evalTags" placeholder="bucles, variables">
+        </label>
+        <label>Modo de ejercicios
+          <select id="evalModo">
+            <option value="codigo">Código (Python/texto)</option>
+            <option value="bloques">Bloques visuales</option>
+            <option value="mixto">Mixto (ambos)</option>
+          </select>
+        </label>
+        <label>Notificar resultado
+          <select id="evalNotificarResultado">
+            <option value="instante">Al instante (si es incorrecto)</option>
+            <option value="avanzar" selected>Al avanzar (Siguiente/Finalizar)</option>
+            <option value="silencio">Sin notificaciones (pasar en silencio)</option>
+          </select>
+        </label>
+      </section>
+
+      <section>
+        <h2>Agregar Ejercicio</h2>
+        <div class="tool-grid" id="ejerciciosGrid">
+          <!-- Grupo: Preguntas (ambos modos) -->
+          <div class="tool-group-label" data-grupo="codigo bloques">Preguntas</div>
+          <button data-add-ejercicio="quiz" data-grupo="codigo bloques" style="background: #9966FF22; border-color: #9966FF;">Quiz</button>
+          <button data-add-ejercicio="verdadero_falso" data-grupo="codigo bloques" style="background: #22c55e22; border-color: #22c55e;">V/F</button>
+          <button data-add-ejercicio="multiple_respuesta" data-grupo="codigo bloques" style="background: #3b82f622; border-color: #3b82f6;">Multiple</button>
+          <button data-add-ejercicio="relacionar" data-grupo="codigo bloques" style="background: #f59e0b22; border-color: #f59e0b;">Relacionar</button>
+
+          <!-- Grupo: Código (solo modo código) -->
+          <div class="tool-group-label" data-grupo="codigo">💻 Código</div>
+          <button data-add-ejercicio="completar_codigo" data-grupo="codigo" style="background: #4C97FF22; border-color: #4C97FF;">Completar</button>
+          <button data-add-ejercicio="ordenar_bloques" data-grupo="codigo" style="background: #FFAB1922; border-color: #FFAB19;">Ordenar</button>
+          <button data-add-ejercicio="que_hace_codigo" data-grupo="codigo" style="background: #CF63CF22; border-color: #CF63CF;">¿Qué hace?</button>
+          <button data-add-ejercicio="escribir_codigo" data-grupo="codigo" style="background: #FF8C1A22; border-color: #FF8C1A;">Escribir</button>
+
+          <!-- Grupo: Avanzados Código (solo modo código) -->
+          <div class="tool-group-label" data-grupo="codigo">🔧 Avanzados</div>
+          <button data-add-ejercicio="depurar_codigo" data-grupo="codigo" style="background: #ef444422; border-color: #ef4444;">Depurar</button>
+          <button data-add-ejercicio="reto_ejecucion" data-grupo="codigo" style="background: #00b35922; border-color: #00b359;">Reto</button>
+
+          <!-- Grupo: Bloques (solo modo bloques) -->
+          <div class="tool-group-label" data-grupo="bloques">🧩 Bloques</div>
+          <button data-add-ejercicio="bloques_completar" data-grupo="bloques" style="background: #4C97FF22; border-color: #4C97FF;">Completar</button>
+          <button data-add-ejercicio="bloques_ordenar" data-grupo="bloques" style="background: #FFAB1922; border-color: #FFAB19;">Ordenar</button>
+          <button data-add-ejercicio="bloques_armar" data-grupo="bloques" style="background: #9966FF22; border-color: #9966FF;">Armar</button>
+          <button data-add-ejercicio="bloques_corregir" data-grupo="bloques" style="background: #ef444422; border-color: #ef4444;">Corregir</button>
+        </div>
+      </section>
+
+      <section class="layers-section">
+        <div class="section-title">
+          <h2>Ejercicios</h2>
+          <span id="evalEjercicioCount">0</span>
+        </div>
+        <div id="evalEjerciciosList" class="layers"></div>
+      </section>
+
+      <section>
+        <h2>Evaluaciones Guardadas</h2>
+        <button id="refreshEvaluaciones">Actualizar</button>
+        <div id="savedEvaluaciones" class="saved-maps"></div>
+      </section>
+
+      <section>
+        <h2>Estadísticas</h2>
+        <div id="evalEstadisticas" style="font-size: 12px; color: #94a3b8;">
+          <p>Total evaluaciones: <strong id="statTotalEvals">0</strong></p>
+          <p>Total ejercicios: <strong id="statTotalEjercicios">0</strong></p>
+        </div>
+      </section>
+    </aside>
+
+    <section class="canvas-shell" style="background: #1a2234; display: flex; flex-direction: column;">
+      <div class="canvas-toolbar">
+        <span id="evalInfo">Editor de Evaluaciones</span>
+        <button id="duplicateEjercicio">Duplicar</button>
+        <button id="deleteEjercicio" class="danger">Eliminar</button>
+        <button id="moveEjercicioUp">↑ Subir</button>
+        <button id="moveEjercicioDown">↓ Bajar</button>
+      </div>
+      <div id="evalEditorArea" style="flex: 1; overflow-y: auto; padding: 20px;">
+        <div id="noEjercicioSelected" class="empty" style="text-align: center; padding: 60px 20px; color: #94a3b8;">
+          <div style="font-size: 48px; margin-bottom: 16px;">📝</div>
+          <h3 style="margin: 0 0 8px;">Editor de Ejercicios</h3>
+          <p style="margin: 0;">Selecciona un ejercicio de la lista o agrega uno nuevo.</p>
+        </div>
+        <div id="ejercicioEditor" hidden style="background: #0f172a; border-radius: 8px; padding: 20px;">
+          <!-- El editor dinámico se renderiza aquí -->
+        </div>
+      </div>
+    </section>
+
+    <aside class="sidebar right">
+      <nav class="tabs" style="grid-template-columns: repeat(3, 1fr);">
+        <button class="active" data-tab-eval="propiedades">Propiedades</button>
+        <button data-tab-eval="opciones">Opciones</button>
+        <button data-tab-eval="bloques">Bloques</button>
+      </nav>
+
+      <!-- PESTAÑA: PROPIEDADES DEL EJERCICIO -->
+      <section class="tab active" data-panel-eval="propiedades">
+        <h2>Propiedades del Ejercicio</h2>
+        <div id="noEjercicioProps" class="empty">Selecciona un ejercicio.</div>
+        <div id="ejercicioInspector" hidden>
+          <div class="type-badge" id="ejercicioTypeDisplay" style="margin-bottom: 12px; padding: 4px 10px; border-radius: 4px; font-size: 11px; text-transform: uppercase;"></div>
+          <label>Enunciado<textarea id="ejercicioEnunciado" rows="3" style="resize: vertical;"></textarea></label>
+          <label>Puntos<input id="ejercicioPuntos" type="number" value="10" min="1" max="100"></label>
+          <label>Pista (opcional)<textarea id="ejercicioPista" rows="2" style="resize: vertical;"></textarea></label>
+          <label>Explicación de respuesta<textarea id="ejercicioExplicacion" rows="2" style="resize: vertical;"></textarea></label>
+
+          <!-- Área dinámica para opciones específicas del tipo -->
+          <div id="ejercicioTypeOptions"></div>
+        </div>
+      </section>
+
+      <!-- PESTAÑA: OPCIONES DE RESPUESTA -->
+      <section class="tab" data-panel-eval="opciones">
+        <h2>Configurar Respuestas</h2>
+        <div id="noRespuestasConfig" class="empty">Selecciona un ejercicio para configurar sus respuestas.</div>
+        <div id="respuestasEditor" hidden>
+          <!-- Quiz / Multiple -->
+          <div id="opcionesQuizEditor" hidden>
+            <div id="opcionesQuizList"></div>
+            <button id="addOpcionQuiz" class="primary" style="width: 100%; margin-top: 8px;">+ Agregar opción</button>
+          </div>
+
+          <!-- Verdadero/Falso -->
+          <div id="opcionesVFEditor" hidden>
+            <label>Respuesta correcta
+              <select id="respuestaVF">
+                <option value="true">Verdadero</option>
+                <option value="false">Falso</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- Completar código -->
+          <div id="opcionesCompletarEditor" hidden>
+            <label>Código con huecos (usa ___ para espacios)<textarea id="codigoConHuecos" rows="6" style="font-family: monospace; resize: vertical;"></textarea></label>
+            <h3>Respuestas esperadas</h3>
+            <div id="respuestasHuecosList"></div>
+            <button id="addRespuestaHueco" class="primary" style="width: 100%; margin-top: 8px;">+ Agregar respuesta</button>
+          </div>
+
+          <!-- Ordenar bloques -->
+          <div id="opcionesOrdenarEditor" hidden>
+            <label>Bloques (uno por línea, en orden correcto)<textarea id="bloquesOrden" rows="8" style="font-family: monospace; resize: vertical;"></textarea></label>
+            <label class="check"><input id="mostrarDistractores" type="checkbox"> Incluir bloques distractores</label>
+            <div id="distractoresArea" hidden>
+              <label>Distractores (uno por línea)<textarea id="bloquesDistractores" rows="4" style="font-family: monospace; resize: vertical;"></textarea></label>
+            </div>
+          </div>
+
+          <!-- Qué hace el código -->
+          <div id="opcionesQueHaceEditor" hidden>
+            <label>Código a analizar<textarea id="codigoAnalizar" rows="6" style="font-family: monospace; resize: vertical;"></textarea></label>
+            <label>Resultado/Comportamiento esperado<textarea id="resultadoEsperado" rows="3" style="resize: vertical;"></textarea></label>
+          </div>
+
+          <!-- Escribir código -->
+          <div id="opcionesEscribirEditor" hidden>
+            <label>Código solución (referencia)<textarea id="codigoSolucion" rows="8" style="font-family: monospace; resize: vertical;"></textarea></label>
+            <label>Palabras clave requeridas (separadas por coma)<input id="palabrasClave" placeholder="for, range, print"></label>
+          </div>
+
+          <!-- Relacionar -->
+          <div id="opcionesRelacionarEditor" hidden>
+            <h3>Pares de relación</h3>
+            <div id="paresRelacionList"></div>
+            <button id="addParRelacion" class="primary" style="width: 100%; margin-top: 8px;">+ Agregar par</button>
+          </div>
+
+          <!-- Depurar -->
+          <div id="opcionesDepurarEditor" hidden>
+            <label>Código con error<textarea id="codigoConError" rows="6" style="font-family: monospace; resize: vertical;"></textarea></label>
+            <label>Código corregido<textarea id="codigoCorregido" rows="6" style="font-family: monospace; resize: vertical;"></textarea></label>
+            <label>Tipo de error
+              <select id="tipoError">
+                <option value="sintaxis">Error de sintaxis</option>
+                <option value="logica">Error de lógica</option>
+                <option value="ejecucion">Error de ejecución</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- Reto ejecución -->
+          <div id="opcionesRetoEditor" hidden>
+            <label>Descripción del reto<textarea id="descReto" rows="3" style="resize: vertical;"></textarea></label>
+            <label>Condiciones de éxito (JSON)
+              <textarea id="condicionesExito" rows="4" style="font-family: monospace; resize: vertical;" placeholder='{"tipo": "posicion", "x": 100, "y": 100}'></textarea>
+            </label>
+            <label>Bloques permitidos (opcional)<input id="bloquesPermitidos" placeholder="mover, girar, repetir"></label>
+            <label>Bloques máximos<input id="maxBloques" type="number" value="0" min="0" placeholder="0 = sin límite"></label>
+          </div>
+        </div>
+      </section>
+
+      <!-- PESTAÑA: BLOQUES -->
+      <section class="tab" data-panel-eval="bloques">
+        <h2>Editor de Bloques</h2>
+        <p class="hint">Configura la solución y los huecos para ejercicios de completar.</p>
+
+        <div id="noBloquesConfig" class="empty">Selecciona un ejercicio de tipo "Completar bloques".</div>
+
+        <div id="bloquesConfigEditor" hidden>
+          <!-- Editar Solución -->
+          <div class="bloques-section">
+            <h3>🧩 Solución con Bloques</h3>
+            <p class="hint">Abre el editor para crear la solución y marcar los huecos:</p>
+            <button id="btnEditarSolucionBloques" class="primary" style="width: 100%; padding: 12px; font-size: 14px;">
+              Abrir Editor de Bloques
+            </button>
+            <p id="bloquesTip" class="hint" style="margin-top: 8px; font-size: 11px;">
+              <strong>Tip:</strong> En el editor, haz <strong style="background: #f59e0b; color: #000; padding: 1px 4px; border-radius: 2px;">Ctrl + Clic</strong> en un bloque para marcarlo como hueco.
+            </p>
+          </div>
+
+          <!-- Estado guardado -->
+          <div id="bloquesEstadoSection" class="bloques-section" style="margin-top: 12px;">
+            <h3>Estado actual</h3>
+            <div id="bloquesEstadoInfo" style="padding: 8px; background: #1e293b; border-radius: 6px; font-size: 12px; color: #94a3b8;">
+              <span id="estadoBloques">Sin solución guardada</span>
+            </div>
+          </div>
+
+          <!-- Categorías disponibles -->
+          <div id="bloquesCategoriasSection" class="bloques-section" style="margin-top: 12px;">
+            <h3>Categorías para el alumno</h3>
+            <p class="hint">Solo aparecerán bloques de estas categorías:</p>
+            <div id="bloquesCategoriasConfig" style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #0f172a; padding: 8px; border-radius: 6px;">
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="motion" checked>
+                <span style="color: #4C97FF;">➡️ Movimiento</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="looks" checked>
+                <span style="color: #9966FF;">👁️ Apariencia</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="sound">
+                <span style="color: #CF63CF;">🔊 Sonido</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="events" checked>
+                <span style="color: #FFBF00;">🏴 Eventos</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="control" checked>
+                <span style="color: #FFAB19;">🔄 Control</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="sensing">
+                <span style="color: #5CB1D6;">📡 Sensores</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="operators" checked>
+                <span style="color: #59C059;">🔢 Operadores</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="variables">
+                <span style="color: #FF8C1A;">📦 Variables</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="lists">
+                <span style="color: #FF661A;">📋 Listas</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="pen">
+                <span style="color: #0fBD8C;">✏️ Lápiz</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="music">
+                <span style="color: #D65CD6;">🎵 Música</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="logic">
+                <span style="color: #48BF53;">🟢 Lógica+</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="state">
+                <span style="color: #9966FF;">⚙️ Estado</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="debug">
+                <span style="color: #607D8B;">🐛 Debug</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="gravity">
+                <span style="color: #5B7CFA;">🪐 Gravedad</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="physics">
+                <span style="color: #00A8A8;">⚛️ Física</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">
+                <input type="checkbox" data-categoria="custom">
+                <span style="color: #5B7CFA;">⚡ Personalizados</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Info -->
+          <div style="margin-top: 12px; padding: 10px; background: #172554; border: 1px solid #1e40af; border-radius: 6px; font-size: 11px; color: #93c5fd;">
+            <strong>Nota:</strong> Usa la vista previa general (botón superior) para probar el ejercicio como alumno.
+          </div>
+        </div>
+      </section>
+
+
+    </aside>
+  </main>
+
+  <input id="robotJsonFile" type="file" accept=".json,application/json" hidden>
+  <input id="chassisModelFile" type="file" accept=".glb,.gltf,.obj,.stl" hidden>
+  <input id="partModelFile" type="file" accept=".glb,.gltf,.obj,.stl" hidden>
+  <input id="jsonFile" type="file" accept=".json,application/json" hidden>
+  <input id="pieceJsonFile" type="file" accept=".json,application/json" hidden>
+  <input id="pieceSegmentModelFile" type="file" accept=".glb,.gltf,.obj,.stl" hidden>
+  <input id="modelFile" type="file" accept=".glb,.gltf,.obj,.stl" hidden>
+  <input id="evaluacionJsonFile" type="file" accept=".json,application/json" hidden>
+  <div id="toast" role="status"></div>
+  <script src="../js/customRobotStorage.js"></script>
+  <!-- Blockly para sistema de bloques de evaluaciones -->
+  <script src="https://unpkg.com/blockly/blockly.min.js"></script>
+  <script src="blockly-scratch-blocks.js?v=4"></script>
+  <!-- Sistema anterior (se mantiene por compatibilidad) -->
+  <script src="tutor-blocks.js?v=stblock-eval-v18"></script>
+  <script src="editor.js?v=stblock-pieces-v61"></script>
+</body>
+</html>

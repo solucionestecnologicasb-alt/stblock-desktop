@@ -1,0 +1,5 @@
+{
+    "main": "../backend/server.js",
+    "output": "../src-tauri/backends/backend-server.blob",
+    "disableExperimentalSEAWarning": true
+}

@@ -1,0 +1,1348 @@
+/* Panel Python - STBlock Theme */
+@import "../../css/colors.css";
+
+/* ═══════════════════════════════════════════════════════════════
+   BOTON TOGGLE - Pestana lateral para abrir/cerrar
+   ═══════════════════════════════════════════════════════════════ */
+
+.toggle-button {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 80px;
+    background: linear-gradient(180deg, #19663d 0%, #00b359 100%);
+    border-radius: 12px 0 0 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -3px 0 12px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    border: none;
+    overflow: hidden;
+}
+
+.toggle-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(180deg,
+        rgba(255, 255, 255, 0.15) 0%,
+        rgba(255, 255, 255, 0) 50%,
+        rgba(0, 0, 0, 0.1) 100%);
+    pointer-events: none;
+}
+
+.toggle-button:hover {
+    width: 38px;
+    background: linear-gradient(180deg, #14b866 0%, #00c95f 100%);
+    box-shadow: -4px 0 16px rgba(0, 179, 89, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.toggle-button:active {
+    transform: translateY(-50%) scale(0.98);
+}
+
+.toggle-button.panel-open {
+    right: calc(50% - 2px);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.toggle-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    gap: 4px;
+    position: relative;
+    z-index: 1;
+}
+
+.python-logo {
+    font-size: 14px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-weight: 800;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    letter-spacing: -0.5px;
+}
+
+.toggle-arrow {
+    font-size: 16px;
+    transition: transform 0.3s ease;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-button:hover .toggle-arrow {
+    animation: pulse-arrow 1s ease-in-out infinite;
+}
+
+@keyframes pulse-arrow {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(-3px); }
+}
+
+.toggle-button.panel-open .toggle-arrow {
+    transform: rotate(180deg);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PANEL PRINCIPAL
+   ═══════════════════════════════════════════════════════════════ */
+
+.python-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    overflow: hidden;
+    background: linear-gradient(180deg, #f8faf9 0%, #ffffff 100%);
+    border-left: 3px solid #00b359;
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.35s ease;
+    display: flex;
+    flex-direction: column;
+    z-index: 99;
+    box-shadow: none;
+}
+
+.python-panel.open {
+    width: 50%;
+    box-shadow: -8px 0 30px rgba(0, 0, 0, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════════════════════════════ */
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #19663d 0%, #1a7a45 50%, #00b359 100%);
+    border-bottom: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg,
+        rgba(255, 255, 255, 0.1) 0%,
+        rgba(255, 255, 255, 0) 50%,
+        rgba(255, 255, 255, 0.05) 100%);
+    pointer-events: none;
+}
+
+.header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg,
+        rgba(255, 255, 255, 0.3) 0%,
+        rgba(255, 255, 255, 0.1) 100%);
+}
+
+.header-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: white;
+    font-weight: 600;
+    font-size: 15px;
+    position: relative;
+    z-index: 1;
+}
+
+.header-title svg {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+.mode-indicator {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.2);
+    font-weight: 500;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.mode-indicator.edit-mode {
+    background: rgba(255, 255, 255, 0.95);
+    color: #19663d;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Badge del target (sprite/escenario) */
+.target-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%);
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(4px);
+    transition: all 0.2s ease;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.target-badge svg {
+    flex-shrink: 0;
+    opacity: 0.9;
+}
+
+.target-badge:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+}
+
+.header-actions {
+    display: flex;
+    gap: 6px;
+    position: relative;
+    z-index: 1;
+}
+
+.action-button {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    color: white;
+    position: relative;
+    backdrop-filter: blur(4px);
+}
+
+.action-button:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.action-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.action-button.unlocked {
+    background: rgba(255, 255, 255, 0.95);
+    color: #19663d;
+    border-color: transparent;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-button.unlocked:hover {
+    background: #ffffff;
+}
+
+.action-button.copied {
+    background: rgba(255, 255, 255, 0.95);
+    color: #19663d;
+    animation: copy-success 0.4s ease;
+}
+
+@keyframes copy-success {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
+.copy-tooltip {
+    position: absolute;
+    bottom: -32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #19663d;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    animation: tooltip-appear 0.3s ease;
+    z-index: 10;
+}
+
+.copy-tooltip::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 5px solid #19663d;
+}
+
+@keyframes tooltip-appear {
+    0% { opacity: 0; transform: translateX(-50%) translateY(5px); }
+    100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   AREA DE CODIGO
+   ═══════════════════════════════════════════════════════════════ */
+
+.code-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #ffffff;
+    animation: fade-in 0.4s ease 0.1s both;
+}
+
+@keyframes fade-in {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+.code-header {
+    padding: 10px 16px;
+    background: linear-gradient(180deg, #f0f4f2 0%, #e8f3ed 100%);
+    border-bottom: 1px solid rgba(0, 179, 89, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.file-icon {
+    width: 16px;
+    height: 16px;
+    color: #00b359;
+}
+
+.file-name {
+    color: #19663d;
+    font-size: 13px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   EDITOR CON OVERLAY (Highlighting + Textarea)
+   ═══════════════════════════════════════════════════════════════ */
+
+.editor-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.highlighter-scroll {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: auto;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Ocultar scrollbar del highlighter (el textarea controla el scroll) */
+.highlighter-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.highlighter-scroll {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Cuando está en modo solo lectura, permitir scroll e interacción */
+.highlighter-scroll.scrollable {
+    pointer-events: auto;
+    overflow: auto;
+}
+
+.highlighter-scroll.scrollable::-webkit-scrollbar {
+    display: block;
+    width: 8px;
+    height: 8px;
+}
+
+.highlighter-scroll.scrollable::-webkit-scrollbar-track {
+    background: #f0f4f2;
+    border-radius: 4px;
+}
+
+.highlighter-scroll.scrollable::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #00b359 0%, #19663d 100%);
+    border-radius: 4px;
+}
+
+.highlighter-scroll.scrollable::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #14b866 0%, #1a7a45 100%);
+}
+
+.highlighter-layer {
+    min-height: 100%;
+    pointer-events: none;
+}
+
+.highlighter-layer.editable {
+    /* Borde sutil para indicar modo edición */
+    box-shadow: inset 0 0 0 2px rgba(0, 179, 89, 0.15);
+}
+
+.editor-textarea {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    padding: 16px;
+    /* Debe coincidir exactamente con el highlighter:
+       16px (code-display padding) + 40px (line-num) + 1px (border) + 12px (margin) = 69px */
+    padding-left: 69px;
+    background: transparent;
+    color: transparent;
+    /* Cursor muy visible - naranja brillante */
+    caret-color: #ff6b00;
+    border: none;
+    resize: none;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    letter-spacing: 0;
+    outline: none;
+    z-index: 2;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    /* Asegurar que use el mismo box-sizing */
+    box-sizing: border-box;
+    tab-size: 4;
+    -moz-tab-size: 4;
+}
+
+.editor-textarea::selection {
+    background: rgba(255, 107, 0, 0.3);
+    color: transparent;
+}
+
+.editor-textarea:focus {
+    box-shadow: inset 0 0 0 2px rgba(255, 107, 0, 0.25);
+}
+
+.editor-textarea::placeholder {
+    color: #a0b0a8;
+}
+
+/* Hacer el cursor más grueso y visible */
+@supports (caret-color: #ff6b00) {
+    .editor-textarea {
+        caret-color: #ff6b00;
+    }
+}
+
+/* Sincronizar scroll entre textarea y highlighter */
+.editor-wrapper:focus-within .highlighter-layer {
+    background: #fafcfb;
+}
+
+/* Legacy textarea (por si se usa en algún lugar) */
+.code-area {
+    flex: 1;
+    width: 100%;
+    padding: 16px;
+    background: #ffffff;
+    color: #3d4f66;
+    border: none;
+    resize: none;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    outline: none;
+    transition: background 0.2s ease;
+}
+
+.code-area::placeholder {
+    color: #a0b0a8;
+}
+
+.code-area::selection {
+    background: rgba(0, 179, 89, 0.2);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════════════════════════ */
+
+.footer {
+    padding: 12px 16px;
+    background: linear-gradient(180deg, #e8f3ed 0%, #dfeee6 100%);
+    border-top: 1px solid rgba(0, 179, 89, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.footer-icon {
+    width: 14px;
+    height: 14px;
+    color: #00b359;
+    flex-shrink: 0;
+}
+
+.footer-info {
+    color: #19663d;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMACION DE ENTRADA DEL PANEL
+   ═══════════════════════════════════════════════════════════════ */
+
+.python-panel.open .header {
+    animation: slide-down 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.python-panel.open .code-container {
+    animation: slide-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
+}
+
+.python-panel.open .footer {
+    animation: slide-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both;
+}
+
+@keyframes slide-down {
+    0% { opacity: 0; transform: translateY(-10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-up {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1200px) {
+    .python-panel.open {
+        width: 45%;
+    }
+
+    .toggle-button.panel-open {
+        right: calc(45% - 2px);
+    }
+}
+
+@media (max-width: 900px) {
+    .python-panel.open {
+        width: 100%;
+    }
+
+    .toggle-button.panel-open {
+        right: calc(100% - 2px);
+    }
+
+    .toggle-button {
+        height: 60px;
+        width: 28px;
+    }
+
+    .python-logo {
+        font-size: 12px;
+    }
+
+    .toggle-arrow {
+        font-size: 14px;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCROLLBAR PERSONALIZADO
+   ═══════════════════════════════════════════════════════════════ */
+
+.code-area::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.code-area::-webkit-scrollbar-track {
+    background: #f0f4f2;
+    border-radius: 4px;
+}
+
+.code-area::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #00b359 0%, #19663d 100%);
+    border-radius: 4px;
+}
+
+.code-area::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #14b866 0%, #1a7a45 100%);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SYNTAX HIGHLIGHTING - Estilo VS Code Light
+   ═══════════════════════════════════════════════════════════════ */
+
+.code-display {
+    flex: 1;
+    width: 100%;
+    padding: 16px;
+    background: transparent;
+    border: none;
+    overflow: visible;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    letter-spacing: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    tab-size: 4;
+    -moz-tab-size: 4;
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+.code-display:focus {
+    outline: none;
+}
+
+/* Cuando está en modo solo lectura (sin textarea encima) */
+.highlighter-scroll:only-child .code-display {
+    background: #ffffff;
+    overflow: auto;
+}
+
+/* Números de línea */
+.code-line {
+    display: flex;
+    min-height: 1.7em;
+}
+
+.line-number {
+    user-select: none;
+    width: 40px;
+    min-width: 40px;
+    padding-right: 8px;
+    text-align: right;
+    color: #a0aab4;
+    font-size: 12px;
+    border-right: 1px solid #e8f3ed;
+    margin-right: 12px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+.line-content {
+    flex: 1;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    letter-spacing: 0;
+}
+
+/* Tokens de Python - Paleta VS Code Light */
+
+/* Comentarios - verde gris */
+.token-comment {
+    color: #008000;
+    font-style: italic;
+}
+
+/* Keywords - azul/morado */
+.token-keyword {
+    color: #0000ff;
+    font-weight: 500;
+}
+
+/* Definiciones (def, class) - azul */
+.token-definition {
+    color: #0000ff;
+    font-weight: 600;
+}
+
+/* Nombres de funciones - amarillo/dorado */
+.token-function {
+    color: #795E26;
+    font-weight: 500;
+}
+
+/* Decoradores - amarillo */
+.token-decorator {
+    color: #AF00DB;
+    font-weight: 500;
+}
+
+/* Strings - naranja/marrón */
+.token-string {
+    color: #A31515;
+}
+
+/* Números - verde */
+.token-number {
+    color: #098658;
+}
+
+/* Operadores */
+.token-operator {
+    color: #000000;
+    font-weight: 500;
+}
+
+/* Booleanos y None */
+.token-boolean {
+    color: #0000ff;
+    font-weight: 500;
+}
+
+/* Built-in functions */
+.token-builtin {
+    color: #267f99;
+}
+
+/* Variables/identificadores */
+.token-variable {
+    color: #001080;
+}
+
+/* Parámetros */
+.token-parameter {
+    color: #001080;
+}
+
+/* Clases */
+.token-class {
+    color: #267f99;
+    font-weight: 500;
+}
+
+/* Puntuación (paréntesis, comas, etc.) */
+.token-punctuation {
+    color: #000000;
+}
+
+/* Self/this */
+.token-self {
+    color: #0000ff;
+    font-style: italic;
+}
+
+/* Imports */
+.token-import {
+    color: #AF00DB;
+}
+
+/* Header del código generado */
+.token-header {
+    color: #6a9955;
+    font-style: italic;
+}
+
+/* Línea activa */
+.code-line:hover {
+    background: rgba(0, 179, 89, 0.05);
+}
+
+/* Selección de texto */
+.code-display ::selection {
+    background: rgba(0, 179, 89, 0.2);
+}
+
+/* Cursor para modo edición */
+.code-display.editable {
+    cursor: text;
+}
+
+.code-display.readonly {
+    cursor: default;
+}
+
+/* Scrollbar para code-display */
+.code-display::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.code-display::-webkit-scrollbar-track {
+    background: #f0f4f2;
+    border-radius: 4px;
+}
+
+.code-display::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #00b359 0%, #19663d 100%);
+    border-radius: 4px;
+}
+
+.code-display::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #14b866 0%, #1a7a45 100%);
+}
+
+/* Efectos de transición suave */
+.code-display span {
+    transition: color 0.15s ease;
+}
+
+/* Resaltar tokens al hover */
+.token-function:hover,
+.token-builtin:hover,
+.token-variable:hover {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOTON DE EJECUTAR
+   ═══════════════════════════════════════════════════════════════ */
+
+.run-button {
+    background: linear-gradient(135deg, #00b359 0%, #19663d 100%) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    min-width: 36px;
+}
+
+.run-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #14b866 0%, #1a7a45 100%) !important;
+    transform: translateY(-1px) scale(1.05);
+}
+
+.run-button.running {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%) !important;
+}
+
+.run-button.running:hover:not(:disabled) {
+    background: linear-gradient(135deg, #ec7063 0%, #e74c3c 100%) !important;
+}
+
+.run-button.loading {
+    background: rgba(255, 255, 255, 0.3) !important;
+    cursor: wait;
+}
+
+.run-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* Spinner de carga */
+.spinner-icon {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CONSOLA DE SALIDA
+   ═══════════════════════════════════════════════════════════════ */
+
+.console {
+    border-top: 2px solid #19663d;
+    background: #1e1e1e;
+    display: flex;
+    flex-direction: column;
+    max-height: 150px;
+    animation: slide-up 0.3s ease;
+}
+
+.console-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: linear-gradient(90deg, #2d2d2d 0%, #3d3d3d 100%);
+    color: #00b359;
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid #3d3d3d;
+}
+
+.console-header svg {
+    color: #00b359;
+}
+
+.console-close {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.console-close:hover {
+    color: #fff;
+}
+
+.console-output {
+    flex: 1;
+    padding: 12px;
+    overflow: auto;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    color: #d4d4d4;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.console-output::-webkit-scrollbar {
+    width: 6px;
+}
+
+.console-output::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+.console-output::-webkit-scrollbar-thumb {
+    background: #3d3d3d;
+    border-radius: 3px;
+}
+
+/* Mensajes de error en consola */
+.console-output .error {
+    color: #f44336;
+}
+
+.console-output .success {
+    color: #4caf50;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PANEL DE AYUDA - Referencia Rápida
+   ═══════════════════════════════════════════════════════════════ */
+
+.action-button.help-active {
+    background: rgba(255, 255, 255, 0.95);
+    color: #19663d;
+    border-color: transparent;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.help-panel {
+    position: absolute;
+    top: 56px;
+    left: 0;
+    right: 0;
+    bottom: 40px;
+    background: #ffffff;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    animation: fade-slide-in 0.25s ease-out;
+    box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes fade-slide-in {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.help-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: linear-gradient(90deg, #f0f4f2 0%, #e8f3ed 100%);
+    border-bottom: 2px solid #00b359;
+    color: #19663d;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.help-header svg {
+    color: #00b359;
+}
+
+.help-close {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: #19663d;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    transition: all 0.2s;
+    border-radius: 4px;
+}
+
+.help-close:hover {
+    background: rgba(0, 179, 89, 0.1);
+    color: #00b359;
+}
+
+.help-content {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+    background: #ffffff;
+}
+
+.help-code {
+    padding: 12px 16px;
+    font-size: 12px !important;
+    line-height: 1.6 !important;
+}
+
+.help-code .code-line {
+    min-height: 1.5em;
+}
+
+/* Scrollbar para el panel de ayuda */
+.help-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.help-content::-webkit-scrollbar-track {
+    background: #f0f4f2;
+}
+
+.help-content::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #00b359 0%, #19663d 100%);
+    border-radius: 4px;
+}
+
+.help-content::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #14b866 0%, #1a7a45 100%);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOTON DE SINCRONIZACION Python → Bloques
+   ═══════════════════════════════════════════════════════════════ */
+
+.sync-button {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.sync-button:hover {
+    background: linear-gradient(135deg, #5dade2 0%, #3498db 100%) !important;
+    transform: translateY(-1px) scale(1.05);
+}
+
+.sync-button:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.sync-button svg {
+    transition: transform 0.3s ease;
+}
+
+.sync-button:hover svg {
+    transform: rotate(180deg);
+}
+
+.sync-button.sync-success {
+    background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%) !important;
+    animation: sync-success-pulse 0.4s ease;
+}
+
+.sync-button.sync-error {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%) !important;
+    animation: sync-error-shake 0.4s ease;
+}
+
+@keyframes sync-success-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+@keyframes sync-error-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+}
+
+.sync-tooltip {
+    position: absolute;
+    bottom: -32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #27ae60;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    animation: tooltip-appear 0.3s ease;
+    z-index: 10;
+}
+
+.sync-tooltip::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 5px solid #27ae60;
+}
+
+.sync-tooltip-error {
+    position: absolute;
+    bottom: -32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #e74c3c;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    animation: tooltip-appear 0.3s ease;
+    z-index: 10;
+}
+
+.sync-tooltip-error::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 5px solid #e74c3c;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PANEL DE ERRORES
+   ═══════════════════════════════════════════════════════════════ */
+
+.errors-panel {
+    background: linear-gradient(180deg, #fef3f3 0%, #fee8e8 100%);
+    border-top: 2px solid #e74c3c;
+    max-height: 150px;
+    display: flex;
+    flex-direction: column;
+    animation: slide-up 0.3s ease;
+}
+
+.errors-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: linear-gradient(90deg, #fde8e8 0%, #fad4d4 100%);
+    border-bottom: 1px solid rgba(231, 76, 60, 0.2);
+}
+
+.errors-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #c0392b;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.errors-title svg {
+    color: #e74c3c;
+}
+
+.close-errors-button {
+    background: transparent;
+    border: none;
+    color: #c0392b;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    transition: all 0.2s;
+    border-radius: 4px;
+}
+
+.close-errors-button:hover {
+    background: rgba(231, 76, 60, 0.15);
+    color: #e74c3c;
+}
+
+.errors-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.error-item {
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    animation: error-appear 0.2s ease;
+}
+
+@keyframes error-appear {
+    0% {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.error-item.error-type-error {
+    background: rgba(231, 76, 60, 0.12);
+    border-left: 3px solid #e74c3c;
+}
+
+.error-item.error-type-warning {
+    background: rgba(241, 196, 15, 0.15);
+    border-left: 3px solid #f1c40f;
+}
+
+.error-line {
+    color: #c0392b;
+    font-weight: 600;
+    font-size: 11px;
+}
+
+.error-message {
+    color: #333;
+    line-height: 1.4;
+}
+
+.error-suggestion {
+    color: #27ae60;
+    font-size: 11px;
+    margin-top: 2px;
+}
+
+.error-suggestion code {
+    background: rgba(39, 174, 96, 0.15);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Consolas', monospace;
+}
+
+/* Indicador de errores colapsado */
+.errors-collapsed {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: linear-gradient(90deg, #fde8e8 0%, #fad4d4 100%);
+    border: none;
+    border-top: 2px solid #e74c3c;
+    color: #c0392b;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.errors-collapsed:hover {
+    background: linear-gradient(90deg, #fad4d4 0%, #f8c0c0 100%);
+}
+
+.errors-collapsed svg {
+    color: #e74c3c;
+}
+
+/* Scrollbar para lista de errores */
+.errors-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.errors-list::-webkit-scrollbar-track {
+    background: rgba(231, 76, 60, 0.1);
+    border-radius: 3px;
+}
+
+.errors-list::-webkit-scrollbar-thumb {
+    background: #e74c3c;
+    border-radius: 3px;
+}
+
+/* Línea con error en el highlighter */
+.code-line.has-error {
+    background: rgba(231, 76, 60, 0.1) !important;
+    border-left: 3px solid #e74c3c;
+    margin-left: -3px;
+    padding-left: 3px;
+}
+
+.code-line.has-error .line-number {
+    color: #e74c3c;
+    font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESALTADO DEBUG - Linea activa durante debug mode
+   ═══════════════════════════════════════════════════════════════ */
+
+.code-line.has-highlight {
+    background: rgba(255, 180, 50, 0.25) !important;
+    border-left: 3px solid #FF8C00;
+    margin-left: -3px;
+    padding-left: 3px;
+    animation: debug-highlight-pulse 1s ease-in-out;
+}
+
+.code-line.has-highlight .line-number {
+    color: #CC7000;
+    font-weight: 700;
+}
+
+@keyframes debug-highlight-pulse {
+    0% {
+        background: rgba(255, 140, 0, 0.4);
+    }
+    100% {
+        background: rgba(255, 180, 50, 0.25);
+    }
+}
