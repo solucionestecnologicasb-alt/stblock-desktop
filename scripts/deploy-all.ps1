@@ -33,6 +33,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Limpiar token de entorno conflictivo para usar la sesion activa de gh CLI/llavero
+$env:GH_TOKEN = $null
 
 function Write-Step {
     param([string] $Text)

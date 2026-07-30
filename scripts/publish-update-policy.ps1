@@ -11,6 +11,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$env:GH_TOKEN = $null
 if (-not $MinimumVersion) { $MinimumVersion = if ($Level -eq 'mandatory') { $Version } else { '0.0.0' } }
 if (-not $Title) { $Title = if ($Level -eq 'mandatory') { 'Actualización obligatoria' } else { 'Nueva versión de STBlock disponible' } }
 if (-not $Message) { $Message = if ($Level -eq 'mandatory') { 'Esta versión es necesaria para continuar usando STBlock.' } else { 'Hay mejoras disponibles para STBlock.' } }
