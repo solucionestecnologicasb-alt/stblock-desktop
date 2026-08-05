@@ -84,6 +84,15 @@ class SoundEditor extends React.Component {
         document.removeEventListener('keydown', this.handleKeyPress);
     }
     handleKeyPress (event) {
+        // Solo interceptar atajos cuando el editor de sonido está VISIBLE.
+        // La SoundTab permanece montada aunque esté oculta (los paneles de
+        // SplitContainer se ocultan con `visibility: hidden`), así que sin este
+        // guard el handler global secuestraba Ctrl+C/Ctrl+V en TODO el resto de
+        // la app (panel de referencia Python, vistas de código, etc.), porque
+        // hace preventDefault para cualquier target que no sea input/textarea.
+        if (!this.ref || getComputedStyle(this.ref).visibility === 'hidden') {
+            return;
+        }
         if (event.target instanceof HTMLInputElement ||
             event.target instanceof HTMLTextAreaElement ||
             event.target.isContentEditable) {

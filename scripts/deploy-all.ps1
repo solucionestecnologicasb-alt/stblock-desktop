@@ -118,16 +118,22 @@ function Invoke-Checked {
 
 
 function Get-PrimaryInstaller {
-    param([object[]] $Files)
+    param(
+        [object[]] $Files,
+        [string] $Version
+    )
 
+    # Preferir el instalador NSIS (.exe) x64 de la version desplegada: es el flujo
+    # de actualizacion mas confiable de Tauri en Windows. El MSI suele fallar si la
+    # app esta corriendo (bloqueo del exe) -> "instala pero abre la version anterior".
     $installer = $Files |
-        Where-Object { $_.Extension -eq '.msi' -and $_.Name -match 'x64' } |
+        Where-Object { $_.Extension -eq '.exe' -and $_.Name -match 'x64' -and $_.Name -like "*_$Version`_*" } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
     if (-not $installer) {
         $installer = $Files |
-            Where-Object { $_.Extension -eq '.exe' -and $_.Name -match 'x64' } |
+            Where-Object { $_.Extension -eq '.msi' -and $_.Name -match 'x64' -and $_.Name -like "*_$Version`_*" } |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
     }
@@ -290,12 +296,38 @@ if (Test-Path -LiteralPath $releaseAssetDir) {
 }
 New-Item -ItemType Directory -Path $releaseAssetDir -Force | Out-Null
 
-$bundleFiles | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $releaseAssetDir $_.Name) -Force
+# Solo copiar instaladores/firmas de la version desplegada. Si el build no genero
+# un instalador con esa version, fallar antes de publicar un latest.json incorrecto
+# (era la causa de "instala pero abre la version anterior": se firmaba/publicaba el
+# instalador viejo de la carpeta bundle como si fuera la version nueva).
+$versionFiles = $bundleFiles |
+    Where-Object { $_.Name -like "*_$version`_*" }
+
+if (-not $versionFiles) {
+    if (-not $SkipReleasePublish) {
+        Fail "No se genero instalador para la version $version en $BundleDir. Revisa que 'tauri build --bundles nsis --bundles msi' haya producido STBlock_${version}_x64-setup.exe/.msi. Si usaste -SkipInstallerBuild, el bundle no contiene la version nueva."
+    } else {
+        Write-Warn "No hay instaladores para la version $version; se omite preparar artefactos (no se publica release)."
+        $versionFiles = @()
+    }
 }
-Write-OK "Artefactos copiados a $releaseAssetDir"
-$primaryInstaller = Get-PrimaryInstaller -Files $bundleFiles
-Ensure-UpdaterMetadata -Installer $primaryInstaller -Version $version -Repo $ReleaseRepo -AssetDir $releaseAssetDir -Notes $Notes
+
+if ($versionFiles) {
+    $versionFiles | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $releaseAssetDir $_.Name) -Force
+    }
+    Write-OK "Artefactos copiados a $releaseAssetDir"
+
+    $primaryInstaller = Get-PrimaryInstaller -Files $versionFiles -Version $version
+    if (-not $primaryInstaller) {
+        if (-not $SkipReleasePublish) {
+            Fail "No se encontro instalador x64 para la version $version. Revisa el output del build."
+        }
+        Write-Warn "No se encontro instalador x64; se omite generar latest.json."
+    } else {
+        Ensure-UpdaterMetadata -Installer $primaryInstaller -Version $version -Repo $ReleaseRepo -AssetDir $releaseAssetDir -Notes $Notes
+    }
+}
 
 if (-not $SkipPluginCopy) {
     Write-Step "Copiando instaladores al plugin WordPress"
@@ -304,17 +336,17 @@ if (-not $SkipPluginCopy) {
     }
 
     $x64ExeInstaller = $bundleFiles |
-        Where-Object { $_.Extension -eq '.exe' -and $_.Name -match 'x64' -and ($_.Name -like '*setup*' -or $_.Name -like 'STBlock*') } |
+        Where-Object { $_.Extension -eq '.exe' -and $_.Name -match 'x64' -and ($_.Name -like '*setup*' -or $_.Name -like 'STBlock*') -and $_.Name -like "*_$version`_*" } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
     $x64MsiInstaller = $bundleFiles |
-        Where-Object { $_.Extension -eq '.msi' -and $_.Name -match 'x64' } |
+        Where-Object { $_.Extension -eq '.msi' -and $_.Name -match 'x64' -and $_.Name -like "*_$version`_*" } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
     $x32Installer = $bundleFiles |
-        Where-Object { $_.Extension -eq '.exe' -and ($_.Name -match 'x32' -or $_.Name -match 'ia32') } |
+        Where-Object { $_.Extension -eq '.exe' -and ($_.Name -match 'x32' -or $_.Name -match 'ia32') -and $_.Name -like "*_$version`_*" } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 

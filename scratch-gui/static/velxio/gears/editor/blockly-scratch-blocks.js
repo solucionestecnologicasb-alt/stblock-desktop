@@ -579,6 +579,23 @@
 
     // ==================== CREAR TOOLBOX ====================
     createToolbox: function(options) {
+      var isDevices = (options && options.entorno === 'dispositivos');
+      if (isDevices) {
+        var boardId = (options && options.tarjeta) || (window.evaluacionState && window.evaluacionState.tarjeta) || 'stbBoardV2';
+        var dynamicXml = '';
+        if (typeof window.registerDynamicDeviceBlocks === 'function') {
+          dynamicXml = window.registerDynamicDeviceBlocks(boardId);
+        } else {
+          dynamicXml = '<category name="Arduino" colour="#00979C">' + this.getArduinoBlocks() + '</category>';
+        }
+        return '<xml id="toolbox">' +
+          dynamicXml +
+          '<category name="Control" colour="' + COLORS.control.primary + '">' + this.getControlBlocks() + '</category>' +
+          '<category name="Operadores" colour="' + COLORS.operators.primary + '">' + this.getOperatorsBlocks() + '</category>' +
+          '<category name="Variables" colour="' + COLORS.variables.primary + '">' + this.getVariablesBlocks() + '</category>' +
+          '</xml>';
+      }
+
       return '<xml id="toolbox">' +
         '<category name="Movimiento" colour="' + COLORS.motion.primary + '">' + this.getMotionBlocks() + '</category>' +
         '<category name="Apariencia" colour="' + COLORS.looks.primary + '">' + this.getLooksBlocks() + '</category>' +
@@ -623,6 +640,21 @@
     getPhysicsBlocks: function() { return '<block type="game_setvelocity"><value name="VX"><shadow type="math_number"><field name="NUM">0</field></shadow></value><value name="VY"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block><block type="game_changevelocity"><value name="VX"><shadow type="math_number"><field name="NUM">1</field></shadow></value><value name="VY"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block><block type="game_velocityx"></block><block type="game_velocityy"></block><block type="game_speed"></block><sep gap="24"></sep><block type="game_applyvelocity"></block><block type="game_setfriction"><value name="FRICTION"><shadow type="math_number"><field name="NUM">0.9</field></shadow></value></block><block type="game_setbounce"><value name="BOUNCE"><shadow type="math_number"><field name="NUM">0.8</field></shadow></value></block><block type="game_applyforce"><value name="FORCE"><shadow type="math_number"><field name="NUM">10</field></shadow></value><value name="DIRECTION"><shadow type="math_number"><field name="NUM">90</field></shadow></value></block><sep gap="24"></sep><block type="game_stopmotion"></block><block type="game_clamptostage"></block><block type="game_bounceonstageedge"></block>'; },
     getCameraBlocks: function() { return '<block type="game_camerasetxy"><value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value><value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block><block type="game_camerachangexy"><value name="X"><shadow type="math_number"><field name="NUM">10</field></shadow></value><value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block><block type="game_camerafollowthis"><value name="STRENGTH"><shadow type="math_number"><field name="NUM">0.1</field></shadow></value></block><block type="game_camerasetzoom"><value name="ZOOM"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block><block type="game_camerashake"><value name="AMOUNT"><shadow type="math_number"><field name="NUM">10</field></shadow></value></block><sep gap="24"></sep><block type="game_camerax"></block><block type="game_cameray"></block><block type="game_camerazoom"></block>'; },
     getAIBlocks: function() { return '<block type="game_aimovetoxy"><value name="X"><shadow type="math_number"><field name="NUM">0</field></shadow></value><value name="Y"><shadow type="math_number"><field name="NUM">0</field></shadow></value><value name="SPEED"><shadow type="math_number"><field name="NUM">5</field></shadow></value></block><block type="game_aimovetowardtarget"><value name="TARGET"><shadow type="text"><field name="TEXT">Sprite1</field></shadow></value><value name="SPEED"><shadow type="math_number"><field name="NUM">5</field></shadow></value></block><block type="game_aifleefromtarget"><value name="TARGET"><shadow type="text"><field name="TEXT">Sprite1</field></shadow></value><value name="SPEED"><shadow type="math_number"><field name="NUM">5</field></shadow></value></block><block type="game_aifacetarget"><value name="TARGET"><shadow type="text"><field name="TEXT">Sprite1</field></shadow></value></block><sep gap="24"></sep><block type="game_aidistancetotarget"><value name="TARGET"><shadow type="text"><field name="TEXT">Sprite1</field></shadow></value></block><block type="game_aitargetinrange"><value name="TARGET"><shadow type="text"><field name="TEXT">Sprite1</field></shadow></value><value name="RANGE"><shadow type="math_number"><field name="NUM">100</field></shadow></value></block><block type="game_aiwander"><value name="SPEED"><shadow type="math_number"><field name="NUM">3</field></shadow></value></block>'; },
+    getArduinoBlocks: function() {
+      return '<block type="arduino_when_started"></block>' +
+             '<block type="arduino_loop"></block>' +
+             '<sep gap="24"></sep>' +
+             '<block type="arduino_pinMode"></block>' +
+             '<block type="arduino_digitalWrite"></block>' +
+             '<block type="arduino_digitalRead"></block>' +
+             '<sep gap="24"></sep>' +
+             '<block type="arduino_analogWrite"></block>' +
+             '<block type="arduino_analogRead"></block>' +
+             '<sep gap="24"></sep>' +
+             '<block type="arduino_delay"></block>' +
+             '<block type="arduino_servo"></block>' +
+             '<block type="arduino_ultrasonic"></block>';
+    },
     getCombatBlocks: function() { return '<block type="game_setmaxhealth"><value name="HEALTH"><shadow type="math_number"><field name="NUM">100</field></shadow></value></block><block type="game_sethealth"><value name="HEALTH"><shadow type="math_number"><field name="NUM">100</field></shadow></value></block><block type="game_changehealth"><value name="HEALTH"><shadow type="math_number"><field name="NUM">-10</field></shadow></value></block><block type="game_health"></block><block type="game_maxhealth"></block><block type="game_healthpercent"></block><block type="game_isalive"></block><sep gap="24"></sep><block type="game_damageself"><value name="AMOUNT"><shadow type="math_number"><field name="NUM">10</field></shadow></value></block><block type="game_healself"><value name="AMOUNT"><shadow type="math_number"><field name="NUM">20</field></shadow></value></block><block type="game_setinvincible"><value name="SECS"><shadow type="math_number"><field name="NUM">2</field></shadow></value></block><block type="game_isinvincible"></block><block type="game_revive"><value name="HEALTH"><shadow type="math_number"><field name="NUM">100</field></shadow></value></block>'; },
 
     // ==================== UTILIDADES ====================
@@ -634,6 +666,212 @@
     setReadOnly: function(readonly) { if (this.workspace) this.workspace.options.readOnly = readonly; },
     onChange: function(callback) { if (this.workspace) this.workspace.addChangeListener(callback); }
   };
+
+  if (window.Blockly) {
+    var arduinoColors = {
+      arduino: '#00979C',
+      control: '#FFAB19'
+    };
+
+    var arduinoBlockDefs = [
+      {
+        "type": "arduino_when_started",
+        "message0": "Al iniciar Arduino",
+        "nextStatement": null,
+        "colour": arduinoColors.control,
+        "tooltip": "Código ejecutado en void setup()",
+        "helpUrl": ""
+      },
+      {
+        "type": "arduino_loop",
+        "message0": "Bucle por siempre",
+        "nextStatement": null,
+        "colour": arduinoColors.control,
+        "tooltip": "Código ejecutado en void loop()",
+        "helpUrl": ""
+      },
+      {
+        "type": "arduino_pinMode",
+        "message0": "configurar pin %1 como %2",
+        "args0": [
+          {
+            "type": "field_number",
+            "name": "PIN",
+            "value": 13,
+            "min": 0,
+            "max": 53
+          },
+          {
+            "type": "field_dropdown",
+            "name": "MODE",
+            "options": [
+              ["SALIDA (OUTPUT)", "OUTPUT"],
+              ["ENTRADA (INPUT)", "INPUT"]
+            ]
+          }
+        ],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": arduinoColors.arduino,
+        "tooltip": "Establece el modo de un pin",
+        "helpUrl": ""
+      },
+      {
+        "type": "arduino_digitalWrite",
+        "message0": "escribir pin digital %1 %2",
+        "args0": [
+          {
+            "type": "field_number",
+            "name": "PIN",
+            "value": 13,
+            "min": 0,
+            "max": 53
+          },
+          {
+            "type": "field_dropdown",
+            "name": "LEVEL",
+            "options": [
+              ["ALTO (HIGH)", "HIGH"],
+              ["BAJO (LOW)", "LOW"]
+            ]
+          }
+        ],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": arduinoColors.arduino,
+        "tooltip": "Escribe un valor HIGH o LOW en un pin digital",
+        "helpUrl": ""
+      },
+      {
+        "type": "arduino_digitalRead",
+        "message0": "leer pin digital %1",
+        "args0": [
+          {
+            "type": "field_number",
+            "name": "PIN",
+            "value": 2,
+            "min": 0,
+            "max": 53
+          }
+        ],
+        "output": "Boolean",
+        "colour": arduinoColors.arduino,
+        "tooltip": "Lee el estado lógico de un pin digital",
+        "helpUrl": ""
+      },
+      {
+        "type": "arduino_analogWrite",
+        "message0": "escribir pin analógico (PWM) %1 valor %2",
+        "args0": [
+          {
+            "type": "field_number",
+            "name": "PIN",
+            "value": 3,
+            "min": 0,
+            "max": 53
+          },
+          {
+            "type": "field_number",
+            "name": "VALUE",
+            "value": 255,
+            "min": 0,
+            "max": 255
+          }
+        ],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": arduinoColors.arduino,
+        "tooltip": "Escribe un valor analógico (PWM) de 0 a 255",
+        "helpUrl": ""
+      },
+      {
+        "type": "arduino_analogRead",
+        "message0": "leer pin analógico %1",
+        "args0": [
+          {
+            "type": "field_dropdown",
+            "name": "PIN",
+            "options": [
+              ["A0", "A0"],
+              ["A1", "A1"],
+              ["A2", "A2"],
+              ["A3", "A3"],
+              ["A4", "A4"],
+              ["A5", "A5"]
+            ]
+          }
+        ],
+        "output": "Number",
+        "colour": arduinoColors.arduino,
+        "tooltip": "Lee el valor analógico de un pin (0-1023)",
+        "helpUrl": ""
+      },
+      {
+        "type": "arduino_delay",
+        "message0": "esperar %1 milisegundos",
+        "args0": [
+          {
+            "type": "field_number",
+            "name": "MS",
+            "value": 1000,
+            "min": 0
+          }
+        ],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": arduinoColors.control,
+        "tooltip": "Pausa el programa durante los milisegundos especificados",
+        "helpUrl": ""
+      },
+      {
+        "type": "arduino_servo",
+        "message0": "escribir servo pin %1 ángulo %2",
+        "args0": [
+          {
+            "type": "field_number",
+            "name": "PIN",
+            "value": 9,
+            "min": 0,
+            "max": 53
+          },
+          {
+            "type": "field_number",
+            "name": "ANGLE",
+            "value": 90,
+            "min": 0,
+            "max": 180
+          }
+        ],
+        "previousStatement": null,
+        "nextStatement": null,
+        "colour": arduinoColors.arduino,
+        "tooltip": "Posiciona un servo motor de 0 a 180 grados",
+        "helpUrl": ""
+      },
+      {
+        "type": "arduino_ultrasonic",
+        "message0": "leer sensor ultrasonido trig %1 echo %2 (cm)",
+        "args0": [
+          {
+            "type": "field_number",
+            "name": "TRIG",
+            "value": 4
+          },
+          {
+            "type": "field_number",
+            "name": "ECHO",
+            "value": 5
+          }
+        ],
+        "output": "Number",
+        "colour": arduinoColors.arduino,
+        "tooltip": "Lee la distancia del sensor ultrasónico en centímetros",
+        "helpUrl": ""
+      }
+    ];
+
+    Blockly.defineBlocksWithJsonArray(arduinoBlockDefs);
+  }
 
   console.log('[ScratchBlockly] Module loaded with custom blocks');
 })();

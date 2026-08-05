@@ -28,6 +28,9 @@ import DragLayer from '../../containers/drag-layer.jsx';
 import ConnectionModal from '../../containers/connection-modal.jsx';
 import TelemetryModal from '../telemetry-modal/telemetry-modal.jsx';
 import UpdateModal from '../update-modal/update-modal.jsx';
+import StudentEvaluacionPlayer from '../student-evaluacion/student-evaluacion.jsx';
+import { save } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
 
 import layout, {STAGE_SIZE_MODES, STAGE_DISPLAY_SIZES} from '../../lib/layout-constants';
 import {resolveStageSize} from '../../lib/screen-utils';
@@ -37,6 +40,7 @@ import {
     dismissRecommendedUpdate,
     installPendingSTBlockUpdate
 } from '../../lib/stblock-updater';
+import {STBLOCK_SKETCHFORGE_URL} from '../../lib/sketchforge-url';
 
 import styles from './gui.css';
 import addExtensionIcon from './icon--extensions.svg';
@@ -91,7 +95,9 @@ import {
     getCircuitData,
     restoreDeviceState,
     setCircuitData,
-    clearCircuitData
+    clearCircuitData,
+    getSketchforgeData,
+    clearSketchforgeData
 } from '../../reducers/device-mode';
 import DeviceChangeConfirm from '../device-change-confirm/device-change-confirm.jsx';
 import UploadProgress from '../upload-progress/upload-progress.jsx';
@@ -100,8 +106,6 @@ import PythonPanel from '../python-panel/python-panel.jsx';
 import {
     generatePythonCode,
     generatePythonCodeWithMap,
-    createExecutor,
-    preload as preloadPyodide,
     syncPythonToWorkspace,
     savePanelState as savePythonPanelState,
     loadPanelState as loadPythonPanelState
@@ -109,6 +113,7 @@ import {
 import {ArduinoUploader, STBLOCK_LINK_DOWNLOAD_URL} from '../../lib/arduino-uploader';
 import {openConnectionModal} from '../../reducers/modals';
 import {setConnectionModalExtensionId} from '../../reducers/connection-modal';
+import {getVelxioStateKey} from '../velxio-circuit/velxio-circuit.jsx';
 
 const messages = defineMessages({
     addExtension: {
@@ -266,10 +271,13 @@ const GUIComponent = props => {
         onSetCodeLocked,
         onSetManualCode,
         circuitData,
+        sketchforgeSkf,
         deviceModeProgramMode,
         onRestoreDeviceState,
         onSetCircuitData,
         onClearCircuitData,
+        onClearSketchforgeData,
+        onSetSketchforgeData, // Evita propagar al DOM Box
         enableCommunity,
         intl,
         isCreating,
@@ -328,6 +336,21 @@ const GUIComponent = props => {
 
     const selectedDevice = deviceModeDevice;
     const velxioRef = useRef(null);
+    // Refs/estado para el puente con SketchForge 3D (iframe "Diseño 3D").
+    // El .skf editable se captura desde el iframe y se empaqueta en el .flynt
+    // para que "Guardar en tu ordenador" incluya también el proyecto 3D.
+    const sketchforgeFrameRef = useRef(null);
+    const sketchforgeReadyRef = useRef(false); // shell de SketchForge cargado (page.tsx)
+    const sketchforgeEditorReadyRef = useRef(false); // editor de SketchForge montado
+    const sketchforgeCacheRef = useRef(null); // {bytes: Uint8Array} último .skf capturado
+    const sketchforgeResolversRef = useRef(new Map()); // requestId -> resolver
+    const sketchforgeImportQueueRef = useRef([]); // importaciones 3D pendientes de la IA (cola)
+    const sketchforgeImportResolversRef = useRef(new Map()); // requestId -> resolver de import 3D
+    const sketchforgeCaptureTimerRef = useRef(null); // debounce de captura
+    const sketchforgeRestoredRef = useRef(false); // evita re-importar el .skf restaurado
+    const [sketchforgeReady, setSketchforgeReady] = useState(false);
+    const sketchforgeLatestReduxRef = useRef(sketchforgeSkf);
+    sketchforgeLatestReduxRef.current = sketchforgeSkf;
     const [workspaceHandle, setWorkspaceHandle] = useState(null);
     const [mentorGuidanceMsg, setMentorGuidanceMsg] = useState();
     const [showSTBlockLinkPrompt, setShowSTBlockLinkPrompt] = useState(false);
@@ -366,11 +389,7 @@ const GUIComponent = props => {
         }));
     }, [currentTargetId]);
 
-    const [pythonRunning, setPythonRunning] = useState(false);
-    const [pythonLoading, setPythonLoading] = useState(false);
-    const [pythonConsole, setPythonConsole] = useState('');
     const pythonGenDebounceRef = useRef(null);
-    const pythonExecutorRef = useRef(null);
     const pythonPanelLockedRef = useRef(pythonPanelLocked);
 
     // Mantener el ref actualizado con el estado de bloqueo
@@ -462,23 +481,14 @@ const GUIComponent = props => {
         });
     }, [pythonPanelOpen, pythonPanelLocked]);
 
-    // Crear ejecutor de Python cuando el VM esté disponible
-    useEffect(() => {
-        if (vm && !pythonExecutorRef.current) {
-            pythonExecutorRef.current = createExecutor(vm);
-            // Pre-cargar Pyodide en background cuando el panel se abre
-        }
-    }, [vm]);
-
-    // Pre-cargar Pyodide cuando el panel se abre por primera vez
-    useEffect(() => {
-        if (pythonPanelOpen && pythonExecutorRef.current && !pythonExecutorRef.current.isPyodideReady()) {
-            preloadPyodide();
-        }
-    }, [pythonPanelOpen]);
-
     // Calcular si estamos en modo edición Python (toolbox oculto)
     const isPythonEditMode = !pythonPanelLocked && pythonPanelOpen && deviceMode !== 'device';
+
+    // Modo activo del asistente de IA según el contexto actual de la app.
+    const aiActiveMode = deviceMode === 'device' ? 'device'
+        : deviceMode === 'diseno' ? '3d'
+        : deviceMode === 'evaluacion' ? 'blocks'
+        : (isPythonEditMode ? 'python' : 'blocks');
 
     // Redimensionar workspace y mover bloques cuando cambia el modo Python
     const prevPythonEditModeRef = useRef(isPythonEditMode);
@@ -522,48 +532,6 @@ const GUIComponent = props => {
         return () => clearTimeout(timer);
     }, [isPythonEditMode, workspaceHandle]);
 
-    // Función para ejecutar código Python
-    const handleRunPythonCode = useCallback((code) => {
-        if (!pythonExecutorRef.current || pythonRunning) return;
-
-        setPythonLoading(true);
-        setPythonConsole('Cargando entorno Python...\n');
-
-        pythonExecutorRef.current.execute(
-            code,
-            // onOutput
-            (output) => {
-                setPythonConsole(prev => prev + output + '\n');
-            },
-            // onError
-            (error) => {
-                setPythonConsole(prev => prev + `\n❌ Error: ${error}\n`);
-                setPythonRunning(false);
-                setPythonLoading(false);
-            },
-            // onComplete
-            (result) => {
-                setPythonConsole(prev => prev + '\n✓ Ejecución completada\n');
-                setPythonRunning(false);
-                setPythonLoading(false);
-            }
-        ).then(() => {
-            setPythonLoading(false);
-            setPythonRunning(true);
-        }).catch((err) => {
-            setPythonConsole(prev => prev + `\n❌ Error: ${err.message}\n`);
-            setPythonLoading(false);
-        });
-    }, [pythonRunning]);
-
-    // Función para detener código Python
-    const handleStopPythonCode = useCallback(() => {
-        if (pythonExecutorRef.current) {
-            pythonExecutorRef.current.stop();
-            setPythonRunning(false);
-            setPythonConsole(prev => prev + '\n⏹ Ejecución detenida\n');
-        }
-    }, []);
     const lastSyncedRef = useRef({ peripheralName: null, connected: false, baudRate: null });
 
     // Generar código Python cuando el workspace cambie (solo en modo Programación)
@@ -788,6 +756,49 @@ const GUIComponent = props => {
                 // Fallback para web: window.open
                 window.open(robotEditorUrl, 'stblock-robot-editor');
             }
+            if (event.data && event.data.type === 'stblock-save-json') {
+                const { json, filename } = event.data;
+                console.log('[GUI] postMessage stblock-save-json recibido:', filename);
+                
+                const isTauri = typeof window !== 'undefined' && window.__TAURI__ !== undefined;
+                if (isTauri) {
+                    try {
+                        save({
+                            defaultPath: filename,
+                            filters: [{ name: 'JSON', extensions: ['json'] }]
+                        }).then(filePath => {
+                            if (filePath) {
+                                const bytes = Array.from(new TextEncoder().encode(json));
+                                invoke('save_file', { path: filePath, content: bytes })
+                                    .then(() => {
+                                        alert('Evaluación guardada correctamente en: ' + filePath);
+                                    })
+                                    .catch(err => {
+                                        console.error('[GUI] Error en save_file:', err);
+                                        alert('Error al guardar archivo: ' + err.message);
+                                    });
+                            }
+                        }).catch(err => {
+                            console.error('[GUI] Error en save dialog:', err);
+                        });
+                        return;
+                    } catch (e) {
+                        console.warn('[GUI] Error llamando a Tauri save, usando descarga normal:', e);
+                    }
+                }
+                
+                // Fallback para navegador web normal
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
         };
 
         document.addEventListener('keydown', handleKeyDown);
@@ -807,6 +818,25 @@ const GUIComponent = props => {
             onSetCodeViewContent(code);
         }
     }, [deviceMode, onSetCodeViewContent]);
+
+    // La IA generó código Python: se escribe en el panel de Programación y se
+    // abre/desbloquea para que el usuario pueda verlo y ejecutarlo.
+    const handleAiPythonCodeGenerated = useCallback(code => {
+        if (!vm) return;
+        const targetId = currentTargetId || (vm.editingTarget && vm.editingTarget.id);
+        if (!targetId) return;
+        setPythonCodePerTarget(prev => ({...prev, [targetId]: code}));
+        setPythonPanelOpen(true);
+        setPythonPanelLocked(false);
+    }, [vm, currentTargetId]);
+
+    // La IA generó código Arduino C++: se fuerza locked y se setea el contenido
+    // del editor. El reducer sincroniza manualCode cuando locked está activo,
+    // así editor/simulador/upload usan el código generado por la IA.
+    const handleAiArduinoCodeGenerated = useCallback(code => {
+        if (onSetCodeLocked) onSetCodeLocked(true);
+        if (onSetCodeViewContent) onSetCodeViewContent(code);
+    }, [onSetCodeLocked, onSetCodeViewContent]);
 
     // Handle activating a device extension (register blocks, update toolbox)
     const handleActivateExtension = useCallback((extension) => {
@@ -1238,6 +1268,235 @@ const GUIComponent = props => {
         return () => clearTimeout(timer);
     }, [circuitData]);
 
+    // --- Puente SketchForge 3D -----------------------------------------------
+    // Pide al iframe el proyecto editable .skf actual. Si el editor de SketchForge
+    // no está montado (ej. dashboard), devuelve la caché o el .skf restaurado
+    // desde un .flynt, para no bloquear el guardado esperando una respuesta.
+    const requestSketchforgeSkf = useCallback(async () => {
+        const iframe = sketchforgeFrameRef.current;
+        if (!iframe || !iframe.contentWindow || !sketchforgeEditorReadyRef.current) {
+            return sketchforgeCacheRef.current || sketchforgeLatestReduxRef.current || null;
+        }
+        const requestId = `skf-export-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        return new Promise(resolve => {
+            const timeout = window.setTimeout(() => {
+                sketchforgeResolversRef.current.delete(requestId);
+                resolve(sketchforgeCacheRef.current || sketchforgeLatestReduxRef.current || null);
+            }, 15000);
+            sketchforgeResolversRef.current.set(requestId, result => {
+                window.clearTimeout(timeout);
+                resolve(result || sketchforgeCacheRef.current || sketchforgeLatestReduxRef.current || null);
+            });
+            iframe.contentWindow.postMessage({type: 'SKETCHFORGE_EXPORT_SKF', requestId}, '*');
+        });
+    }, []);
+
+    // Envía formas generadas por la IA al iframe de SketchForge. Resuelve cuando
+    // llega SKETCHFORGE_IMPORT_SHAPES_RESULT o tras un timeout de 20s.
+    const sendSketchforgeImport = useCallback((payload) => {
+        const iframe = sketchforgeFrameRef.current;
+        if (!iframe || !iframe.contentWindow || !sketchforgeEditorReadyRef.current) {
+            return Promise.resolve({ok: false, error: 'El editor 3D no está listo.'});
+        }
+        return new Promise(resolve => {
+            const timeout = window.setTimeout(() => {
+                sketchforgeImportResolversRef.current.delete(payload.requestId);
+                resolve({ok: false, error: 'Tiempo de espera agotado al aplicar las formas 3D.'});
+            }, 20000);
+            sketchforgeImportResolversRef.current.set(payload.requestId, result => {
+                window.clearTimeout(timeout);
+                resolve(result);
+            });
+            iframe.contentWindow.postMessage({
+                type: 'SKETCHFORGE_IMPORT_SHAPES',
+                requestId: payload.requestId,
+                clear: !!payload.clear,
+                shapes: payload.shapes
+            }, '*');
+        });
+    }, []);
+
+    // Vacía la cola de importaciones 3D cuando el editor de SketchForge está listo.
+    const flushSketchforgeImportQueue = useCallback(() => {
+        if (!sketchforgeEditorReadyRef.current || !sketchforgeFrameRef.current) return;
+        const queue = sketchforgeImportQueueRef.current;
+        if (queue.length === 0) return;
+        sketchforgeImportQueueRef.current = [];
+        queue.forEach(payload => {
+            sendSketchforgeImport(payload).catch(() => {});
+        });
+    }, [sendSketchforgeImport]);
+
+    // La IA generó un modelo 3D (script3D): lo interpreta y lo envía a
+    // SketchForge. Si el editor 3D no está listo, lo encola y avisa en el chat.
+    const handleAiShapes3DGenerated = useCallback(async (script3D, clearExisting) => {
+        try {
+            const mod = await import('../../lib/ai-3d-interpreter');
+            const result = mod.interpret(script3D);
+            if (!result.ok) {
+                return {ok: false, error: (result.errors || []).join('; ')};
+            }
+            const clear = typeof clearExisting === 'boolean' ? clearExisting : result.clear;
+            const payload = {
+                requestId: `ai-shapes-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                clear: clear,
+                shapes: result.shapes
+            };
+            if (deviceMode === 'diseno' && sketchforgeEditorReadyRef.current && sketchforgeFrameRef.current) {
+                const sendResult = await sendSketchforgeImport(payload);
+                if (!sendResult.ok) {
+                    return {ok: false, error: sendResult.error || 'No se pudieron aplicar las formas.'};
+                }
+                return {ok: true, count: result.shapes.length};
+            }
+            sketchforgeImportQueueRef.current.push(payload);
+            return {
+                ok: true,
+                queued: true,
+                count: result.shapes.length,
+                error: 'Formas listas. Abrí Diseño 3D para aplicarlas.'
+            };
+        } catch (e) {
+            return {ok: false, error: e.message || 'Error al interpretar el modelo 3D.'};
+        }
+    }, [deviceMode, sendSketchforgeImport]);
+
+    // Captura debounced del .skf cuando el proyecto 3D cambia, se restaura o el
+    // editor se (re)monta. Debounce con trailing: cada evento reinicia el timer,
+    // así los eventos rápidos (mount + import) coalescen en una sola captura.
+    const scheduleSketchforgeCapture = useCallback(() => {
+        if (sketchforgeCaptureTimerRef.current !== null) {
+            window.clearTimeout(sketchforgeCaptureTimerRef.current);
+        }
+        sketchforgeCaptureTimerRef.current = window.setTimeout(() => {
+            sketchforgeCaptureTimerRef.current = null;
+            requestSketchforgeSkf();
+        }, 1500);
+    }, [requestSketchforgeSkf]);
+
+    // Captura el estado del circuito de Velxio para incluirlo en el .flynt.
+    const requestCircuitState = useCallback(async () => {
+        try {
+            if (velxioRef.current && velxioRef.current.saveCircuitState) {
+                const state = await velxioRef.current.saveCircuitState();
+                if (state) return state;
+            }
+        } catch (e) {
+            console.warn('[GUI] Error capturing circuit state:', e);
+        }
+        // Fallback: estado persistido por Velxio al desmontar su iframe
+        try {
+            if (deviceModeDevice && deviceModeDevice.deviceId) {
+                const key = getVelxioStateKey(deviceModeDevice.deviceId);
+                const raw = window.localStorage.getItem(key);
+                if (raw) return JSON.parse(raw);
+            }
+        } catch (e) { /* ignore */ }
+        return null;
+    }, [deviceModeDevice]);
+
+    // Listener de mensajes del iframe de SketchForge (shell + editor).
+    useEffect(() => {
+        const handleSketchforgeMessage = event => {
+            const data = event.data;
+            if (!data || typeof data !== 'object') return;
+            const frame = sketchforgeFrameRef.current;
+            if (!frame || event.source !== frame.contentWindow) return;
+
+            if (data.type === 'SKETCHFORGE_READY') {
+                // Shell de SketchForge cargado (page.tsx). El editor puede tardar más.
+                sketchforgeReadyRef.current = true;
+                setSketchforgeReady(true);
+                return;
+            }
+            if (data.type === 'SKETCHFORGE_EDITOR_READY') {
+                // El editor de SketchForge está montado y puede responder exportaciones.
+                sketchforgeEditorReadyRef.current = true;
+                // Aplicar cualquier modelo 3D que la IA haya dejado en cola.
+                flushSketchforgeImportQueue();
+                // Refrescar la caché del .skf: el editor puede haber cargado otro proyecto.
+                scheduleSketchforgeCapture();
+                return;
+            }
+            if (data.type === 'SKETCHFORGE_PROJECT_CHANGED') {
+                // El proyecto 3D cambió: refrescar la caché del .skf (debounced).
+                scheduleSketchforgeCapture();
+                return;
+            }
+            if (data.type === 'SKETCHFORGE_EXPORT_SKF_RESULT') {
+                const resolver = sketchforgeResolversRef.current.get(data.requestId);
+                if (resolver) {
+                    sketchforgeResolversRef.current.delete(data.requestId);
+                    if (data.error) {
+                        resolver(null);
+                    } else if (data.bytes && Array.isArray(data.bytes)) {
+                        const bytes = new Uint8Array(data.bytes);
+                        sketchforgeCacheRef.current = {bytes};
+                        onClearSketchforgeData();
+                        resolver({bytes});
+                    } else {
+                        resolver(null);
+                    }
+                }
+                return;
+            }
+            if (data.type === 'SKETCHFORGE_IMPORT_SKF_RESULT') {
+                // Tras restaurar el .skf importado, capturarlo en caché para que el
+                // siguiente guardado lo incluya aunque no se edite nada.
+                scheduleSketchforgeCapture();
+                return;
+            }
+            if (data.type === 'SKETCHFORGE_IMPORT_SHAPES_RESULT') {
+                // El editor aplicó (o falló al aplicar) las formas generadas por la IA.
+                const importResolver = sketchforgeImportResolversRef.current.get(data.requestId);
+                if (importResolver) {
+                    sketchforgeImportResolversRef.current.delete(data.requestId);
+                    importResolver({
+                        ok: !!data.ok,
+                        count: data.count || 0,
+                        error: data.error || null
+                    });
+                }
+                return;
+            }
+        };
+        window.addEventListener('message', handleSketchforgeMessage);
+        return () => window.removeEventListener('message', handleSketchforgeMessage);
+    }, [scheduleSketchforgeCapture, onClearSketchforgeData, flushSketchforgeImportQueue]);
+
+    // Restaurar el proyecto 3D (.skf) al abrir la pestaña Diseño 3D tras importar un .flynt.
+    useEffect(() => {
+        if (deviceMode !== 'diseno') {
+            sketchforgeReadyRef.current = false;
+            sketchforgeEditorReadyRef.current = false;
+            sketchforgeRestoredRef.current = false;
+            setSketchforgeReady(false);
+            return;
+        }
+        if (!sketchforgeSkf || !sketchforgeSkf.bytes) return;
+        if (sketchforgeRestoredRef.current) return;
+        const iframe = sketchforgeFrameRef.current;
+        if (!iframe || !iframe.contentWindow || !sketchforgeReady) return;
+        sketchforgeRestoredRef.current = true;
+        iframe.contentWindow.postMessage({
+            type: 'SKETCHFORGE_IMPORT_SKF',
+            requestId: `stblock-restore-${Date.now()}`,
+            bytes: Array.from(new Uint8Array(sketchforgeSkf.bytes)),
+            fileName: 'restored.skf'
+        }, '*');
+    }, [deviceMode, sketchforgeSkf, sketchforgeReady]);
+
+    // Al salir de la pestaña Diseño 3D: descartar el debounce pendiente y hacer
+    // una última captura best-effort antes de que el iframe se desmonte.
+    useEffect(() => {
+        if (deviceMode === 'diseno') return;
+        if (sketchforgeCaptureTimerRef.current !== null) {
+            window.clearTimeout(sketchforgeCaptureTimerRef.current);
+            sketchforgeCaptureTimerRef.current = null;
+        }
+        requestSketchforgeSkf();
+    }, [deviceMode, requestSketchforgeSkf]);
+
     // Persistir estado de device mode a localStorage
     useEffect(() => {
         if (!deviceMode || deviceMode !== 'device') return;
@@ -1567,6 +1826,56 @@ const GUIComponent = props => {
     const [isAiOpen, setIsAiOpen] = useState(false);
     const [isAiMinimized, setIsAiMinimized] = useState(false);
 
+    // Botón flotante de IA arrastrable. aiBtnPos guarda la posición en px tras
+    // arrastrarlo (null = usar la posición CSS por defecto).
+    const [aiBtnPos, setAiBtnPos] = useState(null);
+    const aiBtnDragRef = useRef(null); // datos del arrastre en curso
+    const aiBtnMovedRef = useRef(false); // true si el último puntero arrastró el botón
+
+    const handleAiBtnPointerDown = useCallback(e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return; // solo botón izquierdo
+        const rect = e.currentTarget.getBoundingClientRect();
+        aiBtnMovedRef.current = false;
+        aiBtnDragRef.current = {
+            startX: e.clientX,
+            startY: e.clientY,
+            origLeft: rect.left,
+            origTop: rect.top
+        };
+        try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+        } catch (err) { /* captura no soportada: fallback con eventos de ventana */ }
+    }, []);
+
+    const handleAiBtnPointerMove = useCallback(e => {
+        const drag = aiBtnDragRef.current;
+        if (!drag) return;
+        const dx = e.clientX - drag.startX;
+        const dy = e.clientY - drag.startY;
+        // Umbral para distinguir un click de un arrastre.
+        if (!aiBtnMovedRef.current && (Math.abs(dx) + Math.abs(dy) < 4)) return;
+        aiBtnMovedRef.current = true;
+        const btnSize = 44;
+        const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+        const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+        const x = Math.min(Math.max(drag.origLeft + dx, 0), Math.max(0, vw - btnSize));
+        const y = Math.min(Math.max(drag.origTop + dy, 0), Math.max(0, vh - btnSize));
+        setAiBtnPos({x: x, y: y});
+    }, []);
+
+    const handleAiBtnPointerUp = useCallback(() => {
+        aiBtnDragRef.current = null;
+    }, []);
+
+    const handleAiBtnClick = useCallback(() => {
+        if (aiBtnMovedRef.current) {
+            aiBtnMovedRef.current = false;
+            return; // fue un arrastre, no abrir el chat
+        }
+        setIsAiOpen(true);
+        setIsAiMinimized(false);
+    }, []);
+
     useEffect(() => {
         if (pendingExplain) {
             setIsAiOpen(true);
@@ -1643,7 +1952,23 @@ const GUIComponent = props => {
 
     const costumePanel = useMemo(() => <CostumeTab vm={vm} />, [vm]);
     const soundPanel = useMemo(() => <SoundTab vm={vm} />, [vm]);
-    const aiPanel = useMemo(() => <AiTab vm={vm} pendingExplain={pendingExplain} projectKey={projectKey} onClearExplain={onClearExplain} onMentorGuidance={handleMentorGuidance} onActivateTab={onActivateTab} reanalyzeTick={reanalyzeTick} />, [vm, pendingExplain, projectKey, onClearExplain, handleMentorGuidance, onActivateTab, reanalyzeTick]);
+    const aiPanel = useMemo(() => (
+        <AiTab
+            vm={vm}
+            pendingExplain={pendingExplain}
+            projectKey={projectKey}
+            onClearExplain={onClearExplain}
+            onMentorGuidance={handleMentorGuidance}
+            onActivateTab={onActivateTab}
+            reanalyzeTick={reanalyzeTick}
+            activeMode={aiActiveMode}
+            onPythonCodeGenerated={handleAiPythonCodeGenerated}
+            onArduinoCodeGenerated={handleAiArduinoCodeGenerated}
+            onShapes3DGenerated={handleAiShapes3DGenerated}
+        />
+    ), [vm, pendingExplain, projectKey, onClearExplain, handleMentorGuidance, onActivateTab,
+        reanalyzeTick, aiActiveMode, handleAiPythonCodeGenerated, handleAiArduinoCodeGenerated,
+        handleAiShapes3DGenerated]);
 
     const panels = useMemo(() => [codePanel, costumePanel, soundPanel],
         [codePanel, costumePanel, soundPanel]);
@@ -1817,6 +2142,25 @@ const GUIComponent = props => {
         />
     );
 
+    const renderEvaluacionMode = () => (
+        <StudentEvaluacionPlayer
+            vm={vm}
+            onSetDeviceMode={onSetDeviceMode}
+        />
+    );
+
+    const renderDiseno3DMode = () => (
+        <div className={styles.diseno3DWrapper}>
+            <iframe
+                ref={sketchforgeFrameRef}
+                className={styles.diseno3DFrame}
+                src={STBLOCK_SKETCHFORGE_URL}
+                title="SketchForge 3D"
+                allow="fullscreen"
+            />
+        </div>
+    );
+
     // Render upload progress modal
     const uploadProgressModal = deviceModeUploadState && deviceModeUploadState.isVisible ? (
         <UploadProgress
@@ -1970,8 +2314,10 @@ const GUIComponent = props => {
                 selectedDevice={selectedDevice}
                 onUploadFirmware={handleDeviceUploadFirmware}
                 deviceModeConnected={deviceModeConnected}
+                onRequestCircuitState={requestCircuitState}
+                onRequestSketchforgeSkf={requestSketchforgeSkf}
             />
-            {deviceMode === 'device' ? renderDeviceMode() : renderEditor()}
+            {deviceMode === 'device' ? renderDeviceMode() : deviceMode === 'diseno' ? renderDiseno3DMode() : deviceMode === 'evaluacion' ? renderEvaluacionMode() : renderEditor()}
             <DragLayer />
             {isAiOpen && (
                 <div className={classNames(styles.aiFloatingWindow, {[styles.minimized]: isAiMinimized})}>
@@ -1997,8 +2343,21 @@ const GUIComponent = props => {
                 </div>
             )}
             {!isAiOpen && (
-                <button className={styles.aiFloatingBtn} onClick={() => { setIsAiOpen(true); setIsAiMinimized(false); }} title="Preguntar a la IA">
-                    <img className={styles.aiFloatingBtnIcon} src={aiIcon} style={{filter: 'brightness(0) invert(1)'}} />
+                <button
+                    className={styles.aiFloatingBtn}
+                    style={aiBtnPos ? {left: aiBtnPos.x, top: aiBtnPos.y} : null}
+                    onClick={handleAiBtnClick}
+                    onPointerDown={handleAiBtnPointerDown}
+                    onPointerMove={handleAiBtnPointerMove}
+                    onPointerUp={handleAiBtnPointerUp}
+                    onPointerCancel={handleAiBtnPointerUp}
+                    title="Preguntar a la IA"
+                >
+                    <img
+                        className={styles.aiFloatingBtnIcon}
+                        src={aiIcon}
+                        style={{filter: 'brightness(0) invert(1)'}}
+                    />
                 </button>
             )}
         </Box>
@@ -2029,7 +2388,7 @@ GUIComponent.propTypes = {
     costumeLibraryVisible: PropTypes.bool,
     debugModalVisible: PropTypes.bool,
     deviceLibraryVisible: PropTypes.bool,
-    deviceMode: PropTypes.oneOf(['game', 'device']),
+    deviceMode: PropTypes.oneOf(['game', 'device', 'diseno', 'evaluacion']),
     deviceModeCode: PropTypes.string,
     deviceModeCodeLocked: PropTypes.bool,
     deviceModeManualCode: PropTypes.string,
@@ -2067,10 +2426,12 @@ GUIComponent.propTypes = {
     onSetCodeLocked: PropTypes.func,
     onSetManualCode: PropTypes.func,
     circuitData: PropTypes.object,
+    sketchforgeSkf: PropTypes.object,
     deviceModeProgramMode: PropTypes.string,
     onRestoreDeviceState: PropTypes.func,
     onSetCircuitData: PropTypes.func,
     onClearCircuitData: PropTypes.func,
+    onClearSketchforgeData: PropTypes.func,
     enableCommunity: PropTypes.bool,
     intl: intlShape.isRequired,
     isCreating: PropTypes.bool,
@@ -2160,6 +2521,7 @@ const mapStateToProps = state => ({
     deviceModeCodeLocked: isCodeLocked(state),
     deviceModeManualCode: getManualCode(state),
     circuitData: getCircuitData(state),
+    sketchforgeSkf: getSketchforgeData(state),
     deviceModeProgramMode: getProgramMode(state)
 });
 
@@ -2185,7 +2547,8 @@ const mapDispatchToProps = dispatch => ({
     onSetManualCode: code => dispatch(setManualCode(code)),
     onRestoreDeviceState: deviceState => dispatch(restoreDeviceState(deviceState)),
     onSetCircuitData: data => dispatch(setCircuitData(data)),
-    onClearCircuitData: () => dispatch(clearCircuitData())
+    onClearCircuitData: () => dispatch(clearCircuitData()),
+    onClearSketchforgeData: () => dispatch(clearSketchforgeData())
 });
 
 export default injectIntl(connect(

@@ -1069,15 +1069,30 @@ function validateFunctionArguments(funcName, args, lineNumber) {
  */
 function validateCondition(conditionStr, lineNumber) {
     const errors = [];
-    if (!conditionStr || conditionStr === 'True' || conditionStr === 'true') {
+    if (!conditionStr) {
         return errors;
+    }
+
+    // Literales booleanos: no hay nada que validar
+    if (conditionStr === 'True' || conditionStr === 'true' ||
+        conditionStr === 'False' || conditionStr === 'false') {
+        return errors;
+    }
+
+    // Quitar un "not " inicial: la validación debe mirar la condición interna.
+    // Evita falso positivo "Función desconocida en condición: 'not'" en
+    // "while not (x < 5):" o "if not sprite.tocando('borde'):"
+    let cond = conditionStr.trim();
+    const notMatch = cond.match(/^not\s+(.+)$/i);
+    if (notMatch) {
+        cond = stripOuterParens(notMatch[1]);
     }
 
     // Buscar llamadas a métodos de objetos en la condición
     // Patrones como sprite.tocando("..."), sprite.en_suelo(), etc.
     const methodCallPattern = /(\w+)\.(\w+)\s*\(/g;
     let methodMatch;
-    while ((methodMatch = methodCallPattern.exec(conditionStr)) !== null) {
+    while ((methodMatch = methodCallPattern.exec(cond)) !== null) {
         const objName = methodMatch[1];
         const methodName = methodMatch[2];
         const error = validateObjectMethod(objName, methodName, lineNumber);
@@ -1088,7 +1103,7 @@ function validateCondition(conditionStr, lineNumber) {
 
     // Buscar funciones simples como tecla_presionada("...")
     const funcPattern = /^(\w+)\s*\(/;
-    const funcMatch = conditionStr.match(funcPattern);
+    const funcMatch = cond.match(funcPattern);
     if (funcMatch && !funcMatch[1].includes('.')) {
         const funcName = funcMatch[1];
         // Verificar si es una función conocida
@@ -1234,6 +1249,27 @@ function validatePythonLine(line, lineNumber, userDefinedFunctions = new Set()) 
 }
 
 /**
+ * ¿Un bloque terminado en ":" puede quedar VACÍO sin ser error?
+ * - "def f():" → válido (Scratch permite procedimientos sin cuerpo).
+ * - "por_siempre:" / "while true:" → válido (bloque "por siempre" acepta
+ *   substack vacío).
+ * - "while <condición constante>:" → válido. La condición es evaluable en
+ *   tiempo de compilación y el bloque resultante ("por siempre" o "repetir
+ *   hasta que" con condición constante) es válido en Scratch sin cuerpo.
+ * Cualquier otro bloque (if, for, while con condición variable) SÍ exige cuerpo.
+ */
+function isExemptEmptyBlock(blockText) {
+    const text = blockText.trim();
+    if (text.startsWith('def ')) return true;
+    if (/^por_siempre\s*:\s*$/.test(text)) return true;
+    const whileM = text.match(/^while\s+(.+)\s*:\s*$/);
+    // "while true:" → por siempre; "while not 1 == 0:" / "while 1 == 1:" →
+    // repetir-hasta-que con condición constante. Ninguno necesita cuerpo.
+    if (whileM && isConstantTrue(whileM[1]) !== null) return true;
+    return false;
+}
+
+/**
  * Valida código Python completo y retorna todos los errores
  */
 export function validatePythonCode(pythonCode) {
@@ -1278,9 +1314,9 @@ export function validatePythonCode(pythonCode) {
             // Caso 1: La línea anterior iniciaba un bloque (terminaba con ':')
             if (lastBlockLine !== null) {
                 if (currentIndent <= lastBlockIndent) {
-                    // Las definiciones de función (def) vacías son válidas (bloques sin cuerpo)
-                    // No marcar error si la línea pendiente es un 'def'
-                    if (!lastBlockText.startsWith('def ')) {
+                    // 'def' vacío y "por siempre" vacío son válidos (bloques sin cuerpo)
+                    // No marcar error si la línea pendiente es uno de esos
+                    if (!isExemptEmptyBlock(lastBlockText)) {
                         allErrors.push(new CodeError(
                             ERROR_TYPES.INDENT_ERROR,
                             `IndentationError: se esperaba un bloque indentado después de la declaración en la línea ${lastBlockLine}: "${lastBlockText}"`,
@@ -1331,8 +1367,8 @@ export function validatePythonCode(pythonCode) {
         }
 
         // Caso especial: El archivo termina con una declaración de bloque vacía
-        // Las funciones 'def' vacías no se marcan como error (válidas en Scratch)
-        if (lastBlockLine !== null && !lastBlockText.startsWith('def ')) {
+        // 'def' vacío y "por siempre" vacío no se marcan como error (válidos en Scratch)
+        if (lastBlockLine !== null && !isExemptEmptyBlock(lastBlockText)) {
             allErrors.push(new CodeError(
                 ERROR_TYPES.INDENT_ERROR,
                 `IndentationError: se esperaba un bloque indentado al final del archivo después de la línea ${lastBlockLine}: "${lastBlockText}"`,
@@ -1364,8 +1400,22 @@ function parsePythonLine(line) {
 
     // ===== ESTRUCTURAS DE CONTROL =====
 
-    // Detectar "while True:" → control_forever (por siempre)
-    if (/^while\s+True\s*:\s*$/.test(trimmed) || /^por_siempre\s*:\s*$/.test(trimmed)) {
+    // Detectar "while true:" / "while True:" → por siempre.
+    // SOLO el literal booleano true (case-insensitive) genera "por siempre".
+    // Otras condiciones constantes (while not 1 == 0:, while 1 == 1:) NO generan
+    // "por siempre": siguen la regla general `while X:` → "repetir hasta que (not X)".
+    const whileForeverMatch = trimmed.match(/^while\s+(.+)\s*:\s*$/);
+    if (whileForeverMatch && /^true$/i.test(whileForeverMatch[1].trim())) {
+        return {
+            function: '__control_forever__',
+            arguments: [],
+            raw: trimmed,
+            isControl: true,
+            controlType: 'forever'
+        };
+    }
+    // "por_siempre:" explícito en español
+    if (/^por_siempre\s*:\s*$/.test(trimmed)) {
         return {
             function: '__control_forever__',
             arguments: [],
@@ -1399,12 +1449,22 @@ function parsePythonLine(line) {
         };
     }
 
-    // Detectar "while condición:" → control_repeat_until (repetir hasta que)
+    // Detectar "while condición:" → control_repeat_until (repetir hasta que).
+    // Scratch "repetir hasta que X" equivale a Python "while not X" (ver
+    // block-mappings.js), así que la condición del bloque se NIEGA. Si la
+    // condición ya empieza con "not ", se simplifica la doble negación.
     const whileCondMatch = trimmed.match(/^while\s+(.+)\s*:\s*$/);
-    if (whileCondMatch && whileCondMatch[1] !== 'True') {
+    if (whileCondMatch) {
+        // Quitar UN par de paréntesis externos: (x < 5) → x < 5
+        // (sin truncar cadenas que solo terminen en ")" como sprite.tocando("x"))
+        let whileCond = stripOuterParens(whileCondMatch[1]);
+        const notWhile = whileCond.match(/^not\s+(.+)$/i);
+        const negatedCond = notWhile ?
+            stripOuterParens(notWhile[1]) :
+            `not (${whileCond})`;
         return {
             function: '__control_repeat_until__',
-            arguments: [{ type: 'condition', value: whileCondMatch[1] }],
+            arguments: [{ type: 'condition', value: negatedCond }],
             raw: trimmed,
             isControl: true,
             controlType: 'repeat_until'
@@ -1898,8 +1958,90 @@ function createShadowText(value, parentId) {
 }
 
 /**
+ * Crea un bloque booleano constante (True/False).
+ * Scratch no tiene un bloque literal booleano, así que se usa una comparación
+ * matemática siempre verdadera/falsa: 1 = 1 → True, 1 = 0 → False.
+ */
+function createBooleanLiteral(bool, parentId) {
+    const blockId = generateBlockId();
+    const shadowA = createShadowNumber(1, blockId);
+    const shadowB = createShadowNumber(bool ? 1 : 0, blockId);
+    return {
+        blockId,
+        block: {
+            id: blockId,
+            opcode: 'operator_equals',
+            inputs: {
+                OPERAND1: { name: 'OPERAND1', block: shadowA.id, shadow: shadowA.id },
+                OPERAND2: { name: 'OPERAND2', block: shadowB.id, shadow: shadowB.id }
+            },
+            fields: {},
+            next: null,
+            parent: parentId,
+            topLevel: false,
+            shadow: false
+        },
+        shadowBlocks: [shadowA, shadowB]
+    };
+}
+
+/**
+ * Quita UN solo par de paréntesis externos (si la cadena está completamente envuelta).
+ * A diferencia de `replace(/^\(\s*|\s*\)$/g, '')`, NO trunca cadenas que simplemente
+ * TERMINAN en ")" como `sprite.tocando("borde")`.
+ */
+function stripOuterParens(str) {
+    const trimmed = str.trim();
+    if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+        return trimmed.slice(1, -1).trim();
+    }
+    return trimmed;
+}
+
+/**
+ * Evalúa SEGURO (sin `eval`) si una condición es una constante verdadera/falsa.
+ * Soporta: literales booleanos (true/True/false/False), "not <constante>" y
+ * comparaciones numéricas (<n> op <n>). Retorna true/false si es constante y
+ * determinable, o null si la condición depende de variables/estado (no constante).
+ * Se usa para decidir si un "while" con condición constante puede quedar vacío
+ * (bloque "por siempre" o "repetir hasta que" con condición constante).
+ */
+function isConstantTrue(cond) {
+    const c = cond.trim();
+    // Literales booleanos (case-insensitive)
+    if (/^true$/i.test(c)) return true;
+    if (/^false$/i.test(c)) return false;
+
+    // "not <constante>" → niega el valor de la constante interna
+    const notM = c.match(/^not\s+(.+)$/i);
+    if (notM) {
+        const inner = isConstantTrue(stripOuterParens(notM[1]));
+        return inner === null ? null : !inner;
+    }
+
+    // Comparación numérica: <num> op <num>  (==, !=, <, >, <=, >=)
+    const cmp = c.match(/^(-?\d+(?:\.\d+)?)\s*(==|!=|<|>|<=|>=)\s*(-?\d+(?:\.\d+)?)$/);
+    if (cmp) {
+        const a = parseFloat(cmp[1]);
+        const b = parseFloat(cmp[3]);
+        switch (cmp[2]) {
+        case '==': return a === b;
+        case '!=': return a !== b;
+        case '<': return a < b;
+        case '>': return a > b;
+        case '<=': return a <= b;
+        case '>=': return a >= b;
+        default: return null;
+        }
+    }
+
+    // No es una constante determinable
+    return null;
+}
+
+/**
  * Parsea una expresión de condición y la convierte a un bloque booleano de Scratch
- * Soporta: sprite.tocando("x"), tecla_presionada("x"), comparaciones, etc.
+ * Soporta: sprite.tocando("x"), tecla_presionada("x"), comparaciones, negaciones y literales booleanos.
  */
 function parseConditionToBlock(conditionStr, parentId) {
     if (!conditionStr || typeof conditionStr !== 'string') return null;
@@ -1907,6 +2049,32 @@ function parseConditionToBlock(conditionStr, parentId) {
     const condition = conditionStr.trim();
     const blockId = generateBlockId();
     const shadowBlocks = [];
+
+    // Negación: "not <cond>" → operator_not(cond interna)
+    const notMatch = condition.match(/^not\s+(.+)$/i);
+    if (notMatch) {
+        const inner = stripOuterParens(notMatch[1]);
+        const innerResult = parseConditionToBlock(inner, parentId);
+        if (innerResult) {
+            const notBlockId = generateBlockId();
+            return {
+                blockId: notBlockId,
+                block: {
+                    id: notBlockId,
+                    opcode: 'operator_not',
+                    inputs: { OPERAND: { name: 'OPERAND', block: innerResult.blockId, shadow: null } },
+                    fields: {},
+                    next: null,
+                    parent: parentId,
+                    topLevel: false,
+                    shadow: false
+                },
+                shadowBlocks: innerResult.shadowBlocks.concat([{ id: innerResult.blockId, block: innerResult.block }])
+            };
+        }
+        // "not <literal booleano>" sin bloque interno → constante negada
+        return createBooleanLiteral(inner === 'false' || inner === 'False' ? true : false, parentId);
+    }
 
     // sprite.tocando("_edge_") o sprite.tocando("Sprite2")
     const touchingMatch = condition.match(/^sprite\.tocando\s*\(\s*["'](.+?)["']\s*\)$/);
@@ -2115,10 +2283,9 @@ function parseConditionToBlock(conditionStr, parentId) {
         return block;
     }
 
-    // True/False literal
-    if (condition === 'True' || condition === 'true') {
-        // No hay bloque "true" en Scratch, usar un bloque que siempre es true
-        return null;
+    // Literales booleanos: True/False → constante booleana
+    if (condition === 'True' || condition === 'true' || condition === 'False' || condition === 'false') {
+        return createBooleanLiteral(condition === 'True' || condition === 'true', parentId);
     }
 
     console.warn(`[parseConditionToBlock] Condición no reconocida: ${condition}`);

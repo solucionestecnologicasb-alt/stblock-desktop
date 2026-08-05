@@ -1,0 +1,326 @@
+.playerContainer {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background-color: #f0fdf4; /* Pale green-white background */
+    font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1f2937;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.card {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+    border: 1px solid #d1fae5;
+    padding: 24px;
+    max-width: 800px;
+    width: 90%;
+    margin: 40px auto;
+    box-sizing: border-box;
+}
+
+.title {
+    font-size: 28px;
+    font-weight: bold;
+    color: #065f46;
+    margin: 0 0 12px 0;
+    text-align: center;
+}
+
+.description {
+    font-size: 15px;
+    line-height: 1.6;
+    color: #4b5563;
+    margin-bottom: 24px;
+    text-align: center;
+}
+
+.dropzone {
+    border: 3px dashed #10b981;
+    background-color: #f0fdf4;
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    margin-bottom: 20px;
+}
+
+.dropzone:hover {
+    background-color: #d1fae5;
+    border-color: #059669;
+}
+
+.dropzoneIcon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    color: #10b981;
+}
+
+.dropzoneText {
+    font-size: 16px;
+    font-weight: 600;
+    color: #047857;
+    margin: 0;
+}
+
+.dropzoneSubtext {
+    font-size: 13px;
+    color: #6b7280;
+    margin: 4px 0 0 0;
+}
+
+.btnPrimary {
+    background-color: #10b981;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 28px;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+    display: inline-block;
+}
+
+.btnPrimary:hover:not(:disabled) {
+    background-color: #059669;
+    box-shadow: 0 6px 8px -1px rgba(5, 150, 105, 0.3);
+    transform: translateY(-1px);
+}
+
+.btnPrimary:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.btnSecondary {
+    background-color: #ffffff;
+    color: #059669;
+    border: 1px solid #10b981;
+    border-radius: 8px;
+    padding: 12px 28px;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-block;
+}
+
+.btnSecondary:hover:not(:disabled) {
+    background-color: #f0fdf4;
+}
+
+.btnSecondary:disabled {
+    border-color: #d1d5db;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.playerHeader {
+    background: #ffffff;
+    border-bottom: 1px solid #d1fae5;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+}
+
+.headerTitle {
+    font-size: 18px;
+    font-weight: bold;
+    color: #065f46;
+    margin: 0;
+}
+
+.headerProgress {
+    font-size: 14px;
+    color: #4b5563;
+    font-weight: 500;
+}
+
+.timer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f0fdf4;
+    border: 1px solid #a7f3d0;
+    border-radius: 9999px;
+    padding: 6px 16px;
+    font-size: 15px;
+    font-weight: bold;
+    color: #047857;
+}
+
+.timerAlert {
+    border-color: #fca5a5;
+    background: #fef2f2;
+    color: #dc2626;
+    animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+    from { opacity: 1; }
+    to { opacity: 0.7; }
+}
+
+.playerBody {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    box-sizing: border-box;
+}
+
+.exerciseLayout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+    .exerciseLayout {
+        grid-template-columns: 1fr 1.2fr;
+    }
+}
+
+.promptCard {
+    background: #ffffff;
+    border: 1px solid #d1fae5;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+}
+
+.interactiveCard {
+    background: #ffffff;
+    border: 1px solid #d1fae5;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+}
+
+.optionCard {
+    padding: 16px;
+    margin-bottom: 12px;
+    background: #ffffff;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.optionCard:hover {
+    border-color: #10b981;
+    background-color: #f0fdf4;
+}
+
+.optionSelected {
+    border-color: #10b981;
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.optionCorrect {
+    border-color: #10b981;
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.optionIncorrect {
+    border-color: #ef4444;
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.codeBox {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'Fira Code', 'Courier New', Courier, monospace;
+    font-size: 14px;
+    color: #1f2937;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    line-height: 1.5;
+}
+
+.inputField {
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s ease;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.inputField:focus {
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.inputCorrect {
+    border-color: #10b981 !important;
+    background-color: #d1fae5;
+}
+
+.inputIncorrect {
+    border-color: #ef4444 !important;
+    background-color: #fee2e2;
+}
+
+.playerFooter {
+    background: #ffffff;
+    border-top: 1px solid #d1fae5;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.resultsGrid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 24px;
+}
+
+.resultItem {
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.resultCorrect {
+    border-color: #10b981;
+    background-color: #f0fdf4;
+}
+
+.resultIncorrect {
+    border-color: #ef4444;
+    background-color: #fef2f2;
+}
+
+.robotDot {
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}

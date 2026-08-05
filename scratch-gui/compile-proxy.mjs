@@ -25,6 +25,13 @@ const PORT = Number(process.env.PORT || DEFAULT_PORT);
 const HOST = process.env.HOST || '0.0.0.0';
 const EFFECTIVE_PUBLIC_BASE_PATH = PUBLIC_BASE_PATH || '/stblock-compiler';
 
+function cleanPath(p) {
+    if (typeof p === 'string' && p.startsWith('\\\\?\\')) {
+        return p.slice(4);
+    }
+    return p;
+}
+
 // ── Arduino CLI path resolution ──
 // Priority:
 //   1. ARDUINO_CLI_PATH env var (set by Tauri launcher or user)
@@ -42,7 +49,8 @@ function resolveArduinoCli() {
 
     // 2. Tauri bundled resources
     if (process.env.BUNDLE_RESOURCES_DIR) {
-        const bundled = path.join(process.env.BUNDLE_RESOURCES_DIR, 'tools', 'Arduino', 'arduino-cli.exe');
+        const cleanedDir = cleanPath(process.env.BUNDLE_RESOURCES_DIR);
+        const bundled = path.join(cleanedDir, 'tools', 'Arduino', 'arduino-cli.exe');
         if (fs.existsSync(bundled)) return bundled;
     }
 
@@ -76,6 +84,34 @@ function resolveArduinoCli() {
 }
 
 const ARDUINO_CLI = resolveArduinoCli();
+
+function resolveLibrariesDir() {
+    // 1. Env var BUNDLE_RESOURCES_DIR
+    if (process.env.BUNDLE_RESOURCES_DIR) {
+        const cleanedDir = cleanPath(process.env.BUNDLE_RESOURCES_DIR);
+        const p = path.join(cleanedDir, 'tools', 'Arduino', 'libraries');
+        if (fs.existsSync(p)) return p;
+    }
+
+    // 2. Relative to process.execPath (works for SEA compile-proxy.exe in dev/prod)
+    if (process.execPath) {
+        const p = cleanPath(path.join(path.dirname(process.execPath), '..', 'tools', 'Arduino', 'libraries'));
+        if (fs.existsSync(p)) return p;
+    }
+
+    // 3. Relative to current working directory
+    const cwd = cleanPath(process.cwd());
+    const candidates = [
+        path.join(cwd, 'src-tauri', 'tools', 'Arduino', 'libraries'),
+        path.join(cwd, '..', 'src-tauri', 'tools', 'Arduino', 'libraries'),
+        path.join(cwd, 'tools', 'Arduino', 'libraries'),
+    ];
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) return candidate;
+    }
+
+    return null;
+}
 
 // Mapa de FQBNs conocidos por Velxio → su directorio de sketch base
 const FQBN_MAP = {
@@ -155,12 +191,23 @@ function compileSketch(files, fqbn) {
 
         // Ejecutar arduino-cli compile
         console.log(`[compile-proxy] Compilando: fqbn=${fqbn}, sketchDir=${sketchDir}`);
-        const result = spawnSync(ARDUINO_CLI, [
+        const compileArgs = [
             'compile',
             '--fqbn', fqbn,
-            '--output-dir', buildDir,
-            sketchDir
-        ], {
+            '--output-dir', buildDir
+        ];
+        
+        const libsDir = resolveLibrariesDir();
+        if (libsDir) {
+            console.log(`[compile-proxy] Usando librerías en: ${libsDir}`);
+            compileArgs.push('--libraries', libsDir);
+        } else {
+            console.warn('[compile-proxy] Directorio de librerías no encontrado');
+        }
+        
+        compileArgs.push(sketchDir);
+
+        const result = spawnSync(ARDUINO_CLI, compileArgs, {
             timeout: 120000,
             maxBuffer: 10 * 1024 * 1024,
             encoding: 'utf8',

@@ -90,6 +90,19 @@
           }
           return url;
         }
+        function rewriteVelxioAssetUrl(url) {
+          var value = String(url || '');
+          if (value.indexOf('/boards/') !== -1 && value.indexOf('/static/velxio/boards/') === -1) {
+            value = value.replace('/boards/', '/static/velxio/boards/');
+          }
+          if (value.indexOf('/component-svgs/') !== -1 && value.indexOf('/static/velxio/component-svgs/') === -1) {
+            value = value.replace('/component-svgs/', '/static/velxio/component-svgs/');
+          }
+          if (value.indexOf('/assets/') !== -1 && value.indexOf('/static/velxio/assets/') === -1) {
+            value = value.replace('/assets/', '/static/velxio/assets/');
+          }
+          return value;
+        }
         if (window.fetch) {
           var nativeFetch = window.fetch;
           window.fetch = function (input, init) {
@@ -100,7 +113,7 @@
                 headers: {'Content-Type': 'application/json'}
               }));
             }
-            var rewrittenUrl = rewriteVelxioApiUrl(url);
+            var rewrittenUrl = rewriteVelxioAssetUrl(rewriteVelxioApiUrl(url));
             if (rewrittenUrl !== url) {
               if (typeof input === 'string') {
                 return nativeFetch.call(this, rewrittenUrl, init);
@@ -144,7 +157,7 @@
                 setValue('readyState', 1);
                 return;
               }
-              arguments[1] = rewriteVelxioApiUrl(url);
+              arguments[1] = rewriteVelxioAssetUrl(rewriteVelxioApiUrl(url));
               return nativeOpen.apply(xhr, arguments);
             };
             xhr.send = function () {

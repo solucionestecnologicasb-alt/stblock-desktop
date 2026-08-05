@@ -22,7 +22,8 @@ const customTranslations = {
     'gui.loader.stblock.message4': 'Conectando recursos …',
     'gui.loader.stblock.message5': 'Optimizando entorno …',
     'gui.loader.stblock.message6': 'Casi listo …',
-    'gui.loader.stblock.headline': 'Cargando STBlock'
+    'gui.loader.stblock.headline': 'Cargando STBlock',
+    'gui.controls.debug': 'Depurar'
 };
 
 ['es', 'es-419'].forEach(locale => {

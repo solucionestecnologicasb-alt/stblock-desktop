@@ -552,9 +552,10 @@ class VirtualMachine extends EventEmitter {
      * @param {object} aiData Optional AI data: {training, session, settings}
      * @param {object} deviceData Optional device data: {deviceProjects, codeState}
      * @param {object} circuitData Optional circuit data: {boards, activeBoardId, components, wires, fileGroups}
+     * @param {object} sketchforgeData Optional 3D SketchForge project: {bytes: ArrayBuffer|Uint8Array}
      * @return {!Promise} Promise that resolves with a Blob of the .flynt zip.
      */
-    saveProjectFlynt (aiData, deviceData, circuitData) {
+    saveProjectFlynt (aiData, deviceData, circuitData, sketchforgeData) {
         const soundDescs = serializeSounds(this.runtime);
         const costumeDescs = serializeCostumes(this.runtime);
         const projectJson = this.toJSON();
@@ -618,6 +619,12 @@ class VirtualMachine extends EventEmitter {
         // Circuit data (Velxio state)
         if (circuitData) {
             zip.file('devices/circuit-data.json', JSON.stringify(circuitData, null, 2));
+        }
+
+        // SketchForge 3D project (.skf) - binary zip payload so the design travels
+        // inside the .flynt bundle and can be restored on another machine.
+        if (sketchforgeData && sketchforgeData.bytes) {
+            zip.file('sketchforge/project.skf', sketchforgeData.bytes);
         }
 
         return zip.generateAsync({
@@ -1911,6 +1918,25 @@ class VirtualMachine extends EventEmitter {
             return Promise.all(promises).then(function () {
                 return deviceData;
             });
+        }).catch(function () {
+            return null;
+        });
+    }
+
+    /**
+     * Extract the SketchForge 3D project (.skf) from a .flynt zip.
+     * @param {ArrayBuffer} buffer The .flynt zip content.
+     * @return {!Promise<object|null>} {bytes: ArrayBuffer} or null when absent.
+     */
+    static extractFlyntSketchforgeData (buffer) {
+        return JSZip.loadAsync(buffer).then(function (zip) {
+            var file = zip.files['sketchforge/project.skf'];
+            if (file && !file.dir) {
+                return file.async('arraybuffer').then(function (arrayBuffer) {
+                    return {bytes: arrayBuffer};
+                });
+            }
+            return null;
         }).catch(function () {
             return null;
         });

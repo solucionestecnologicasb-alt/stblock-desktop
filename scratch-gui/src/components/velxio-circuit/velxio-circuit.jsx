@@ -1302,3 +1302,5 @@ VelxioCircuit.defaultProps = {
 };
 
 export default VelxioCircuit;
+
+export {getVelxioStateKey};

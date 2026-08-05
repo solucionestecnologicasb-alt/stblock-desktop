@@ -1001,6 +1001,14 @@ ensureStbV2GyroBase();
     'const unsigned long STB_V2_STATUS_POLL_INTERVAL_MS = 30UL;',
     'const unsigned long STB_V2_MOTION_GYRO_ENGAGE_DELAY_MS = 35UL;',
     'const unsigned long STB_V2_GYRO_SUPERVISOR_INTERVAL_MS = 20UL;',
+    '// --- Control LEGO (avance con giroscopio) ---',
+    '// steering = 0 - guiñada; corrección proporcional continua, diferencial simétrico.',
+    'const float STB_V2_LEGO_KP = 3.0f;',
+    'const float STB_V2_LEGO_KD = 0.20f;',
+    'const float STB_V2_LEGO_MAX_CORRECTION_RPM = 14.0f;',
+    'const int STB_V2_LEGO_MAX_BIAS_X10 = 280;',
+    'const int STB_V2_LEGO_BIAS_SLEW_X10 = 90;',
+    'const int8_t STB_V2_LEGO_POLARITY = 1;',
     'const unsigned long STB_V2_TURN_SETTLE_MS = 60UL;',
     'const float STB_V2_MOTION_GYRO_KP = 3.5f;',
     'const float STB_V2_MOTION_GYRO_KD = 0.70f;',
@@ -1078,6 +1086,8 @@ ensureStbV2GyroBase();
     'unsigned long stbV2LastStatusPollMs = 0UL;',
     'uint8_t stbV2StatusPollNode = 0;',
     'bool stbV2MotionGyroAssist = false;',
+    'String stbV2MotionGyroOrientation = "HORIZONTAL";',
+    'bool stbV2GyroOrientDebugPrinted = false;',
     'bool stbV2MotionContinuousActive = false;',
     'bool stbV2MotionDistanceActive = false;',
     'bool stbV2MotionReverse = false;',
@@ -1162,10 +1172,11 @@ ensureStbV2GyroBase();
     'void stbV2ScaleMotionPairSpeeds(int requestedPeakPercent, int &leftSpeed, int &rightSpeed) { int requestedPeak = constrain(abs(requestedPeakPercent), 1, 100); int peak = max(abs(leftSpeed), abs(rightSpeed)); if (peak <= 0) { leftSpeed = requestedPeak; rightSpeed = requestedPeak; return; } float scale = static_cast<float>(requestedPeak) / static_cast<float>(peak); leftSpeed = max(1, static_cast<int>(roundf(abs(leftSpeed) * scale))); rightSpeed = max(1, static_cast<int>(roundf(abs(rightSpeed) * scale))); }',
     'void stbV2ApplyMotionBaseCalibration(int &leftSpeed, int &rightSpeed) { leftSpeed = constrain(static_cast<int>(lroundf(static_cast<float>(leftSpeed) * static_cast<float>(stbV2MotionLeftCalibrationPercent) / 100.0f)), 1, 100); rightSpeed = constrain(static_cast<int>(lroundf(static_cast<float>(rightSpeed) * static_cast<float>(stbV2MotionRightCalibrationPercent) / 100.0f)), 1, 100); }',
     'void stbV2ApplyGyroAssistSpeedCap(int &leftSpeed, int &rightSpeed) { (void)leftSpeed; (void)rightSpeed; }',
-    'void stbV2PrepareGyroForMotion() { if (!stbV2MotionGyroAssist) return; if (stbV2MotionIsTurn) return; stbV2ConfigureGyro(String("Z"), true); if (!stbV2Gyro.ready) stbV2InitGyroHardware(); if (!stbV2Gyro.ready) return; if (!stbV2Gyro.calibrated) stbV2CalibrateGyro(); if (stbV2Gyro.ready && stbV2Gyro.calibrated && !stbV2Gyro.postureCalibrated) stbV2CalibrateGyroPosture(); if (stbV2Gyro.ready && stbV2Gyro.calibrated && stbV2Gyro.postureCalibrated) { stbV2ResetGyroAngle(); stbV2GyroTargetYaw = 0.0f; stbV2LastGyroAngle = 0.0f; stbV2GyroFilteredAngle = 0.0f; stbV2GyroFilteredRate = 0.0f; stbV2GyroIntegral = 0.0f; stbV2GyroAppliedLeftBiasX10 = 0; stbV2GyroAppliedRightBiasX10 = 0; stbV2GyroAdjustSide = STB_V2_SIDE_NONE; stbV2GyroAdjustSideCandidate = STB_V2_SIDE_NONE; stbV2GyroAdjustSideCandidateCount = 0; stbV2GyroAdjustSidePendingSinceMs = 0UL; stbV2LastGyroSupervisorMs = 0UL; stbV2GyroCorrectionPolarity = 1; stbV2GyroPolarityLocked = true; stbV2GyroPolarityLearned = true; stbV2GyroPolarityProbeStartAbsError = 0.0f; stbV2GyroPolarityProbeStartMs = 0UL; stbV2GyroActiveAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateActionCount = 0; stbV2GyroActionSinceMs = 0UL; stbV2GyroCorrectionDirection = 0; stbV2GyroSaturationSinceMs = 0UL; stbV2GyroReleaseUntilMs = 0UL; stbV2GyroCorrectionEngaged = false; } }',
-    'bool stbV2PrepareTurnGyro() { stbV2ConfigureGyro(String("Z"), true); if (!stbV2InitGyroHardware()) return false; if (!stbV2Gyro.calibrated) stbV2CalibrateGyro(); if (stbV2Gyro.ready && stbV2Gyro.calibrated && !stbV2Gyro.postureCalibrated) stbV2CalibrateGyroPosture(); stbV2UpdateGyro(); return stbV2Gyro.ready && stbV2Gyro.calibrated && stbV2Gyro.postureCalibrated; }',
+    'void stbV2PrepareGyroForMotion() { if (!stbV2MotionGyroAssist) return; if (stbV2MotionIsTurn) return; stbV2ConfigureMotionGyro(); if (!stbV2Gyro.ready) stbV2InitGyroHardware(); if (!stbV2Gyro.ready) return; if (!stbV2Gyro.calibrated) stbV2CalibrateGyro(); if (stbV2Gyro.ready && stbV2Gyro.calibrated && !stbV2Gyro.postureCalibrated) stbV2CalibrateGyroPosture(); if (stbV2Gyro.ready && stbV2Gyro.calibrated && stbV2Gyro.postureCalibrated) { stbV2ResetGyroAngle(); stbV2GyroTargetYaw = 0.0f; stbV2LastGyroAngle = 0.0f; stbV2GyroFilteredAngle = 0.0f; stbV2GyroFilteredRate = 0.0f; stbV2GyroIntegral = 0.0f; stbV2GyroAppliedLeftBiasX10 = 0; stbV2GyroAppliedRightBiasX10 = 0; stbV2GyroAdjustSide = STB_V2_SIDE_NONE; stbV2GyroAdjustSideCandidate = STB_V2_SIDE_NONE; stbV2GyroAdjustSideCandidateCount = 0; stbV2GyroAdjustSidePendingSinceMs = 0UL; stbV2LastGyroSupervisorMs = 0UL; stbV2GyroCorrectionPolarity = 1; stbV2GyroPolarityLocked = (stbV2MotionGyroOrientation != "VERTICAL"); stbV2GyroPolarityLearned = stbV2GyroPolarityLocked; stbV2GyroPolarityProbeStartAbsError = 0.0f; stbV2GyroPolarityProbeStartMs = 0UL; stbV2GyroActiveAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateActionCount = 0; stbV2GyroActionSinceMs = 0UL; stbV2GyroCorrectionDirection = 0; stbV2GyroSaturationSinceMs = 0UL; stbV2GyroReleaseUntilMs = 0UL; stbV2GyroCorrectionEngaged = false; } }',
+    'bool stbV2PrepareTurnGyro() { stbV2ConfigureMotionGyro(); if (!stbV2InitGyroHardware()) return false; if (!stbV2Gyro.calibrated) stbV2CalibrateGyro(); if (stbV2Gyro.ready && stbV2Gyro.calibrated && !stbV2Gyro.postureCalibrated) stbV2CalibrateGyroPosture(); stbV2UpdateGyro(); return stbV2Gyro.ready && stbV2Gyro.calibrated && stbV2Gyro.postureCalibrated; }',
     'bool stbV2GyroAssistReady() { return stbV2MotionGyroAssist && stbV2Gyro.ready && stbV2Gyro.calibrated && stbV2Gyro.postureCalibrated; }',
-    'void stbV2SetMotionControlMode(const String& mode) { stbV2MotionGyroAssist = (mode == "PID_GYRO" || mode == "GYRO"); if (stbV2MotionGyroAssist) stbV2ConfigureGyro(String("Z"), true); }',
+    'void stbV2SetMotionControlMode(const String& mode, const String& orientation) { stbV2MotionGyroAssist = (mode == "PID_GYRO" || mode == "GYRO"); stbV2MotionGyroOrientation = (orientation == "VERTICAL") ? "VERTICAL" : "HORIZONTAL"; if (stbV2MotionGyroAssist) stbV2ConfigureMotionGyro(); }',
+    'void stbV2ConfigureMotionGyro() { stbV2InitGyroHardware(); if (!stbV2Gyro.ready) return; if (stbV2MotionGyroOrientation != "VERTICAL") { stbV2ConfigureGyro(String("Z"), true); return; } stbV2UpdateGyro(); float ax = fabsf(stbV2Gyro.accel[0]); float ay = fabsf(stbV2Gyro.accel[1]); String axis = String("X"); float g = stbV2Gyro.accel[0]; if (ay > ax) { axis = String("Y"); g = stbV2Gyro.accel[1]; } bool inverted = g > 0.0f; stbV2ConfigureGyro(axis, inverted); if (STB_V2_DEBUG_MOTION && !stbV2GyroOrientDebugPrinted) { stbV2DebugMotionLine(String("GYRO_ORIENT"), String("mode=VERTICAL,axis=") + axis + ",sign=" + (inverted ? String("-1") : String("1")) + ",ax=" + String(stbV2Gyro.accel[0]) + ",ay=" + String(stbV2Gyro.accel[1]) + ",az=" + String(stbV2Gyro.accel[2])); stbV2GyroOrientDebugPrinted = true; } }',
     'void stbV2PrepareMotorMove(uint8_t motorIndex, int32_t signedTicks, int speedPercent) { STBV2MotorState &motor = stbV2Motors[motorIndex]; int rpm = stbV2MotionTargetRpmFromPercent(speedPercent); if (rpm <= 0) rpm = 1; if (STB_V2_DEBUG_MOTION) { Serial.print("DBG PREPARE motor="); Serial.print(stbV2MotorName(motorIndex)); Serial.print(" ticks="); Serial.print(signedTicks); Serial.print(" speed="); Serial.print(speedPercent); Serial.print(" rpm="); Serial.println(rpm); } stbV2SendFrame(motor.nodeIndex, STB_V2_CMD_PREPARE_MOVE, motor.localIndex, 0, signedTicks, rpm * 100, 0, 0); motor.motionActive = true; motor.busy = true; motor.targetReached = false; motor.fault = false; motor.currentState = STB_V2_STATE_ARMED; motor.appliedSpeedPercent = signedTicks >= 0 ? abs(speedPercent) : -abs(speedPercent); }',
     'bool stbV2WaitMotorState(uint8_t motorIndex, uint8_t expectedState, unsigned long timeoutMs) { unsigned long startMs = millis(); while (millis() - startMs < timeoutMs) { stbV2RuntimeTick(); if (stbV2Motors[motorIndex].currentState == expectedState) return true; if (stbV2Motors[motorIndex].fault) return false; delay(2); } return false; }',
     'void stbV2GoMotor(uint8_t motorIndex) { STBV2MotorState &motor = stbV2Motors[motorIndex]; if (STB_V2_DEBUG_MOTION) stbV2DebugMotionLine(String("GO"), String("motor=") + stbV2MotorName(motorIndex)); stbV2SendFrame(motor.nodeIndex, STB_V2_CMD_GO, motor.localIndex, 0, 0, 0, 0, 0); motor.currentState = STB_V2_STATE_RUNNING; }',
@@ -1174,11 +1185,9 @@ ensureStbV2GyroBase();
     'void stbV2GoMotionPair(uint8_t leftIdx, uint8_t rightIdx) { if (!stbV2StartDelayEnabled || stbV2StartDelayMs == 0UL) { stbV2GoMotor(leftIdx); stbV2GoMotor(rightIdx); return; } uint8_t firstIdx = stbV2StartDelaySide == STB_V2_SIDE_LEFT ? rightIdx : leftIdx; uint8_t delayedIdx = stbV2StartDelaySide == STB_V2_SIDE_LEFT ? leftIdx : rightIdx; stbV2GoMotor(firstIdx); delay(stbV2StartDelayMs); stbV2GoMotor(delayedIdx); }',
     'void stbV2SendBiasPair(int leftBiasX10, int rightBiasX10) { int8_t leftIdx = stbV2FindMotorBySide(STB_V2_SIDE_LEFT); int8_t rightIdx = stbV2FindMotorBySide(STB_V2_SIDE_RIGHT); if (leftIdx >= 0 && leftBiasX10 != stbV2LastLeftBiasX10) { STBV2MotorState &left = stbV2Motors[leftIdx]; stbV2SendFrame(left.nodeIndex, STB_V2_CMD_SET_BIAS, left.localIndex, 0, leftBiasX10, 0, 0, 0); stbV2LastLeftBiasX10 = leftBiasX10; } if (rightIdx >= 0 && rightBiasX10 != stbV2LastRightBiasX10) { STBV2MotorState &right = stbV2Motors[rightIdx]; stbV2SendFrame(right.nodeIndex, STB_V2_CMD_SET_BIAS, right.localIndex, 0, rightBiasX10, 0, 0, 0); stbV2LastRightBiasX10 = rightBiasX10; } }',
     'int stbV2MoveBiasToward(int currentBiasX10, int targetBiasX10, int stepX10) { if (currentBiasX10 < targetBiasX10) return min(currentBiasX10 + stepX10, targetBiasX10); if (currentBiasX10 > targetBiasX10) return max(currentBiasX10 - stepX10, targetBiasX10); return currentBiasX10; }',
-    'void stbV2ApplyGyroBiasTargets(int leftTargetBiasX10, int rightTargetBiasX10) { if (leftTargetBiasX10 != 0) { stbV2GyroAppliedRightBiasX10 = 0; stbV2GyroAppliedLeftBiasX10 = stbV2MoveBiasToward(stbV2GyroAppliedLeftBiasX10, leftTargetBiasX10, STB_V2_MOTION_GYRO_BIAS_SLEW_X10); } else if (rightTargetBiasX10 != 0) { stbV2GyroAppliedLeftBiasX10 = 0; stbV2GyroAppliedRightBiasX10 = stbV2MoveBiasToward(stbV2GyroAppliedRightBiasX10, rightTargetBiasX10, STB_V2_MOTION_GYRO_BIAS_SLEW_X10); } else { stbV2GyroAppliedLeftBiasX10 = stbV2MoveBiasToward(stbV2GyroAppliedLeftBiasX10, 0, STB_V2_MOTION_GYRO_RELEASE_SLEW_X10); stbV2GyroAppliedRightBiasX10 = stbV2MoveBiasToward(stbV2GyroAppliedRightBiasX10, 0, STB_V2_MOTION_GYRO_RELEASE_SLEW_X10); } stbV2SendBiasPair(stbV2GyroAppliedLeftBiasX10, stbV2GyroAppliedRightBiasX10); }',
+    '// Diferencial simétrico tipo LEGO: ambas ruedas se ajustan cada tick (acelera una, frena la otra).',
+    'void stbV2ApplyGyroBiasDifferential(int leftTargetBiasX10, int rightTargetBiasX10) { stbV2GyroAppliedLeftBiasX10 = stbV2MoveBiasToward(stbV2GyroAppliedLeftBiasX10, leftTargetBiasX10, STB_V2_LEGO_BIAS_SLEW_X10); stbV2GyroAppliedRightBiasX10 = stbV2MoveBiasToward(stbV2GyroAppliedRightBiasX10, rightTargetBiasX10, STB_V2_LEGO_BIAS_SLEW_X10); stbV2SendBiasPair(stbV2GyroAppliedLeftBiasX10, stbV2GyroAppliedRightBiasX10); }',
     'void stbV2ClearBias() { stbV2GyroAppliedLeftBiasX10 = 0; stbV2GyroAppliedRightBiasX10 = 0; stbV2SendBiasPair(0, 0); }',
-    'int8_t stbV2GyroActionDirection(int8_t action) { if (action == STB_V2_GYRO_ACTION_BOOST_RIGHT || action == STB_V2_GYRO_ACTION_TRIM_LEFT) return 1; if (action == STB_V2_GYRO_ACTION_BOOST_LEFT || action == STB_V2_GYRO_ACTION_TRIM_RIGHT) return -1; return 0; }',
-    'int8_t stbV2GyroBoostActionForDirection(int8_t direction) { return direction > 0 ? STB_V2_GYRO_ACTION_BOOST_RIGHT : STB_V2_GYRO_ACTION_BOOST_LEFT; }',
-    'int8_t stbV2GyroTrimActionForDirection(int8_t direction) { return direction > 0 ? STB_V2_GYRO_ACTION_TRIM_LEFT : STB_V2_GYRO_ACTION_TRIM_RIGHT; }',
     'int stbV2GyroBiasFromDeltaRpm(int baseSpeedPercent, float deltaRpm, int maxMagnitudeX10) { float nominalRpm = stbV2BoardConfig.maxRpm * static_cast<float>(constrain(abs(baseSpeedPercent), 1, 100)) / 100.0f; if (nominalRpm <= 1.0f) return 0; int biasX10 = static_cast<int>(lroundf((deltaRpm / nominalRpm) * 1000.0f)); return constrain(biasX10, -maxMagnitudeX10, maxMagnitudeX10); }',
     'void stbV2BeginMotionPair(int32_t leftTicks, int32_t rightTicks, int leftSpeed, int rightSpeed, bool reverseMotion) { int8_t leftIdx = stbV2FindMotorBySide(STB_V2_SIDE_LEFT); int8_t rightIdx = stbV2FindMotorBySide(STB_V2_SIDE_RIGHT); if (leftIdx < 0 || rightIdx < 0) return; if (STB_V2_DEBUG_MOTION) { Serial.print("DBG BEGIN pair leftTicks="); Serial.print(leftTicks); Serial.print(" rightTicks="); Serial.print(rightTicks); Serial.print(" leftSpeed="); Serial.print(leftSpeed); Serial.print(" rightSpeed="); Serial.print(rightSpeed); Serial.print(" reverse="); Serial.println(reverseMotion ? 1 : 0); } stbV2MotionReverse = reverseMotion; stbV2MotionIsTurn = (leftTicks < 0 && rightTicks > 0) || (leftTicks > 0 && rightTicks < 0); stbV2MotionLeftBaseSpeedPercent = abs(leftSpeed); stbV2MotionRightBaseSpeedPercent = abs(rightSpeed); stbV2PrepareGyroForMotion(); stbV2Motors[leftIdx].resetOffsetTicks = stbV2Motors[leftIdx].encoderTicks; stbV2Motors[rightIdx].resetOffsetTicks = stbV2Motors[rightIdx].encoderTicks; stbV2PrepareMotorMove(static_cast<uint8_t>(leftIdx), leftTicks, leftSpeed); stbV2PrepareMotorMove(static_cast<uint8_t>(rightIdx), rightTicks, rightSpeed); bool leftArmed = stbV2WaitMotorState(static_cast<uint8_t>(leftIdx), STB_V2_STATE_ARMED, 300UL); bool rightArmed = stbV2WaitMotorState(static_cast<uint8_t>(rightIdx), STB_V2_STATE_ARMED, 300UL); if (!leftArmed || !rightArmed) { if (STB_V2_DEBUG_MOTION) { Serial.print("DBG,tag=ARM_TIMEOUT,msg=left="); Serial.print(leftArmed ? 1 : 0); Serial.print(",right="); Serial.println(rightArmed ? 1 : 0); } stbV2SendFrame(stbV2Motors[leftIdx].nodeIndex, STB_V2_CMD_STOP, stbV2Motors[leftIdx].localIndex, 0, 0, 0, 0, 0); stbV2SendFrame(stbV2Motors[rightIdx].nodeIndex, STB_V2_CMD_STOP, stbV2Motors[rightIdx].localIndex, 0, 0, 0, 0, 0); stbV2Motors[leftIdx].motionActive = false; stbV2Motors[leftIdx].busy = false; stbV2Motors[leftIdx].currentState = STB_V2_STATE_IDLE; stbV2Motors[rightIdx].motionActive = false; stbV2Motors[rightIdx].busy = false; stbV2Motors[rightIdx].currentState = STB_V2_STATE_IDLE; stbV2MotionContinuousActive = false; stbV2MotionDistanceActive = false; stbV2MotionIsTurn = false; stbV2MotionTargetDistanceCm = 0.0f; return; } stbV2GoMotionPair(static_cast<uint8_t>(leftIdx), static_cast<uint8_t>(rightIdx)); stbV2MotionContinuousActive = labs(leftTicks) >= 2000000000L && labs(rightTicks) >= 2000000000L; stbV2MotionDistanceActive = !stbV2MotionContinuousActive; stbV2MotionTargetDistanceCm = stbV2MotionDistanceActive && (leftTicks == rightTicks) ? stbV2TicksToCm(leftTicks) : 0.0f; stbV2MotionStartMs = millis(); if (stbV2MotionGyroAssist) stbV2ClearBias(); }',
     'void stbV2MoveMotorContinuousByIndex(uint8_t motorIndex, int speedPercent) { int32_t sentinel = speedPercent >= 0 ? 2147483647L : -2147483647L; stbV2PrepareMotorMove(motorIndex, sentinel, abs(speedPercent)); stbV2WaitMotorState(motorIndex, STB_V2_STATE_ARMED, 300UL); stbV2GoMotor(motorIndex); stbV2Motors[motorIndex].motionActive = true; }',
@@ -1215,7 +1224,6 @@ ensureStbV2GyroBase();
     'void stbV2ConfigureTriggerBySelector(const String& triggerSelector, bool greaterThan, int threshold, const String& targetSelector) { (void)triggerSelector; (void)greaterThan; (void)threshold; (void)targetSelector; }',
     'void stbV2DisableTriggerBySelector(const String& triggerSelector) { (void)triggerSelector; }',
     'void stbV2DisableAllTriggers() {}',
-    'void stbV2RunGyroSupervisor() { if (stbV2MotionIsTurn) return; if (!stbV2MotionContinuousActive && !stbV2MotionDistanceActive) return; if (!stbV2GyroAssistReady()) return; if (millis() - stbV2MotionStartMs < STB_V2_MOTION_GYRO_ENGAGE_DELAY_MS) return; int8_t leftIdx = stbV2FindMotorBySide(STB_V2_SIDE_LEFT); int8_t rightIdx = stbV2FindMotorBySide(STB_V2_SIDE_RIGHT); if (leftIdx < 0 || rightIdx < 0) return; if (!stbV2Motors[leftIdx].busy && !stbV2Motors[rightIdx].busy) { stbV2MotionContinuousActive = false; stbV2MotionDistanceActive = false; stbV2MotionTargetDistanceCm = 0.0f; stbV2GyroIntegral = 0.0f; stbV2ClearBias(); return; } unsigned long now = millis(); if (stbV2LastGyroSupervisorMs == 0UL) { stbV2LastGyroSupervisorMs = now; return; } unsigned long elapsedMs = now - stbV2LastGyroSupervisorMs; if (elapsedMs < STB_V2_GYRO_SUPERVISOR_INTERVAL_MS) return; float dt = static_cast<float>(elapsedMs) / 1000.0f; if (dt <= 0.0f) return; stbV2LastGyroSupervisorMs = now; float rawAngle = stbV2WrapAngleDeg(stbV2Gyro.angleDeg); float blendedAngle = stbV2GyroFilteredAngle + (STB_V2_GYRO_ANGLE_FILTER_ALPHA * stbV2WrapAngleDeg(rawAngle - stbV2GyroFilteredAngle)); float rawRate = stbV2WrapAngleDeg(blendedAngle - stbV2LastGyroAngle) / dt; stbV2GyroFilteredRate = (stbV2GyroFilteredRate * (1.0f - STB_V2_GYRO_RATE_FILTER_ALPHA)) + (rawRate * STB_V2_GYRO_RATE_FILTER_ALPHA); stbV2GyroFilteredAngle = blendedAngle; stbV2LastGyroAngle = blendedAngle; float angle = stbV2WrapAngleDeg(stbV2GyroFilteredAngle); float controlAngle = stbV2MotionReverse ? -angle : angle; float controlRate = stbV2MotionReverse ? -stbV2GyroFilteredRate : stbV2GyroFilteredRate; float errorAngle = fabsf(controlAngle) < STB_V2_MOTION_GYRO_DEADBAND_DEG ? 0.0f : controlAngle; float absErrorDeg = fabsf(errorAngle); if (absErrorDeg <= STB_V2_MOTION_GYRO_DEADBAND_DEG && fabsf(controlRate) < 2.0f) { stbV2GyroActiveAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateActionCount = 0; stbV2GyroActionSinceMs = 0UL; stbV2GyroPolarityProbeStartMs = 0UL; stbV2GyroIntegral = 0.0f; stbV2DebugGyroMove(String("STRAIGHT"), now, angle, controlRate, errorAngle, 0.0f, 0, 0, leftIdx, rightIdx); stbV2ApplyGyroBiasTargets(0, 0); return; } float strongCorrectionMix = 0.0f; if (absErrorDeg > STB_V2_MOTION_GYRO_STRONG_CORRECTION_START_DEG) { strongCorrectionMix = constrain((absErrorDeg - STB_V2_MOTION_GYRO_STRONG_CORRECTION_START_DEG) / (STB_V2_MOTION_GYRO_STRONG_CORRECTION_MAX_DEG - STB_V2_MOTION_GYRO_STRONG_CORRECTION_START_DEG), 0.0f, 1.0f); } float gainBoost = 1.0f + ((STB_V2_MOTION_GYRO_STRONG_GAIN_MAX - 1.0f) * strongCorrectionMix); float biasBoost = 1.0f + ((STB_V2_MOTION_GYRO_STRONG_BIAS_MAX - 1.0f) * strongCorrectionMix); stbV2GyroIntegral = constrain(stbV2GyroIntegral + (errorAngle * dt), -25.0f, 25.0f); float correction = constrain(((errorAngle * STB_V2_MOTION_GYRO_KP) + (stbV2GyroIntegral * STB_V2_MOTION_GYRO_KI) + (controlRate * STB_V2_MOTION_GYRO_KD)) * gainBoost, -35.0f, 35.0f); float signedCorrection = correction * static_cast<float>(stbV2GyroCorrectionPolarity) * static_cast<float>(STB_V2_GYRO_BIAS_POLARITY); bool leftSaturated = abs(stbV2Motors[leftIdx].appliedPwm) >= STB_V2_MOTION_GYRO_SATURATION_PWM; bool rightSaturated = abs(stbV2Motors[rightIdx].appliedPwm) >= STB_V2_MOTION_GYRO_SATURATION_PWM; int8_t desiredAction = signedCorrection > 0.0f ? STB_V2_GYRO_ACTION_BOOST_RIGHT : STB_V2_GYRO_ACTION_BOOST_LEFT; if (desiredAction == STB_V2_GYRO_ACTION_BOOST_LEFT && leftSaturated) desiredAction = STB_V2_GYRO_ACTION_TRIM_RIGHT; if (desiredAction == STB_V2_GYRO_ACTION_BOOST_RIGHT && rightSaturated) desiredAction = STB_V2_GYRO_ACTION_TRIM_LEFT; if (stbV2GyroActiveAction == STB_V2_GYRO_ACTION_NONE) { if (desiredAction != stbV2GyroCandidateAction) { stbV2GyroCandidateAction = desiredAction; stbV2GyroCandidateActionCount = 1; } else if (stbV2GyroCandidateActionCount < STB_V2_MOTION_GYRO_ACTION_CONFIRM_SAMPLES) { stbV2GyroCandidateActionCount++; } if (stbV2GyroCandidateActionCount >= STB_V2_MOTION_GYRO_ACTION_CONFIRM_SAMPLES) { stbV2GyroActiveAction = desiredAction; stbV2GyroActionSinceMs = now; stbV2GyroPolarityProbeStartMs = 0UL; } } else if (desiredAction != stbV2GyroActiveAction && now - stbV2GyroActionSinceMs >= STB_V2_MOTION_GYRO_ACTION_HOLD_MS) { if (desiredAction != stbV2GyroCandidateAction) { stbV2GyroCandidateAction = desiredAction; stbV2GyroCandidateActionCount = 1; } else if (stbV2GyroCandidateActionCount < STB_V2_MOTION_GYRO_ACTION_CONFIRM_SAMPLES) { stbV2GyroCandidateActionCount++; } if (stbV2GyroCandidateActionCount >= STB_V2_MOTION_GYRO_ACTION_CONFIRM_SAMPLES) { stbV2GyroActiveAction = desiredAction; stbV2GyroActionSinceMs = now; stbV2GyroCandidateActionCount = 0; stbV2GyroPolarityProbeStartMs = 0UL; } } else { stbV2GyroCandidateAction = desiredAction; stbV2GyroCandidateActionCount = 0; } if (stbV2GyroActiveAction == STB_V2_GYRO_ACTION_NONE) { stbV2DebugGyroMove(String("WAIT_ACTION"), now, angle, controlRate, errorAngle, correction, 0, 0, leftIdx, rightIdx); stbV2ApplyGyroBiasTargets(0, 0); return; } if (!stbV2GyroPolarityLocked && absErrorDeg >= STB_V2_MOTION_GYRO_POLARITY_MIN_ERROR_DEG) { if (stbV2GyroPolarityProbeStartMs == 0UL) { stbV2GyroPolarityProbeStartMs = now; stbV2GyroPolarityProbeStartAbsError = absErrorDeg; } else if (now - stbV2GyroPolarityProbeStartMs >= STB_V2_MOTION_GYRO_POLARITY_LEARN_MS) { if (absErrorDeg > stbV2GyroPolarityProbeStartAbsError + STB_V2_MOTION_GYRO_POLARITY_GROWTH_DEG) { stbV2GyroCorrectionPolarity = -stbV2GyroCorrectionPolarity; stbV2GyroActiveAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateActionCount = 0; stbV2GyroActionSinceMs = 0UL; stbV2GyroIntegral = 0.0f; stbV2GyroPolarityProbeStartMs = 0UL; stbV2DebugGyroMove(String("POLARITY_FLIP"), now, angle, controlRate, errorAngle, correction, 0, 0, leftIdx, rightIdx); stbV2ApplyGyroBiasTargets(0, 0); return; } stbV2GyroPolarityLocked = true; } } int magnitudeX10 = constrain(static_cast<int>(roundf(fabsf(correction) * 12.0f * biasBoost)), STB_V2_MOTION_GYRO_MIN_BOOST_X10, STB_V2_MOTION_GYRO_TRIM_MAX_BIAS_X10); int leftTargetBiasX10 = 0; int rightTargetBiasX10 = 0; String phase = String("ONE_NONE_P") + String(stbV2GyroCorrectionPolarity); if (stbV2GyroActiveAction == STB_V2_GYRO_ACTION_BOOST_LEFT) { leftTargetBiasX10 = magnitudeX10; phase = String("ONE_BOOST_LEFT_P") + String(stbV2GyroCorrectionPolarity); } else if (stbV2GyroActiveAction == STB_V2_GYRO_ACTION_BOOST_RIGHT) { rightTargetBiasX10 = magnitudeX10; phase = String("ONE_BOOST_RIGHT_P") + String(stbV2GyroCorrectionPolarity); } else if (stbV2GyroActiveAction == STB_V2_GYRO_ACTION_TRIM_LEFT) { leftTargetBiasX10 = -min(magnitudeX10, STB_V2_MOTION_GYRO_NEGATIVE_TRIM_MAX_X10); phase = String("ONE_TRIM_LEFT_P") + String(stbV2GyroCorrectionPolarity); } else if (stbV2GyroActiveAction == STB_V2_GYRO_ACTION_TRIM_RIGHT) { rightTargetBiasX10 = -min(magnitudeX10, STB_V2_MOTION_GYRO_NEGATIVE_TRIM_MAX_X10); phase = String("ONE_TRIM_RIGHT_P") + String(stbV2GyroCorrectionPolarity); } stbV2DebugGyroMove(phase, now, angle, controlRate, errorAngle, correction, leftTargetBiasX10, rightTargetBiasX10, leftIdx, rightIdx); stbV2ApplyGyroBiasTargets(leftTargetBiasX10, rightTargetBiasX10); }',
     'void stbV2RunSingleWheelGyroSupervisor() {',
     '  if (stbV2MotionIsTurn || (!stbV2MotionContinuousActive && !stbV2MotionDistanceActive)) return;',
     '  unsigned long now = millis();',
@@ -1225,7 +1233,7 @@ ensureStbV2GyroBase();
     '  bool leftDone = stbV2Motors[leftIdx].currentState == STB_V2_STATE_DONE;',
     '  bool rightDone = stbV2Motors[rightIdx].currentState == STB_V2_STATE_DONE;',
     '  if (leftDone || rightDone) { stbV2DebugMotionLine(String("PAIR_DONE_STOP"), String(leftDone ? "LEFT" : "RIGHT")); stbV2StopBySelector(String("MOTION"), true); return; }',
-    '  if (!stbV2Motors[leftIdx].busy && !stbV2Motors[rightIdx].busy) { stbV2MotionContinuousActive = false; stbV2MotionDistanceActive = false; stbV2MotionTargetDistanceCm = 0.0f; stbV2GyroIntegral = 0.0f; stbV2ClearBias(); return; }',
+    '  if (!stbV2Motors[leftIdx].busy && !stbV2Motors[rightIdx].busy) { stbV2MotionContinuousActive = false; stbV2MotionDistanceActive = false; stbV2MotionTargetDistanceCm = 0.0f; stbV2ClearBias(); return; }',
     '  if (!stbV2GyroAssistReady() || now - stbV2MotionStartMs < STB_V2_MOTION_GYRO_ENGAGE_DELAY_MS) return;',
     '  if (stbV2LastGyroSupervisorMs == 0UL) { stbV2LastGyroSupervisorMs = now; return; }',
     '  unsigned long elapsedMs = now - stbV2LastGyroSupervisorMs;',
@@ -1242,69 +1250,14 @@ ensureStbV2GyroBase();
     '  float angle = stbV2WrapAngleDeg(blendedAngle);',
     '  float controlAngle = stbV2MotionReverse ? -angle : angle;',
     '  float controlRate = stbV2MotionReverse ? -stbV2GyroFilteredRate : stbV2GyroFilteredRate;',
-    '  float projectedAngle = controlAngle + (controlRate * STB_V2_MOTION_GYRO_CONTROL_LOOKAHEAD_S);',
-    '  bool anySaturated = abs(stbV2Motors[leftIdx].appliedPwm) >= STB_V2_MOTION_GYRO_SATURATION_PWM || abs(stbV2Motors[rightIdx].appliedPwm) >= STB_V2_MOTION_GYRO_SATURATION_PWM;',
-    '  bool bothSaturated = abs(stbV2Motors[leftIdx].appliedPwm) >= STB_V2_MOTION_GYRO_SATURATION_PWM && abs(stbV2Motors[rightIdx].appliedPwm) >= STB_V2_MOTION_GYRO_SATURATION_PWM;',
-    '  float leftAbsRpm = fabsf(static_cast<float>(stbV2Motors[leftIdx].measuredRpmX100) / 100.0f);',
-    '  float rightAbsRpm = fabsf(static_cast<float>(stbV2Motors[rightIdx].measuredRpmX100) / 100.0f);',
-    '  if (bothSaturated && leftAbsRpm < 20.0f && rightAbsRpm < 20.0f) { stbV2GyroActiveAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCorrectionDirection = 0; stbV2GyroIntegral = 0.0f; stbV2ApplyGyroBiasTargets(0, 0); return; }',
-    '  float absErrorDeg = fabsf(controlAngle);',
-    '  float projectedAbsErrorDeg = fabsf(projectedAngle);',
-    '  if (!stbV2GyroCorrectionEngaged && projectedAbsErrorDeg >= STB_V2_MOTION_GYRO_DEADBAND_DEG) stbV2GyroCorrectionEngaged = true;',
-    '  if (stbV2GyroCorrectionEngaged && absErrorDeg <= STB_V2_MOTION_GYRO_EXIT_DEADBAND_DEG && fabsf(controlRate) <= STB_V2_MOTION_GYRO_EXIT_RATE_DEG_S) stbV2GyroCorrectionEngaged = false;',
-    '  if (!stbV2GyroCorrectionEngaged) {',
-    '    stbV2GyroActiveAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateActionCount = 0; stbV2GyroCorrectionDirection = 0; stbV2GyroActionSinceMs = 0UL; stbV2GyroSaturationSinceMs = 0UL; stbV2GyroPolarityProbeStartMs = 0UL; stbV2GyroIntegral = 0.0f;',
-    '    stbV2ApplyGyroBiasTargets(0, 0);',
-    '    return;',
-    '  }',
-    '  if (absErrorDeg <= STB_V2_MOTION_GYRO_CENTER_COAST_DEG && projectedAbsErrorDeg < STB_V2_MOTION_GYRO_TARGET_BAND_DEG) { stbV2GyroActiveAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateActionCount = 0; stbV2GyroCorrectionDirection = 0; stbV2GyroIntegral *= 0.75f; stbV2GyroReleaseUntilMs = now + STB_V2_MOTION_GYRO_RELEASE_COAST_MS; stbV2ApplyGyroBiasTargets(0, 0); return; }',
-    '  float currentErrorSign = controlAngle >= 0.0f ? 1.0f : -1.0f;',
-    '  float centerRate = controlRate * currentErrorSign;',
-    '  float directionAngle = projectedAbsErrorDeg >= STB_V2_MOTION_GYRO_DEADBAND_DEG ? projectedAngle : controlAngle;',
-    '  float errorSign = directionAngle > 0.0f ? 1.0f : -1.0f;',
-    '  float awayRate = controlRate * errorSign;',
-    '  float dynamicReengageAngle = constrain(fabsf(controlRate) * STB_V2_MOTION_GYRO_REENGAGE_RATE_SCALE, STB_V2_MOTION_GYRO_REENGAGE_ANGLE_DEG, STB_V2_MOTION_GYRO_REENGAGE_MAX_ANGLE_DEG);',
-    '  bool projectedOutsideTargetBand = projectedAbsErrorDeg >= STB_V2_MOTION_GYRO_TARGET_BAND_DEG;',
-    '  if (now < stbV2GyroReleaseUntilMs && centerRate <= 0.0f && absErrorDeg < dynamicReengageAngle && !projectedOutsideTargetBand) { stbV2GyroIntegral *= 0.90f; stbV2ApplyGyroBiasTargets(0, 0); return; }',
-    '  if (now >= stbV2GyroReleaseUntilMs) stbV2GyroReleaseUntilMs = 0UL;',
-    '  float releaseAngleDeg = constrain(fabsf(controlRate) * STB_V2_MOTION_GYRO_RELEASE_LOOKAHEAD_S, STB_V2_MOTION_GYRO_RELEASE_MIN_ANGLE_DEG, STB_V2_MOTION_GYRO_RELEASE_MAX_ANGLE_DEG);',
-    '  bool projectedCrossing = controlAngle * projectedAngle <= 0.0f && absErrorDeg > STB_V2_MOTION_GYRO_EXIT_DEADBAND_DEG && !projectedOutsideTargetBand;',
-    '  if (projectedCrossing || (centerRate <= -STB_V2_MOTION_GYRO_RELEASE_MIN_RATE_DEG_S && absErrorDeg <= releaseAngleDeg)) { stbV2GyroActiveAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateActionCount = 0; stbV2GyroCorrectionDirection = 0; stbV2GyroActionSinceMs = 0UL; stbV2GyroSaturationSinceMs = 0UL; stbV2GyroPolarityProbeStartMs = 0UL; stbV2GyroIntegral *= 0.70f; stbV2GyroReleaseUntilMs = now + STB_V2_MOTION_GYRO_RELEASE_COAST_MS; stbV2ApplyGyroBiasTargets(0, 0); return; }',
-    '  float rateContribution = awayRate > 0.0f ? awayRate * STB_V2_MOTION_GYRO_KD : 0.0f;',
-    '  float controlErrorDeg = awayRate > 0.0f ? max(absErrorDeg, projectedAbsErrorDeg) : absErrorDeg;',
-    '  float strongMix = constrain((controlErrorDeg - STB_V2_MOTION_GYRO_STRONG_CORRECTION_START_DEG) / (STB_V2_MOTION_GYRO_STRONG_CORRECTION_MAX_DEG - STB_V2_MOTION_GYRO_STRONG_CORRECTION_START_DEG), 0.0f, 1.0f);',
-    '  float gainBoost = 1.0f + ((STB_V2_MOTION_GYRO_STRONG_GAIN_MAX - 1.0f) * strongMix);',
-    '  float biasBoost = 1.0f + ((STB_V2_MOTION_GYRO_STRONG_BIAS_MAX - 1.0f) * strongMix);',
-    '  bool returningToCenter = controlAngle * controlRate < 0.0f;',
-    '  if (anySaturated) stbV2GyroIntegral *= 0.50f; else if (absErrorDeg < 0.8f || returningToCenter) stbV2GyroIntegral *= 0.92f; else { if (stbV2GyroIntegral * controlAngle < 0.0f) stbV2GyroIntegral *= 0.25f; stbV2GyroIntegral = constrain(stbV2GyroIntegral + (controlAngle * dt), -STB_V2_MOTION_GYRO_INTEGRAL_LIMIT, STB_V2_MOTION_GYRO_INTEGRAL_LIMIT); }',
-    '  float integralContributionRpm = fabsf(stbV2GyroIntegral) * STB_V2_MOTION_GYRO_KI;',
-    '  float dynamicCorrectionMaxRpm = absErrorDeg < 1.0f ? STB_V2_MOTION_GYRO_NEAR_CENTER_MAX_RPM : (absErrorDeg < 2.0f ? STB_V2_MOTION_GYRO_MID_BAND_MAX_RPM : STB_V2_MOTION_GYRO_MAX_CORRECTION_RPM);',
-    '  float correctionRpm = constrain(((controlErrorDeg * STB_V2_MOTION_GYRO_KP) + rateContribution + integralContributionRpm) * gainBoost, STB_V2_MOTION_GYRO_MIN_CORRECTION_RPM, dynamicCorrectionMaxRpm);',
-    '  int8_t direction = static_cast<int8_t>(errorSign) * stbV2GyroCorrectionPolarity * STB_V2_GYRO_BIAS_POLARITY;',
-    '  int8_t trimAction = stbV2GyroTrimActionForDirection(direction);',
-    '  int8_t desiredAction = trimAction;',
-    '  if (direction != stbV2GyroCorrectionDirection) {',
-    '    stbV2GyroIntegral *= 0.25f;',
-    '    if (desiredAction != stbV2GyroCandidateAction) { stbV2GyroCandidateAction = desiredAction; stbV2GyroCandidateActionCount = 1; } else if (stbV2GyroCandidateActionCount < STB_V2_MOTION_GYRO_ACTION_CONFIRM_SAMPLES) { stbV2GyroCandidateActionCount++; }',
-    '    stbV2GyroActiveAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroActionSinceMs = 0UL; stbV2GyroSaturationSinceMs = 0UL; stbV2GyroPolarityProbeStartMs = 0UL;',
-    '    stbV2ClearBias();',
-    '    if (stbV2GyroCandidateActionCount < STB_V2_MOTION_GYRO_ACTION_CONFIRM_SAMPLES) return;',
-    '    stbV2GyroCorrectionDirection = direction; stbV2GyroActiveAction = desiredAction; stbV2GyroActionSinceMs = now; stbV2GyroCandidateActionCount = 0;',
-    '  }',
-    '  if (stbV2GyroActionDirection(stbV2GyroActiveAction) != direction || stbV2GyroActiveAction != desiredAction) { stbV2GyroActiveAction = desiredAction; stbV2GyroActionSinceMs = now; }',
-    '  if (!stbV2GyroPolarityLocked && absErrorDeg >= STB_V2_MOTION_GYRO_POLARITY_MIN_ERROR_DEG) {',
-    '    if (stbV2GyroPolarityProbeStartMs == 0UL) { stbV2GyroPolarityProbeStartMs = now; stbV2GyroPolarityProbeStartAbsError = absErrorDeg; }',
-    '    else if (now - stbV2GyroPolarityProbeStartMs >= STB_V2_MOTION_GYRO_POLARITY_LEARN_MS) {',
-    '      if (absErrorDeg > stbV2GyroPolarityProbeStartAbsError + STB_V2_MOTION_GYRO_POLARITY_GROWTH_DEG) { stbV2GyroCorrectionPolarity = -stbV2GyroCorrectionPolarity; stbV2GyroPolarityLocked = true; stbV2GyroPolarityLearned = true; stbV2GyroCorrectionDirection = 0; stbV2GyroActiveAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateAction = STB_V2_GYRO_ACTION_NONE; stbV2GyroCandidateActionCount = 0; stbV2GyroSaturationSinceMs = 0UL; stbV2GyroPolarityProbeStartMs = 0UL; stbV2GyroIntegral = 0.0f; stbV2ClearBias(); return; }',
-    '      stbV2GyroPolarityLocked = true; stbV2GyroPolarityLearned = true;',
-    '    }',
-    '  }',
-    '  float requestedDeltaRpm = correctionRpm * biasBoost;',
-    '  int leftTargetBiasX10 = 0; int rightTargetBiasX10 = 0;',
-    '  if (stbV2GyroActiveAction == STB_V2_GYRO_ACTION_TRIM_LEFT) leftTargetBiasX10 = stbV2GyroBiasFromDeltaRpm(stbV2MotionLeftBaseSpeedPercent, -(requestedDeltaRpm * STB_V2_MOTION_GYRO_LEFT_TRIM_SCALE), STB_V2_MOTION_GYRO_LEFT_TRIM_MAX_X10);',
-    '  else rightTargetBiasX10 = stbV2GyroBiasFromDeltaRpm(stbV2MotionRightBaseSpeedPercent, -(requestedDeltaRpm * STB_V2_MOTION_GYRO_RIGHT_TRIM_SCALE), STB_V2_MOTION_GYRO_RIGHT_TRIM_MAX_X10);',
-    '  if (!stbV2GyroPolarityLocked) { leftTargetBiasX10 = constrain(leftTargetBiasX10, -STB_V2_MOTION_GYRO_UNLEARNED_MAX_BOOST_X10, STB_V2_MOTION_GYRO_UNLEARNED_MAX_BOOST_X10); rightTargetBiasX10 = constrain(rightTargetBiasX10, -STB_V2_MOTION_GYRO_UNLEARNED_MAX_BOOST_X10, STB_V2_MOTION_GYRO_UNLEARNED_MAX_BOOST_X10); }',
-    '  stbV2ApplyGyroBiasTargets(leftTargetBiasX10, rightTargetBiasX10);',
+    '  // LEGO: steering = 0 - guiñada. Corrección proporcional continua, sin deadband/coast/histéresis.',
+    '  // Signo: girar a la izquierda (controlAngle<0) => frenar izquierda / acelerar derecha.',
+    '  float steeringRpm = constrain((-controlAngle * STB_V2_LEGO_KP) - (controlRate * STB_V2_LEGO_KD), -STB_V2_LEGO_MAX_CORRECTION_RPM, STB_V2_LEGO_MAX_CORRECTION_RPM);',
+    '  float signedRpm = steeringRpm * static_cast<float>(STB_V2_LEGO_POLARITY);',
+    '  int leftTargetBiasX10 = stbV2GyroBiasFromDeltaRpm(stbV2MotionLeftBaseSpeedPercent, -signedRpm, STB_V2_LEGO_MAX_BIAS_X10);',
+    '  int rightTargetBiasX10 = stbV2GyroBiasFromDeltaRpm(stbV2MotionRightBaseSpeedPercent, signedRpm, STB_V2_LEGO_MAX_BIAS_X10);',
+    '  stbV2DebugGyroMove(String("LEGO"), now, angle, controlRate, controlAngle, steeringRpm, leftTargetBiasX10, rightTargetBiasX10, leftIdx, rightIdx);',
+    '  stbV2ApplyGyroBiasDifferential(leftTargetBiasX10, rightTargetBiasX10);',
     '}',
     'void stbV2RuntimeTick() { if (!stbV2BoardConfig.initialized) return; stbV2PumpSerial(0); stbV2PumpSerial(1); unsigned long now = millis(); if (now - stbV2LastHeartbeatMs >= STB_V2_HEARTBEAT_INTERVAL_MS) { stbV2SendFrame(0, STB_V2_CMD_HEARTBEAT, 0xFF, 0, 0, 0, 0, 0); stbV2SendFrame(1, STB_V2_CMD_HEARTBEAT, 0xFF, 0, 0, 0, 0, 0); stbV2LastHeartbeatMs = now; } if (now - stbV2LastStatusPollMs >= STB_V2_STATUS_POLL_INTERVAL_MS) { stbV2RequestStatus(stbV2StatusPollNode, 0xFF); stbV2StatusPollNode = (stbV2StatusPollNode + 1) % STB_V2_NODE_COUNT; stbV2LastStatusPollMs = now; } for (uint8_t i = 0; i < STB_V2_MOTOR_COUNT; ++i) { if (stbV2Motors[i].timedMoveStopAtMs > 0UL && now >= stbV2Motors[i].timedMoveStopAtMs) { stbV2StopMotorByIndex(i); } } if (stbV2Gyro.ready) stbV2UpdateGyro(); stbV2RunSingleWheelGyroSupervisor(); }',
     'void stbV2WaitForSelectorIdle(const String& selector, unsigned long timeoutMs) { unsigned long startMs = millis(); while (millis() - startMs < timeoutMs) { stbV2RuntimeTick(); if (!stbV2IsMotorMoving(selector)) { if (selector == "MOTION") { stbV2MotionDistanceActive = false; stbV2MotionContinuousActive = false; stbV2MotionTargetDistanceCm = 0.0f; stbV2GyroIntegral = 0.0f; stbV2ClearBias(); } return; } if (selector == "MOTION") { int8_t leftIdx = stbV2FindMotorBySide(STB_V2_SIDE_LEFT); int8_t rightIdx = stbV2FindMotorBySide(STB_V2_SIDE_RIGHT); if (leftIdx >= 0 && rightIdx >= 0) { bool leftDone = stbV2Motors[leftIdx].currentState == STB_V2_STATE_DONE; bool rightDone = stbV2Motors[rightIdx].currentState == STB_V2_STATE_DONE; if (leftDone != rightDone) { stbV2StopBySelector(selector, true); return; } } } delay(2); } stbV2StopBySelector(selector); }'
@@ -1313,6 +1266,13 @@ ensureStbV2GyroBase();
   // Keep the Mega2560 runtime alive in loop() so the motor nodes keep
   // receiving heartbeats and status polling while user code is idle.
   Blockly.Arduino.loops_['stb_v2_runtime_loop'] = 'stbV2RuntimeTick();';
+}
+
+function ensureStbV2RepeatHelper () {
+ensureStbV2MegaBase();
+  // Define repeat() so the wait-loop blocks (button, sensor, motor, etc.)
+  // keep the Mega2560 runtime alive while they wait for a condition.
+  Blockly.Arduino.definitions_['stb_v2_repeat_helper'] = 'void repeat() {\n  stbV2RuntimeTick();\n}';
 }
 
 function ensureStbV2MegaConfigHelpers () {
@@ -3517,8 +3477,9 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2MegaMoveHelpers();
+  var orientation = block.getFieldValue('ORIENTATION') || 'HORIZONTAL';
   return 'stbV2RuntimeTick();\n' +
-    'stbV2SetMotionControlMode("PID_GYRO");\n';
+    'stbV2SetMotionControlMode("PID_GYRO", "' + orientation + '");\n';
         })();
         if (Array.isArray(res)) return res[0];
         return res;
@@ -3709,6 +3670,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2MegaMoveHelpers();
+  ensureStbV2RepeatHelper();
   var motor = block.getFieldValue('MOTOR') || 'MOTION';
   var condition = Blockly.Arduino.valueToCode(block, 'CONDITION', Blockly.Arduino.ORDER_UNARY_POSTFIX) || 'false';
   var branch = Blockly.Arduino.statementToCode(block, 'SUBSTACK');
@@ -3807,6 +3769,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2MegaMoveHelpers();
+  ensureStbV2RepeatHelper();
   var motor = block.getFieldValue('MOTOR') || 'MOTION';
   var condition = Blockly.Arduino.valueToCode(block, 'CONDITION', Blockly.Arduino.ORDER_UNARY_POSTFIX) || 'false';
   var branch = Blockly.Arduino.statementToCode(block, 'SUBSTACK');
@@ -3833,6 +3796,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2MegaTurnHelpers();
+  ensureStbV2RepeatHelper();
   var side = block.getFieldValue('SIDE') || 'RIGHT';
   var condition = Blockly.Arduino.valueToCode(block, 'CONDITION', Blockly.Arduino.ORDER_UNARY_POSTFIX) || 'false';
   var branch = Blockly.Arduino.statementToCode(block, 'SUBSTACK');
@@ -4187,6 +4151,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2GyroReadHelpers();
+  ensureStbV2RepeatHelper();
   var axis = block.getFieldValue('AXIS') || 'Z';
   var condition = block.getFieldValue('CONDITION') || 'GT';
   var value = Blockly.Arduino.valueToCode(block, 'VALUE', Blockly.Arduino.ORDER_UNARY_POSTFIX) || '0';
@@ -4212,6 +4177,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2GyroReadHelpers();
+  ensureStbV2RepeatHelper();
   var axis = block.getFieldValue('AXIS') || 'Z';
   var condition = block.getFieldValue('CONDITION') || 'GT';
   var value = Blockly.Arduino.valueToCode(block, 'VALUE', Blockly.Arduino.ORDER_UNARY_POSTFIX) || '0';
@@ -4237,6 +4203,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2GyroReadHelpers();
+  ensureStbV2RepeatHelper();
   var condition = block.getFieldValue('CONDITION') || 'GT';
   var value = Blockly.Arduino.valueToCode(block, 'VALUE', Blockly.Arduino.ORDER_UNARY_POSTFIX) || '90';
   var branch = Blockly.Arduino.statementToCode(block, 'SUBSTACK');
@@ -4360,6 +4327,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2GyroPredicateHelpers();
+  ensureStbV2RepeatHelper();
   var code = 'while (!stbV2IsShaken()) {\n';
   code += Blockly.Arduino.INDENT + 'stbV2UpdateGyro();\n';
   code += Blockly.Arduino.INDENT + 'repeat();\n';
@@ -4379,6 +4347,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2GyroPredicateHelpers();
+  ensureStbV2RepeatHelper();
   var value = Blockly.Arduino.valueToCode(block, 'VALUE', Blockly.Arduino.ORDER_UNARY_POSTFIX) || '20';
   var code = 'while (!stbV2IsTilted(' + value + ')) {\n';
   code += Blockly.Arduino.INDENT + 'stbV2UpdateGyro();\n';
@@ -4429,6 +4398,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2InfraredDetectHelper();
+  ensureStbV2RepeatHelper();
   var code = 'while (!stbV2InfraredDetected()) {\n';
   code += Blockly.Arduino.INDENT + 'stbV2InfraredTick();\n';
   code += Blockly.Arduino.INDENT + 'repeat();\n';
@@ -4448,6 +4418,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2InfraredDetectHelper();
+  ensureStbV2RepeatHelper();
   var branch = Blockly.Arduino.statementToCode(block, 'SUBSTACK');
   branch = Blockly.Arduino.addLoopTrap(branch, block.id);
   var code = 'while (stbV2InfraredDetected()) {\n';
@@ -4841,6 +4812,7 @@ module.exports = {
         const res = (function() {
             ensureStbV2LocalUtilsRuntime();
   ensureStbV2LightPercentHelper();
+  ensureStbV2RepeatHelper();
   var condition = block.getFieldValue('CONDITION') || 'GT';
   var value = Blockly.Arduino.valueToCode(block, 'VALUE', Blockly.Arduino.ORDER_UNARY_POSTFIX) || '50';
   var code = 'while (!stbV2LocalCompareFloat(stbV2ReadLightPercent(), String("' + condition + '"), ' + value + ')) {\n';
@@ -4862,6 +4834,7 @@ module.exports = {
         const res = (function() {
             ensureStbV2LocalUtilsRuntime();
   ensureStbV2LightPercentHelper();
+  ensureStbV2RepeatHelper();
   var condition = block.getFieldValue('CONDITION') || 'GT';
   var value = Blockly.Arduino.valueToCode(block, 'VALUE', Blockly.Arduino.ORDER_UNARY_POSTFIX) || '50';
   var branch = Blockly.Arduino.statementToCode(block, 'SUBSTACK');
@@ -4979,6 +4952,7 @@ module.exports = {
         const res = (function() {
             ensureStbV2LocalUtilsRuntime();
   ensureStbV2TemperatureCelsiusHelper();
+  ensureStbV2RepeatHelper();
   var condition = block.getFieldValue('CONDITION') || 'GT';
   var value = Blockly.Arduino.valueToCode(block, 'VALUE', Blockly.Arduino.ORDER_UNARY_POSTFIX) || '25';
   var code = 'while (!stbV2LocalCompareFloat(stbV2ReadTemperatureCelsius(), String("' + condition + '"), ' + value + ')) {\n';
@@ -5000,6 +4974,7 @@ module.exports = {
         const res = (function() {
             ensureStbV2LocalUtilsRuntime();
   ensureStbV2TemperatureCelsiusHelper();
+  ensureStbV2RepeatHelper();
   var condition = block.getFieldValue('CONDITION') || 'GT';
   var value = Blockly.Arduino.valueToCode(block, 'VALUE', Blockly.Arduino.ORDER_UNARY_POSTFIX) || '25';
   var branch = Blockly.Arduino.statementToCode(block, 'SUBSTACK');
@@ -5132,6 +5107,7 @@ module.exports = {
         const res = (function() {
             ensureStbV2LocalUtilsRuntime();
   ensureStbV2MicrophoneSoundLevelHelper();
+  ensureStbV2RepeatHelper();
   var condition = block.getFieldValue('CONDITION') || 'GT';
   var value = Blockly.Arduino.valueToCode(block, 'VALUE', Blockly.Arduino.ORDER_UNARY_POSTFIX) || '50';
   var code = 'while (!stbV2LocalCompareFloat(stbV2ReadSoundLevelPercent(), String("' + condition + '"), ' + value + ')) {\n';
@@ -5153,6 +5129,7 @@ module.exports = {
         const res = (function() {
             ensureStbV2LocalUtilsRuntime();
   ensureStbV2MicrophoneSoundLevelHelper();
+  ensureStbV2RepeatHelper();
   var condition = block.getFieldValue('CONDITION') || 'GT';
   var value = Blockly.Arduino.valueToCode(block, 'VALUE', Blockly.Arduino.ORDER_UNARY_POSTFIX) || '50';
   var branch = Blockly.Arduino.statementToCode(block, 'SUBSTACK');
@@ -5376,6 +5353,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2BluetoothBase();
+  ensureStbV2RepeatHelper();
   var code = 'while (!stbV2BluetoothHasData()) {\n';
   code += Blockly.Arduino.INDENT + 'repeat();\n';
   code += '}\n';
@@ -5394,6 +5372,7 @@ module.exports = {
         initBlocklyProxy(this, block, blocks);
         const res = (function() {
             ensureStbV2BluetoothBase();
+  ensureStbV2RepeatHelper();
   var branch = Blockly.Arduino.statementToCode(block, 'SUBSTACK');
   branch = Blockly.Arduino.addLoopTrap(branch, block.id);
   var code = 'while (stbV2BluetoothHasData()) {\n';
@@ -6034,6 +6013,7 @@ module.exports = {
         const res = (function() {
             ensureStbV2ButtonsReadHelper();
   ensureStbV2BootUiDisableModeButtonsSetup();
+  ensureStbV2RepeatHelper();
   var button = block.getFieldValue('BUTTON') || 'B1';
   var code = 'while (!stbV2ReadButton(String("' + button + '"))) {\n';
   code += Blockly.Arduino.INDENT + 'stbV2ButtonsTick();\n';
@@ -6055,6 +6035,7 @@ module.exports = {
         const res = (function() {
             ensureStbV2ButtonsReadHelper();
   ensureStbV2BootUiDisableModeButtonsSetup();
+  ensureStbV2RepeatHelper();
   var button = block.getFieldValue('BUTTON') || 'B1';
   var branch = Blockly.Arduino.statementToCode(block, 'SUBSTACK');
   branch = Blockly.Arduino.addLoopTrap(branch, block.id);

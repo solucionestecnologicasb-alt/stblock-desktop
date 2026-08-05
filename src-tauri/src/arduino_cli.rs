@@ -36,11 +36,20 @@ pub struct UploadResult {
     pub error: Option<String>,
 }
 
+fn clean_path(path: PathBuf) -> PathBuf {
+    let path_str = path.to_string_lossy().to_string();
+    if path_str.starts_with(r"\\?\") {
+        PathBuf::from(&path_str[4..])
+    } else {
+        path
+    }
+}
+
 /// Helper function to resolve the path of the bundled or system arduino-cli
 fn get_arduino_cli_path(app_handle: &tauri::AppHandle) -> String {
     // 1. Try to find arduino-cli in Tauri's bundled resources folder
     if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        let bundled_path = resource_dir.join("tools").join("Arduino").join("arduino-cli.exe");
+        let bundled_path = clean_path(resource_dir.join("tools").join("Arduino").join("arduino-cli.exe"));
         if bundled_path.exists() {
             return bundled_path.to_string_lossy().to_string();
         }
@@ -56,11 +65,60 @@ fn get_arduino_cli_path(app_handle: &tauri::AppHandle) -> String {
 /// Helper function to resolve the path of the bundled arduino-cli.yaml config file
 fn get_arduino_config_path(app_handle: &tauri::AppHandle) -> Option<String> {
     if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        let bundled_config = resource_dir.join("tools").join("Arduino").join("arduino-cli.yaml");
+        let bundled_config = clean_path(resource_dir.join("tools").join("Arduino").join("arduino-cli.yaml"));
         if bundled_config.exists() {
             return Some(bundled_config.to_string_lossy().to_string());
         }
     }
+    None
+}
+
+/// Resolve the directory containing the bundled preinstalled libraries.
+///
+/// Packaged apps ship them under `<resources>/tools/Arduino/libraries`.
+/// Dev builds fall back to the source folder `<repo>/src-tauri/tools/Arduino/libraries`.
+fn bundled_libraries_dir(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
+    // 1. Bundled resources: <resource_dir>/tools/Arduino/libraries
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        let p = clean_path(resource_dir.join("tools").join("Arduino").join("libraries"));
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+
+    // 2. Dev fallback: the binary lives at <repo>/src-tauri/target/{debug,release}/stblock.exe
+    if let Ok(exe) = std::env::current_exe() {
+        let cleaned_exe = clean_path(exe);
+        if let Some(dir) = cleaned_exe
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+        {
+            let p = dir.join("tools").join("Arduino").join("libraries");
+            if p.is_dir() {
+                return Some(p);
+            }
+        }
+    }
+
+    // 3. Last resort: <cwd>/tools/Arduino/libraries
+    if let Ok(cwd) = std::env::current_dir() {
+        let cleaned_cwd = clean_path(cwd);
+        let p = cleaned_cwd.join("tools").join("Arduino").join("libraries");
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+
+    // 4. Alternate dev fallback: <cwd>/src-tauri/tools/Arduino/libraries
+    if let Ok(cwd) = std::env::current_dir() {
+        let cleaned_cwd = clean_path(cwd);
+        let p = cleaned_cwd.join("src-tauri").join("tools").join("Arduino").join("libraries");
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+
     None
 }
 
@@ -147,6 +205,51 @@ pub fn compile_arduino_sketch(
     fqbn: String,
     sketch_name: String,
 ) -> Result<CompileResult, String> {
+    // Diagnostic logging
+    let debug_path = std::env::temp_dir().join("stblock_compile_debug.txt");
+    let mut debug_info = format!("Sketch compilation started\n");
+    debug_info.push_str(&format!("FQBN: {}\n", fqbn));
+    debug_info.push_str(&format!("Sketch Name: {}\n", sketch_name));
+    
+    if let Ok(rd) = app_handle.path().resource_dir() {
+        debug_info.push_str(&format!("Resource Dir: {:?}\n", rd));
+        debug_info.push_str(&format!("Resource Dir exists: {}\n", rd.exists()));
+        let libs = rd.join("tools").join("Arduino").join("libraries");
+        debug_info.push_str(&format!("Resource Libs Path: {:?}\n", libs));
+        debug_info.push_str(&format!("Resource Libs Path exists: {}\n", libs.is_dir()));
+    } else {
+        debug_info.push_str("Resource Dir error\n");
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        debug_info.push_str(&format!("Current Exe: {:?}\n", exe));
+        if let Some(dir) = exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+            debug_info.push_str(&format!("Exe Ancestor Dir: {:?}\n", dir));
+            let p = dir.join("tools").join("Arduino").join("libraries");
+            debug_info.push_str(&format!("Exe Ancestor Libs: {:?}\n", p));
+            debug_info.push_str(&format!("Exe Ancestor Libs exists: {}\n", p.is_dir()));
+        }
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        debug_info.push_str(&format!("CWD: {:?}\n", cwd));
+        let p1 = cwd.join("tools").join("Arduino").join("libraries");
+        debug_info.push_str(&format!("CWD/tools Libs exists: {}\n", p1.is_dir()));
+        let p2 = cwd.join("src-tauri").join("tools").join("Arduino").join("libraries");
+        debug_info.push_str(&format!("CWD/src-tauri Libs exists: {}\n", p2.is_dir()));
+    }
+
+    let libs_dir = bundled_libraries_dir(&app_handle);
+    debug_info.push_str(&format!("bundled_libraries_dir result: {:?}\n", libs_dir));
+
+    let cli_path = get_arduino_cli_path(&app_handle);
+    debug_info.push_str(&format!("arduino-cli path: {}\n", cli_path));
+
+    let config_path = get_arduino_config_path(&app_handle);
+    debug_info.push_str(&format!("arduino-cli config path: {:?}\n", config_path));
+
+    let _ = fs::write(debug_path, debug_info);
+
     // Create temp directory for sketch
     let temp_dir = std::env::temp_dir().join("stblock_sketches");
     fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
@@ -164,15 +267,14 @@ pub fn compile_arduino_sketch(
 
     // Compile
     let mut cmd = build_arduino_cli_command(&app_handle);
-    let output = cmd
-        .args([
-            "compile",
-            "--fqbn", &fqbn,
-            "--output-dir", build_dir.to_str().unwrap(),
-            sketch_dir.to_str().unwrap(),
-        ])
-        .output()
-        .map_err(|e| e.to_string())?;
+    cmd.args(["compile", "--fqbn", &fqbn, "--output-dir", build_dir.to_str().unwrap()]);
+    // Add the bundled preinstalled libraries (Servo, etc.) so sketches compile
+    // even when the arduino-cli user/data directories lack them.
+    if let Some(libs_dir) = bundled_libraries_dir(&app_handle) {
+        cmd.arg("--libraries").arg(libs_dir);
+    }
+    cmd.arg(sketch_dir.to_str().unwrap());
+    let output = cmd.output().map_err(|e| e.to_string())?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();

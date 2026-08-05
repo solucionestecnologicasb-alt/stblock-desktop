@@ -2,6 +2,16 @@ import AI_KNOWLEDGE from './ai-knowledge';
 import {getCompactPromptLines, getDetailedBlockInfo} from './ai-block-library';
 import {TrainingEngine, generateOptimizedPrompt} from './ai-training-engine';
 
+// Pollinations.ai rechaza (403 "Missing Turnstile token") las peticiones de navegador
+// cuyo hostname de Origin es exactamente `localhost`. En ese caso enrutamos por el
+// dev server de webpack (proxy /pollinations que elimina Origin/Referer). En Tauri
+// produccion (origin http://tauri.localhost) y en la web desplegada no hace falta.
+function isLocalhostOrigin() {
+    return typeof window !== 'undefined' &&
+        window.location &&
+        window.location.hostname === 'localhost';
+}
+
 var PROVIDER_CONFIG = {
     groq: {
         url: 'https://api.groq.com/openai/v1/chat/completions',
@@ -22,6 +32,15 @@ var PROVIDER_CONFIG = {
     opencodezen: {
         url: '/zen/v1/chat/completions',
         format: 'openai'
+    },
+    // Proveedor público gratuito: no requiere API key (Pollinations.ai anonymous tier).
+    // Cualquier valor en el header Authorization es aceptado; omitimos el header si no hay clave.
+    // noTemperature: la capa anónima/gratuita de Pollinations devuelve 402 "Payment Required"
+    // si el body incluye el campo `temperature` (lo rechaza). El resto de proveedores lo aceptan.
+    pollinations: {
+        url: isLocalhostOrigin() ? '/pollinations/openai' : 'https://text.pollinations.ai/openai',
+        format: 'openai',
+        noTemperature: true
     }
 };
 
@@ -114,36 +133,195 @@ function buildMentorSystemPrompt(sessionSummary) {
     return lines.join('\n');
 }
 
-var _appPromptCache = null;
-function buildAppSystemPrompt(trainingExamples, sessionSummary) {
-    if (!trainingExamples && !sessionSummary && _appPromptCache) return _appPromptCache;
+var _appPromptCacheByMode = {};
+
+// ─── Prompts específicos por modo ─────────────────────────────────────────
+
+function buildPythonModePrompt() {
+    var lines = [];
+    lines.push('=== MODO PROGRAMACIÓN (Python) ===');
+    lines.push('Generá código Python en el campo "pythonCode". Se ejecuta con Pyodide en el navegador.');
+    lines.push('');
+    lines.push('API DE STBLOCK DISPONIBLE (objetos globales ya definidos, no hace falta importarlos):');
+    lines.push('- sprite: controla el sprite/objeto seleccionado.');
+    lines.push('  Métodos: mover(pasos), girar_derecha(grados), girar_izquierda(grados), ir_a_xy(x, y), ir_a(destino), deslizar_a_xy(x, y, segundos), apuntar_en_direccion(dir), apuntar_hacia(objetivo), cambiar_x(dx), cambiar_y(dy), fijar_x(x), fijar_y(y), rebotar_si_toca_borde(), decir(mensaje, segundos=None), pensar(mensaje, segundos=None), cambiar_disfraz(nombre), siguiente_disfraz(), cambiar_tamaño(cambio), fijar_tamaño(tamaño), mostrar(), esconder(), cambiar_efecto(efecto, valor), quitar_efectos(), tocando(objetivo), tocando_color(color), distancia_a(objetivo), saltar(fuerza), aplicar_gravedad(), en_suelo(), en_aire(), fijar_salud(valor), cambiar_salud(cantidad), esta_vivo(), esta_muerto().');
+    lines.push('  Propiedades: sprite.x, sprite.y, sprite.direccion, sprite.tamaño, sprite.salud, sprite.velocidad_x, sprite.velocidad_y.');
+    lines.push('- escenario: escenario.ancho, escenario.alto (también permite cambiar fondos).');
+    lines.push('- sonido: sonido.reproducir(nombre), sonido.reproducir_y_esperar(nombre), sonido.detener_todos().');
+    lines.push('- raton: raton.x, raton.y, raton.presionado.');
+    lines.push('- fisica: control de gravedad/fricción del mundo (opcional).');
+    lines.push('- camara: camara.seguir(sprite, suavidad=0.1).');
+    lines.push('- estado: máquina de estados. estado.cambiar(nombre), estado.actual, estado.anterior, estado.es(nombre).');
+    lines.push('- debug: debug.log(valor), debug.advertencia(valor), debug.error(valor).');
+    lines.push('- pruebas: pruebas.reiniciar(), pruebas.verificar(condicion, nombre), pruebas.reporte().');
+    lines.push('- ia: utilidades de IA (si se habilitan).');
+    lines.push('');
+    lines.push('Funciones globales:');
+    lines.push('- esperar(segundos): pausa aproximada. En Pyodide no bloquea estrictamente; usalo en bucles cortos combinado con delta_tiempo().');
+    lines.push('- delta_tiempo(): segundos transcurridos desde el último frame.');
+    lines.push('- aleatorio(minimo, maximo): número aleatorio entre min y max.');
+    lines.push('- preguntar(mensaje): pregunta al usuario y devuelve la respuesta como texto.');
+    lines.push('- tecla_presionada(tecla): True/False si una tecla está presionada.');
+    lines.push('- fps(): cuadros por segundo actuales.');
+    lines.push('');
+    lines.push('REGLAS:');
+    lines.push('1. Usá SIEMPRE la API de STBlock (sprite, escenario, sonido, etc.). NO importes librerías externas (no hay internet en Pyodide).');
+    lines.push('2. Para movimiento continuo usá bucles con delta_tiempo() o esperar() (ej: while True: sprite.mover(5); esperar(0.05)).');
+    lines.push('3. NO uses time.sleep (bloquea el navegador). Usá esperar() o delta_tiempo().');
+    lines.push('4. Las coordenadas van de -240 a 240 en X y de -180 a 180 en Y (como Scratch).');
+    lines.push('5. El código debe ser autónomo: arranca en la primera línea (no hace falta definir main()).');
+    lines.push('6. Si el código tiene un bucle infinito, usá un contador o una condición de salida razonable.');
+    lines.push('');
+    lines.push('CONTRATO: respondé con {"mode":"python","pythonCode":"<tu código>","explanation":"..."}.');
+    lines.push('');
+    lines.push('EJEMPLO (sprite que se mueve en círculos):');
+    lines.push('while True:');
+    lines.push('    sprite.mover(5)');
+    lines.push('    sprite.girar_derecha(5)');
+    lines.push('    esperar(0.05)');
+    return lines;
+}
+
+function buildDeviceModePrompt() {
+    var lines = [];
+    lines.push('=== MODO ELECTRÓNICA (Arduino C++ + Gearbot/Velxio) ===');
+    lines.push('Generá código Arduino C++ en el campo "arduinoCode". Se compila/ejecuta en el modo Electrónica y en los simuladores embebidos (stblock-execute).');
+    lines.push('');
+    lines.push('REGLAS C++ ARDUINO (Arduino UNO):');
+    lines.push('- Todo programa tiene void setup() y void loop().');
+    lines.push('- pinMode(pin, OUTPUT/INPUT/INPUT_PULLUP) se llama en setup(); digitalWrite(pin, HIGH/LOW); digitalRead(pin); analogWrite(pin, valor) para PWM (0-255); analogRead(pin) para pines A0-A5 (0-1023); delay(ms); tone(pin, frecuencia); Serial.begin(9600) y Serial.print/println.');
+    lines.push('- Pines UNO: digitales 2-13; analógicos A0-A5; PWM: 3, 5, 6, 9, 10, 11.');
+    lines.push('- Usá delay() con moderación (bloquea el programa).');
+    lines.push('');
+    lines.push('=== GEARBOT (robot simulador embebido en static/velxio/gears/index.html) ===');
+    lines.push('- Es un robot "singleFollower" programado en C++ (el simulador lo traduce a Python vía Skulpt).');
+    lines.push('- Motores: motor A y motor B (base de tracción). El electroimán va en el puerto C.');
+    lines.push('- Sensores en puertos 1-4 (según el mundo cargado).');
+    lines.push('- Vocabulario de bloques del robot (equivalentes a los bloques del simulador):');
+    lines.push('  * move_steering(motores, direccion, potencia, distancia): avanzar/girar con steering.');
+    lines.push('  * run_motor(motor, potencia, segundos) / run_motor_for(motor, potencia, grados).');
+    lines.push('  * stop_motor(motor).');
+    lines.push('  * color_sensor(puerto): color detectado.');
+    lines.push('  * ultrasonic_sensor(puerto): distancia en cm.');
+    lines.push('  * gyro_sensor(puerto): ángulo de giro.');
+    lines.push('  * button_state(puerto): True/False si el botón está presionado.');
+    lines.push('  * beep(frecuencia, duracion_ms).');
+    lines.push('  * radio_* : enviar/recibir mensajes entre robots.');
+    lines.push('- Ejemplo "robot que esquiva obstáculos": leé ultrasonic_sensor en el puerto delantero y usá move_steering para girar cuando la distancia es corta.');
+    lines.push('');
+    lines.push('=== VELXIO (simulador de circuitos embebido) ===');
+    lines.push('- Recibe el mismo C++ vía stblock-execute.');
+    lines.push('- Componentes disponibles: LED, resistencia, botón, buzzer, servo, sensores.');
+    lines.push('- Reglas de pines y Serial iguales a Arduino UNO (ver arriba).');
+    lines.push('- El simulador muestra la salida Serial en su consola.');
+    lines.push('');
+    lines.push('CONTRATO: respondé con {"mode":"device","arduinoCode":"<código C++>","explanation":"..."}.');
+    lines.push('');
+    lines.push('EJEMPLO (LED parpadeante):');
+    lines.push('void setup() { pinMode(13, OUTPUT); }');
+    lines.push('void loop() { digitalWrite(13, HIGH); delay(1000); digitalWrite(13, LOW); delay(1000); }');
+    return lines;
+}
+
+function build3dModePrompt() {
+    var lines = [];
+    lines.push('=== MODO DISEÑO 3D (DSL procedural para SketchForge) ===');
+    lines.push('Generá un modelo 3D en el campo "script3D" usando el siguiente DSL seguro interpretado (el host lo interpreta, nunca usa eval).');
+    lines.push('');
+    lines.push('GRAMÁTICA DEL DSL:');
+    lines.push('- clear=true | clear=false   (opcional, primera línea; true reemplaza la escena, false agrega al modelo actual)');
+    lines.push('- add <forma>(param=valor, ...)   // agrega una forma');
+    lines.push('- repeat(<expresión>) as i { ... }  // repite el bloque con el índice i (anidables, sombrean)');
+    lines.push('- Comentarios con // hasta fin de línea. Saltos de línea separan statements.');
+    lines.push('- Expresiones aritméticas: + - * / ( ) con números y el índice i.');
+    lines.push('- Funciones: sin(x), cos(x) (en grados), sqrt(x), floor(x).');
+    lines.push('');
+    lines.push('FORMAS Y PARÁMETROS (además de los comunes x, z, elevation, rotation, rotationX, rotationZ, hole, color, name):');
+    lines.push('- box(width, depth, height, radius, steps, bevel)');
+    lines.push('- cylinder(radius, height, sides, bevel, segments)');
+    lines.push('- sphere(radius, steps)');
+    lines.push('- cone(radius, height, topRadius, baseRadius, sides)');
+    lines.push('- pyramid(width, depth, height, sides)');
+    lines.push('- wedge(width, depth, height)');
+    lines.push('- roundRoof(width, depth, height, sides)');
+    lines.push('- halfSphere(radius, steps)');
+    lines.push('- torus(radius, sides)');
+    lines.push('- tube(radius, height, sides, bevel)');
+    lines.push('- gear(radius, height, teeth, toothSize, centerHoleSize, sides)');
+    lines.push('- text(width, depth, height, text="...", font="...")');
+    lines.push('');
+    lines.push('REGLAS DE COORDENADAS:');
+    lines.push('- El plano del suelo es X/Z. x y z en unidades de la rejilla (default 0).');
+    lines.push('- elevation es la altura sobre el suelo.');
+    lines.push('- width = tamaño en X, depth = tamaño en Z, height = tamaño en Y.');
+    lines.push('- rotation, rotationX y rotationZ en grados.');
+    lines.push('- color acepta "#rrggbb".');
+    lines.push('');
+    lines.push('LÍMITES:');
+    lines.push('- Usá repeat() para patrones. Mantenete cerca de 50 formas (el host limita a 500).');
+    lines.push('- repeat máximo 200 iteraciones; anidamiento máximo 4 niveles.');
+    lines.push('');
+    lines.push('CONTRATO: respondé con {"mode":"3d","script3D":"clear=true\\nadd box(...)\\nrepeat(4) as i { ... }","explanation":"..."}.');
+    lines.push('');
+    lines.push('EJEMPLO (torre de 5 cajas + anillo de 12 columnas):');
+    lines.push('clear=true');
+    lines.push('repeat(5) as i { add box(x=0, z=0, elevation=i*25, width=30, depth=30, height=25) }');
+    lines.push('repeat(12) as i { add cylinder(x=cos(i*30)*80, z=sin(i*30)*80, radius=4, height=40, color="#0098c7") }');
+    return lines;
+}
+
+function buildAppSystemPrompt(trainingExamples, sessionSummary, activeMode) {
+    activeMode = activeMode || 'blocks';
+    if (!trainingExamples && !sessionSummary && _appPromptCacheByMode[activeMode]) return _appPromptCacheByMode[activeMode];
     var lines = [
-        'Eres asistente STBlock. PODÉS crear/editar bloques reales tanto para MODO JUEGO (Scratch) como para MODO DISPOSITIVO (Arduino, ESP32, Micro:bit).',
+        'Eres asistente STBlock. PODÉS crear/editar bloques reales y código según el modo activo: bloques Scratch (modo Juego), código Python (modo Programación), código Arduino C++ (modo Electrónica + Gearbot/Velxio) o modelos 3D procedurales (modo Diseño 3D).',
         '',
         'CAPACIDADES:',
         '- Crear bloques de Scratch (movimiento, apariencia, sonido, eventos, control, sensores, operadores, variables, lápiz, música)',
-        '- Crear bloques de Arduino (digitalWrite, digitalRead, analogWrite, analogRead, servo, serial, etc.)',
-        '- Crear bloques de ESP32 (WiFi, touch, DAC, etc.)',
-        '- Crear bloques de Micro:bit (matriz LED, botones, acelerómetro, etc.)',
-        '- MEZCLAR bloques de Scratch con bloques de dispositivos en el MISMO programa',
+        '- Crear bloques de Arduino (digitalWrite, digitalRead, analogWrite, analogRead, servo, serial, etc.), ESP32 (WiFi, touch, DAC, etc.) y Micro:bit (matriz LED, botones, acelerómetro, etc.)',
+        '- Generar código Python para el panel de Programación (se ejecuta con Pyodide)',
+        '- Generar código Arduino C++ para el modo Electrónica y los simuladores Gearbot/Velxio',
+        '- Generar modelos 3D procedurales para SketchForge (modo Diseño 3D)',
         '',
-        'DEBES responder SIEMPRE en formato JSON con la siguiente estructura:',
+        'DEBES responder SIEMPRE en formato JSON con la siguiente estructura. Solo el campo correspondiente al MODO ACTIVO va lleno; los demás van vacíos u omitidos:',
         '{',
-        '  "explanation": "Explicación en español para mostrar en el chat sobre qué hace el script o la respuesta a la pregunta del usuario.",',
-        '  "clearExisting": true o false (si es true, borra los bloques actuales del Sprite; si es false, agrega los nuevos bloques al lado),',
-        '  "scripts": [',
-        '    {',
-        '      "blocks": [',
-        '        {',
-        '          "opcode": "opcode_del_bloque",',
-        '          "fields": { "NOMBRE_CAMPO": "valor" }, // opcional, para variables, listas, teclas o disfraces',
-        '          "inputs": {',
-        '            "NOMBRE_ENTRADA": 10 o "texto" o [ ... array de bloques (para substack/bucles/condiciones) ... ] o { "opcode": "nested_reporter_opcode", "inputs": { ... }, "fields": { ... } }',
-        '          }',
-        '        }',
-        '      ]',
-        '    }',
-        '  ]',
+        '  "explanation": "Explicación en español para mostrar en el chat sobre lo que genera o la respuesta a la pregunta del usuario.",',
+        '  "mode": "blocks | python | device | 3d",',
+        '  "clearExisting": true o false (modo blocks/3d: si true reemplaza el contenido actual; si false agrega),',
+        '  "scripts": [ ... bloques Scratch, solo modo blocks ... ],',
+        '  "pythonCode": "... código Python, solo modo python ...",',
+        '  "arduinoCode": "... código C++ Arduino, solo modo device ...",',
+        '  "script3D": "clear=true\\nadd box(...)\\nrepeat(4) as i { ... }", solo modo 3d',
+        '}',
+        '',
+        'REGLAS GENERALES:',
+        '1. Respondé SIEMPRE en español en "explanation".',
+        '2. Asegurate de retornar un JSON válido.',
+        '3. El campo "mode" debe coincidir con el MODO ACTIVO indicado en el mensaje del usuario ([MODO ACTIVO: X]).',
+        '4. Si solo respondés una pregunta de chat sin pedir código, dejá los campos de código vacíos y poné la respuesta en "explanation".',
+        '5. NUNCA inventes parámetros, opcodes o funciones que no estén documentadas en la sección del modo activo.',
+        ''
+    ];
+
+    if (activeMode === 'python') {
+        var pythonPrompt = buildPythonModePrompt();
+        for (var pi = 0; pi < pythonPrompt.length; pi++) lines.push(pythonPrompt[pi]);
+    } else if (activeMode === 'device') {
+        var devicePrompt = buildDeviceModePrompt();
+        for (var di = 0; di < devicePrompt.length; di++) lines.push(devicePrompt[di]);
+    } else if (activeMode === '3d') {
+        var d3dPrompt = build3dModePrompt();
+        for (var d3i = 0; d3i < d3dPrompt.length; d3i++) lines.push(d3dPrompt[d3i]);
+    } else {
+        // ── modo blocks: contrato + ejemplos + referencia de bloques ──
+        lines.push('CONTRATO DE BLOQUES (modo blocks):',
+        '"scripts" es un array de scripts, cada uno con "blocks" (array de bloques). Estructura de un bloque:',
+        '{',
+        '  "opcode": "opcode_del_bloque",',
+        '  "fields": { "NOMBRE_CAMPO": "valor" }, // opcional, para variables, listas, teclas o disfraces',
+        '  "inputs": {',
+        '    "NOMBRE_ENTRADA": 10 o "texto" o [ ... array de bloques (para substack/bucles/condiciones) ... ] o { "opcode": "nested_reporter_opcode", "inputs": { ... }, "fields": { ... } }',
+        '  }',
         '}',
         '',
         'EJEMPLO DE JSON DE RETORNO (calculadora):',
@@ -257,36 +435,37 @@ function buildAppSystemPrompt(trainingExamples, sessionSummary) {
         '=== BLOQUES DISPONIBLES ===',
         'Formato: opcode[tipo] desc (f:campo1) (v:entrada1) {st:substack}',
         'Tipos: h=hat s=stack c=c-block r=reporter b=boolean e=end',
-        '',
-    ];
+        ''
+        );
 
-    // Inject compact block reference from library
-    var blockRef = getCompactPromptLines();
-    for (var bri = 0; bri < blockRef.length; bri++) {
-        lines.push(blockRef[bri]);
+        // Inject compact block reference from library
+        var blockRef = getCompactPromptLines();
+        for (var bri = 0; bri < blockRef.length; bri++) {
+            lines.push(blockRef[bri]);
+        }
+
+        lines.push('');
+        lines.push('CÓMO EDITAR BLOQUES EXISTENTES:');
+        lines.push('- El workspace actual está arriba (WORKSPACE ACTUAL).');
+        lines.push('- Para MODIFICAR: responde con "clearExisting": true y provee el JSON de TODOS los bloques nuevos/modificados.');
+        lines.push('- Para AGREGAR: responde con "clearExisting": false y el JSON del bloque nuevo.');
+        lines.push('');
+
+        lines.push('TIPS:');
+        lines.push('- Todos los valores de variables o teclas se especifican en el objeto fields.');
+        lines.push('- Los valores numéricos, lógicos o de texto se pasan en el objeto inputs.');
+        lines.push('- Los bloques reporteros anidados se colocan como objetos con sus propiedades correspondientes.');
+        lines.push('- Si dudás de un bloque, usá DETALLE:opcode y recibirás la info completa.');
+        lines.push('');
+        lines.push('TIPS ARDUINO:');
+        lines.push('- Para proyectos Arduino puros, usá arduino_whenArduinoBegin como hat block.');
+        lines.push('- Para proyectos mixtos Scratch+Arduino, usá event_whenflagclicked.');
+        lines.push('- arduino_digitalRead devuelve booleano (true/false), NO un número.');
+        lines.push('- arduino_analogRead devuelve número de 0 a 1023.');
+        lines.push('- Usá arduino_map para convertir rangos (ej: sensor 0-1023 a posición -240 a 240).');
+        lines.push('- Para botones con INPUT_PULLUP: presionado=false, suelto=true (lógica invertida).');
+        lines.push('- Los pines de Arduino son números: 2,3,4...13 para digitales, "A0","A1"..."A5" para analógicos.');
     }
-
-    lines.push('');
-    lines.push('CÓMO EDITAR BLOQUES EXISTENTES:');
-    lines.push('- El workspace actual está arriba (WORKSPACE ACTUAL).');
-    lines.push('- Para MODIFICAR: responde con "clearExisting": true y provee el JSON de TODOS los bloques nuevos/modificados.');
-    lines.push('- Para AGREGAR: responde con "clearExisting": false y el JSON del bloque nuevo.');
-    lines.push('');
-
-    lines.push('TIPS:');
-    lines.push('- Todos los valores de variables o teclas se especifican en el objeto fields.');
-    lines.push('- Los valores numéricos, lógicos o de texto se pasan en el objeto inputs.');
-    lines.push('- Los bloques reporteros anidados se colocan como objetos con sus propiedades correspondientes.');
-    lines.push('- Si dudás de un bloque, usá DETALLE:opcode y recibirás la info completa.');
-    lines.push('');
-    lines.push('TIPS ARDUINO:');
-    lines.push('- Para proyectos Arduino puros, usá arduino_whenArduinoBegin como hat block.');
-    lines.push('- Para proyectos mixtos Scratch+Arduino, usá event_whenflagclicked.');
-    lines.push('- arduino_digitalRead devuelve booleano (true/false), NO un número.');
-    lines.push('- arduino_analogRead devuelve número de 0 a 1023.');
-    lines.push('- Usá arduino_map para convertir rangos (ej: sensor 0-1023 a posición -240 a 240).');
-    lines.push('- Para botones con INPUT_PULLUP: presionado=false, suelto=true (lógica invertida).');
-    lines.push('- Los pines de Arduino son números: 2,3,4...13 para digitales, "A0","A1"..."A5" para analógicos.');
 
     lines.push('Áreas:');
     for (var fi = 0; fi < AI_KNOWLEDGE.features.length; fi++) {
@@ -307,7 +486,7 @@ function buildAppSystemPrompt(trainingExamples, sessionSummary) {
     }
 
     if (!trainingExamples && !sessionSummary) {
-        _appPromptCache = lines.join('\n');
+        _appPromptCacheByMode[activeMode] = lines.join('\n');
     }
     return lines.join('\n');
 }
@@ -352,28 +531,51 @@ function readBodySafe(res) {
     });
 }
 
-function callOpenAI(providerUrl, apiKey, model, messages, maxTokens, retries) {
+function callOpenAI(providerUrl, apiKey, model, messages, maxTokens, options) {
+    var opts = options || {};
+    var sendTemperature = opts.sendTemperature !== false;
+    var retries = opts.retries;
     if (!maxTokens) maxTokens = 4096;
     if (retries === undefined) retries = 3;
     var delay = 1000;
 
     function attempt(remaining) {
+        var headers = {
+            'Content-Type': 'application/json'
+        };
+        // Solo enviar Authorization si hay clave (los proveedores públicos gratuitos
+        // como Pollinations funcionan sin clave o aceptan cualquier valor).
+        if (apiKey) {
+            headers['Authorization'] = 'Bearer ' + apiKey;
+        }
+        var payload = {
+            model: model,
+            messages: messages
+        };
+        // Pollinations (tier anónimo) devuelve 402 si el body incluye `temperature`.
+        if (sendTemperature) {
+            payload.temperature = 0.3;
+        }
+        payload.max_tokens = maxTokens;
         return fetch(providerUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + apiKey
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: messages,
-                temperature: 0.3,
-                max_tokens: maxTokens
-            })
+            headers: headers,
+            body: JSON.stringify(payload)
         }).then(function (res) {
             if (res.status === 429 && remaining > 0) {
                 return new Promise(function (resolve) {
                     setTimeout(resolve, delay * (4 - remaining));
+                }).then(function () {
+                    return attempt(remaining - 1);
+                });
+            }
+
+            // Pollinations (tier anónimo) limita a ~1 petición / 15 s por IP y
+            // devuelve 402 cuando se agota la cuota. Reintentamos UNA vez tras
+            // esperar; si vuelve a fallar, mostramos un aviso claro al usuario.
+            if (res.status === 402 && remaining === retries) {
+                return new Promise(function (resolve) {
+                    setTimeout(resolve, 15000);
                 }).then(function () {
                     return attempt(remaining - 1);
                 });
@@ -396,6 +598,7 @@ function callOpenAI(providerUrl, apiKey, model, messages, maxTokens, retries) {
                     if (res.status === 413) msg = 'El mensaje es demasiado grande para este proveedor (413). Probá con un modelo con más contexto.';
                     if (res.status === 401) msg = 'API Key inválida o sin permisos (401). Verificá tu clave en Settings > AI.';
                     if (res.status === 429) msg = 'Demasiadas solicitudes (429). Esperá unos segundos y volvé a intentar.';
+                    if (res.status === 402) msg = 'Pollinations (tier gratuito) alcanzó su límite de peticiones para esta IP (402). Esperá unos segundos, o usá una API key gratuita: creala en https://enter.pollinations.ai y pegalá en Settings > AI.';
                     if (res.status >= 500) msg = 'Error del servidor (' + res.status + '). Probá de nuevo más tarde.';
                     throw new Error(msg);
                 }
@@ -496,24 +699,32 @@ function AiService(provider, apiKey, model, trainingData) {
     this.model = model;
     this.trainingData = trainingData || [];
     this.sessionSummary = '';
-    this.systemPrompt = buildAppSystemPrompt(this.trainingData.length > 0 ? this.trainingData : null);
+    this.activeMode = 'blocks';
+    this.systemPrompt = buildAppSystemPrompt(this.trainingData.length > 0 ? this.trainingData : null, null, this.activeMode);
 }
+
+AiService.prototype.setActiveMode = function (activeMode) {
+    this.activeMode = activeMode || 'blocks';
+    this.systemPrompt = buildAppSystemPrompt(this.trainingData.length > 0 ? this.trainingData : null, this.sessionSummary, this.activeMode);
+};
 
 AiService.prototype.setTrainingData = function (trainingData) {
     this.trainingData = trainingData || [];
-    this.systemPrompt = buildAppSystemPrompt(this.trainingData.length > 0 ? this.trainingData : null, this.sessionSummary);
+    this.systemPrompt = buildAppSystemPrompt(this.trainingData.length > 0 ? this.trainingData : null, this.sessionSummary, this.activeMode);
 };
 
 AiService.prototype.setSessionSummary = function (summary) {
     this.sessionSummary = summary || '';
-    this.systemPrompt = buildAppSystemPrompt(this.trainingData.length > 0 ? this.trainingData : null, this.sessionSummary);
+    this.systemPrompt = buildAppSystemPrompt(this.trainingData.length > 0 ? this.trainingData : null, this.sessionSummary, this.activeMode);
 };
 
 AiService.prototype._call = function (messages, maxTokens) {
     var config = PROVIDER_CONFIG[this.provider];
     if (!config) return Promise.reject(new Error('Proveedor no soportado'));
     if (config.format === 'openai') {
-        return callOpenAI(config.url, this.apiKey, this.model, messages, maxTokens);
+        return callOpenAI(config.url, this.apiKey, this.model, messages, maxTokens, {
+            sendTemperature: !config.noTemperature
+        });
     }
     if (config.format === 'gemini') {
         return callGemini(this.apiKey, this.model, messages, maxTokens);
@@ -521,15 +732,17 @@ AiService.prototype._call = function (messages, maxTokens) {
     return Promise.reject(new Error('Formato no soportado'));
 };
 
-AiService.prototype.ask = function (userMessage, sessionSummary, mentorMode) {
+AiService.prototype.ask = function (userMessage, sessionSummary, mentorMode, activeMode) {
     var prompt;
+    var mode = activeMode || this.activeMode || 'blocks';
     if (mentorMode) {
         prompt = buildMentorSystemPrompt(sessionSummary || '');
     } else {
-        prompt = this.systemPrompt;
-        if (sessionSummary) {
-            prompt = buildAppSystemPrompt(this.trainingData.length > 0 ? this.trainingData : null, sessionSummary);
-        }
+        prompt = buildAppSystemPrompt(
+            this.trainingData.length > 0 ? this.trainingData : null,
+            sessionSummary,
+            mode
+        );
     }
     return this._call([
         {role: 'system', content: prompt},
@@ -566,7 +779,12 @@ AiService.prototype._parseVerification = function (raw) {
 
 AiService.prototype.verify = function (userMsg, assistantResponse) {
     var self = this;
-    var systemPrompt = self.systemPrompt;
+    // La verificación evalúa respuestas sobre Scratch, así que siempre usa modo blocks.
+    var systemPrompt = buildAppSystemPrompt(
+        self.trainingData.length > 0 ? self.trainingData : null,
+        self.sessionSummary,
+        'blocks'
+    );
 
     return self._call([
         {role: 'system', content: 'Verificás respuestas basándote exclusivamente en el conocimiento provisto. No usés información externa.'},

@@ -226,7 +226,23 @@ class MenuBar extends React.Component {
                 }
             } catch (_) {}
 
-            const content = await this.props.vm.saveProjectFlynt(aiData, deviceData);
+            // Gather Velxio circuit/simulation state for the .flynt bundle
+            var circuitData = null;
+            try {
+                if (this.props.onRequestCircuitState) {
+                    circuitData = await this.props.onRequestCircuitState();
+                }
+            } catch (_) {}
+
+            // Gather the 3D SketchForge project (.skf) for the .flynt bundle
+            var sketchforgeData = null;
+            try {
+                if (this.props.onRequestSketchforgeSkf) {
+                    sketchforgeData = await this.props.onRequestSketchforgeSkf();
+                }
+            } catch (_) {}
+
+            const content = await this.props.vm.saveProjectFlynt(aiData, deviceData, circuitData, sketchforgeData);
             const filename = this.getProjectFilename();
 
             const defaultPath = localStorage.getItem('scratchDefaultPath');
@@ -266,6 +282,17 @@ class MenuBar extends React.Component {
         return `${filenameTitle.substring(0, 100)}.flynt`;
     }
     handleDeviceModeChange (newMode) {
+        if (window.stblockActiveEvaluation && window.stblockActiveEvaluation.running && newMode !== 'evaluacion') {
+            const rule = window.stblockActiveEvaluation.reglaSalida;
+            if (rule === 'bloqueo') {
+                alert('No puedes abandonar la evaluación actual hasta que la completes o finalices.');
+                return;
+            } else if (rule === 'reiniciar') {
+                const confirmExit = window.confirm('Si sales de la evaluación ahora, tu progreso de respuestas se reiniciará al volver (el temporizador seguirá corriendo). ¿Seguro que deseas salir?');
+                if (!confirmExit) return;
+            }
+        }
+
         if (newMode === 'device' && !this.props.deviceModeSelectedDevice) {
             // If switching to device mode without a device selected, open the library
             if (this.props.onRequestOpenDeviceLibrary) {
@@ -593,7 +620,7 @@ MenuBar.propTypes = {
     canSave: PropTypes.bool,
     className: PropTypes.string,
     confirmReadyToReplaceProject: PropTypes.func,
-    deviceMode: PropTypes.oneOf(['game', 'device']),
+    deviceMode: PropTypes.oneOf(['game', 'device', 'diseno', 'evaluacion']),
     deviceModeSelectedDevice: PropTypes.shape({
         id: PropTypes.string,
         name: PropTypes.string
@@ -637,6 +664,8 @@ MenuBar.propTypes = {
     deviceModeConnected: PropTypes.bool,
     onSetTimeTravelMode: PropTypes.func,
     onStartSelectingFileUpload: PropTypes.func,
+    onRequestCircuitState: PropTypes.func,
+    onRequestSketchforgeSkf: PropTypes.func,
     projectTitle: PropTypes.string,
     settingsMenuOpen: PropTypes.bool,
     username: PropTypes.string,

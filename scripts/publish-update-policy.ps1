@@ -27,7 +27,11 @@ $policy = [ordered]@{
     notes = $Notes
 }
 
-$temp = Join-Path $env:TEMP "stblock-policy-$Version.json"
+# Usar exactamente el nombre "policy.json" para el asset: la app consulta
+# releases/latest/download/policy.json. El rename "$temp#policy.json" de gh
+# fallaba y dejaba el archivo con su nombre temporal (stblock-policy-X.json),
+# causando 404 en la app.
+$temp = Join-Path $env:TEMP "policy.json"
 $jsonPolicy = $policy | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText($temp, $jsonPolicy)
 
@@ -49,5 +53,5 @@ if ($AssetDir -and (Test-Path -LiteralPath $AssetDir)) {
     }
 }
 
-gh release upload $Tag --repo $Repo $temp#policy.json --clobber
+gh release upload $Tag --repo $Repo $temp --clobber
 Write-Host "Policy publicada en https://github.com/$Repo/releases/latest/download/policy.json"

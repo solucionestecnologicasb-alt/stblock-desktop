@@ -1,7 +1,11 @@
 packages:
   - "scratch-gui"
   - "scratch-vm"
+  - "sketchforge"
 
 allowBuilds:
   chromedriver: set this to true or false
   core-js: true
+  esbuild: true
+  "@tailwindcss/oxide": true
+  sharp: true

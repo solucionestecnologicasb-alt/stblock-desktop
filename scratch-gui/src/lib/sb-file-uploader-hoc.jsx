@@ -26,7 +26,8 @@ import {
     setCodeViewContent,
     appendTerminalOutput,
     restoreDeviceState,
-    setCircuitData
+    setCircuitData,
+    setSketchforgeData
 } from '../reducers/device-mode';
 
 const messages = defineMessages({
@@ -157,9 +158,10 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 var buffer = this.fileReader.result;
                 var filename = this.fileToUpload && this.fileToUpload.name;
 
-                // Check if .flynt format and extract AI and device data before loading project
+                // Check if .flynt format and extract AI, device and 3D data before loading project
                 var aiDataPromise = Promise.resolve(null);
                 var deviceDataPromise = Promise.resolve(null);
+                var sketchforgeDataPromise = Promise.resolve(null);
                 if (buffer && typeof buffer === 'object') {
                     var VMClass = self.props.vm && self.props.vm.constructor;
                     if (VMClass && VMClass.isFlynt) {
@@ -175,12 +177,19 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                             }
                             return null;
                         });
+                        sketchforgeDataPromise = VMClass.isFlynt(buffer).then(function (isFlynt) {
+                            if (isFlynt && VMClass.extractFlyntSketchforgeData) {
+                                return VMClass.extractFlyntSketchforgeData(buffer);
+                            }
+                            return null;
+                        });
                     }
                 }
 
-                Promise.all([aiDataPromise, deviceDataPromise]).then(function (results) {
+                Promise.all([aiDataPromise, deviceDataPromise, sketchforgeDataPromise]).then(function (results) {
                     var aiData = results[0];
                     var deviceData = results[1];
+                    var sketchforgeData = results[2];
                     self.props.onLoadingStarted();
                     try { localStorage.removeItem('ai_messages'); } catch (e) {}
                     var loadingSuccess = false;
@@ -258,6 +267,14 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                                     }
                                 } catch (_) {}
                             }
+
+                            // Restore 3D SketchForge project (.skf) from .flynt to Redux store.
+                            // Se conserva hasta que se capture un .skf más reciente del iframe.
+                            if (sketchforgeData) {
+                                try {
+                                    self.props.onSetSketchforgeData(sketchforgeData);
+                                } catch (_) {}
+                            }
                         })
                         .catch(function (error) {
                             log.warn(error);
@@ -326,6 +343,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         onAppendTerminal: PropTypes.func,
         onRestoreDeviceState: PropTypes.func,
         onSetCircuitData: PropTypes.func,
+        onSetSketchforgeData: PropTypes.func,
         projectChanged: PropTypes.shape({changed: PropTypes.bool, hasBeenSaved: PropTypes.bool}),
         requestProjectUpload: PropTypes.func,
         userOwnsProject: PropTypes.bool,
@@ -371,7 +389,9 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         // Restore connection state (selected device, port, settings)
         onRestoreDeviceState: deviceState => dispatch(restoreDeviceState(deviceState)),
         // Restore circuit data (Velxio state)
-        onSetCircuitData: circuitData => dispatch(setCircuitData(circuitData))
+        onSetCircuitData: circuitData => dispatch(setCircuitData(circuitData)),
+        // Restore 3D SketchForge project (.skf)
+        onSetSketchforgeData: sketchforgeData => dispatch(setSketchforgeData(sketchforgeData))
     });
     // Allow incoming props to override redux-provided props. Used to mock in tests.
     const mergeProps = (stateProps, dispatchProps, ownProps) => Object.assign(

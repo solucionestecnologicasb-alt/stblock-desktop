@@ -1,13 +1,13 @@
 {
     "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName":  "STBlock",
-    "version":  "0.1.13",
+    "version":  "0.1.14",
     "identifier":  "com.stbacademy.stblock",
     "build":  {
                   "frontendDist":  "../scratch-gui/build",
                   "devUrl":  "http://localhost:8601",
-                  "beforeDevCommand":  "pnpm --filter scratch-gui start",
-                  "beforeBuildCommand":  "pnpm --filter scratch-gui build"
+                  "beforeDevCommand":  "pnpm run dev:servers",
+                  "beforeBuildCommand":  "pnpm run build:app"
               },
     "app":  {
                 "withGlobalTauri":  true,
@@ -48,6 +48,7 @@
                                      "drivers/**/*",
                                      "tools/Arduino/arduino-cli.exe",
                                      "tools/Arduino/arduino-cli.yaml",
+                                     "tools/Arduino/libraries/**/*",
                                      "backends/**/*"
                                  ],
                    "createUpdaterArtifacts":  false,

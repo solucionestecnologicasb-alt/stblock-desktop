@@ -12,6 +12,9 @@ const execute = require('./execute.js');
 const ScratchBlocksConstants = require('./scratch-blocks-constants');
 const TargetType = require('../extension-support/target-type');
 const deviceManifests = require('../devices/device-manifests');
+if (typeof window !== 'undefined') {
+    window.deviceManifests = deviceManifests;
+}
 const Thread = require('./thread');
 const log = require('../util/log');
 const maybeFormatMessage = require('../util/maybe-format-message');

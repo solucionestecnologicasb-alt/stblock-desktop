@@ -29,6 +29,8 @@ const CLEAR_UPLOAD_LOGS = 'scratch-gui/device-mode/CLEAR_UPLOAD_LOGS';
 const RESTORE_DEVICE_STATE = 'scratch-gui/device-mode/RESTORE_DEVICE_STATE';
 const SET_CIRCUIT_DATA = 'scratch-gui/device-mode/SET_CIRCUIT_DATA';
 const CLEAR_CIRCUIT_DATA = 'scratch-gui/device-mode/CLEAR_CIRCUIT_DATA';
+const SET_SKETCHFORGE_DATA = 'scratch-gui/device-mode/SET_SKETCHFORGE_DATA';
+const CLEAR_SKETCHFORGE_DATA = 'scratch-gui/device-mode/CLEAR_SKETCHFORGE_DATA';
 
 // Use the same device data as the device library
 const DEVICES = deviceData;
@@ -75,7 +77,9 @@ const initialState = {
         message: '',
         logs: []
     },
-    circuitData: null
+    circuitData: null,
+    // Restored SketchForge 3D project (.skf) from a .flynt import: {bytes: ArrayBuffer} or null
+    sketchforgeSkf: null
 };
 
 const reducer = function (state = initialState, action) {
@@ -275,6 +279,16 @@ const reducer = function (state = initialState, action) {
             ...state,
             circuitData: null
         };
+    case SET_SKETCHFORGE_DATA:
+        return {
+            ...state,
+            sketchforgeSkf: action.data
+        };
+    case CLEAR_SKETCHFORGE_DATA:
+        return {
+            ...state,
+            sketchforgeSkf: null
+        };
     default:
         return state;
     }
@@ -392,6 +406,15 @@ const clearCircuitData = () => ({
     type: CLEAR_CIRCUIT_DATA
 });
 
+const setSketchforgeData = data => ({
+    type: SET_SKETCHFORGE_DATA,
+    data
+});
+
+const clearSketchforgeData = () => ({
+    type: CLEAR_SKETCHFORGE_DATA
+});
+
 const startUpload = () => ({
     type: SET_UPLOAD_STATE,
     uploadState: {
@@ -434,6 +457,7 @@ const isDeviceChangeConfirmOpen = state => state.scratchGui.deviceMode.deviceCha
 const getPendingDevice = state => state.scratchGui.deviceMode.pendingDevice;
 const getUploadState = state => state.scratchGui.deviceMode.uploadState;
 const getCircuitData = state => state.scratchGui.deviceMode.circuitData;
+const getSketchforgeData = state => state.scratchGui.deviceMode.sketchforgeSkf;
 
 // Selector for extracting serializable device state for persistence
 const getDevicePersistState = state => {
@@ -496,9 +520,12 @@ export {
     getPendingDevice,
     getUploadState,
     getCircuitData,
+    getSketchforgeData,
     getDevicePersistState,
     restoreDeviceState,
     setCircuitData,
     clearCircuitData,
+    setSketchforgeData,
+    clearSketchforgeData,
     DEVICES
 };

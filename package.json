@@ -1,7 +1,7 @@
 {
     "name":  "stblock",
     "description":  "STBlock - Programacion visual, electronica, robotica y creacion de juegos.",
-    "version":  "0.1.13",
+    "version":  "0.1.14",
     "workspaces":  [
                        "scratch-gui",
                        "scratch-vm"
@@ -10,6 +10,10 @@
                     "install:all":  "pnpm install \u0026\u0026 pnpm --filter scratch-gui run prepublish \u0026\u0026 pnpm --dir backend install",
                     "start:gui":  "pnpm --filter scratch-gui start",
                     "start:backend":  "pnpm --dir backend dev",
+                    "build:gui":  "pnpm --filter scratch-gui build",
+                    "build:sketchforge":  "pnpm --filter sketchforge export:stblock \u0026\u0026 node scripts/copy-sketchforge-to-build.mjs",
+                    "build:app":  "pnpm run build:gui \u0026\u0026 pnpm run build:sketchforge",
+                    "dev:servers":  "node scripts/start-dev.mjs",
                     "tauri":  "tauri",
                     "dev":  "tauri dev",
                     "build":  "tauri build",

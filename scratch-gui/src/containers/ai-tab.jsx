@@ -19,6 +19,10 @@ var LS_MODEL = function (p) { return p + '_model'; };
 var LS_TRAINING = 'ai_training_data';
 var LS_SESSION = 'ai_session';
 
+// Proveedor público gratuito sin API key (Pollinations.ai anonymous tier).
+var FREE_PROVIDER = 'pollinations';
+var FREE_DEFAULT_MODEL = 'openai-fast';
+
 function getTypingSpeed(len) {
     if (len > 1000) return 3;
     if (len > 400) return 5;
@@ -56,6 +60,62 @@ function compressSession(entries) {
         parts.push('P' + (i + 1) + ': "' + u + '" → "' + a + '"');
     }
     return parts.join(' | ');
+}
+
+// Intenta parsear el JSON completo de la respuesta; si no, busca un bloque
+// ```json ... ```. Devuelve null si no hay JSON válido.
+function extractJson(content) {
+    if (!content) return null;
+    try {
+        var obj = JSON.parse(content);
+        if (obj && typeof obj === 'object') return obj;
+    } catch (e) {}
+    var jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+        try {
+            return JSON.parse(jsonMatch[1]);
+        } catch (e2) {}
+    }
+    return null;
+}
+
+// Extrae el contenido de un bloque de código cercado con una de las "langs"
+// dadas (```lang ... ```). Devuelve null si no hay ninguno.
+function extractFencedCode(content, langs) {
+    if (!content) return null;
+    for (var i = 0; i < langs.length; i++) {
+        var re = new RegExp('```' + langs[i] + '\\s*([\\s\\S]*?)\\s*```', 'i');
+        var m = content.match(re);
+        if (m && m[1] && m[1].trim()) return m[1].trim();
+    }
+    return null;
+}
+
+// Lee un campo del JSON extendido; si el campo no está, cae al fence.
+function extractField(content, field, langs) {
+    var json = extractJson(content);
+    if (json && typeof json[field] === 'string' && json[field].trim()) {
+        return json[field].trim();
+    }
+    return extractFencedCode(content, langs);
+}
+
+function extractPythonCode(content) {
+    return extractField(content, 'pythonCode', ['python', 'py']);
+}
+
+function extractArduinoCode(content) {
+    return extractField(content, 'arduinoCode', ['cpp', 'arduino']);
+}
+
+function extract3dScript(content) {
+    return extractField(content, 'script3D', ['st3d']);
+}
+
+function extractClearExisting(content) {
+    var json = extractJson(content);
+    if (json && typeof json.clearExisting === 'boolean') return json.clearExisting;
+    return undefined;
 }
 
 var AiTab = function (props) {
@@ -96,10 +156,18 @@ var AiTab = function (props) {
 
     var getService = useCallback(function () {
         if (typeof window === 'undefined') return null;
-        var provider = localStorage.getItem(LS_PROVIDER) || 'groq';
+        var provider = localStorage.getItem(LS_PROVIDER) || FREE_PROVIDER;
         var apiKey = localStorage.getItem(LS_API_KEY(provider));
         var model = localStorage.getItem(LS_MODEL(provider));
         var trainingOn = localStorage.getItem('ai_training_enabled') !== 'false';
+
+        var isFreeProvider = provider === FREE_PROVIDER;
+        if (isFreeProvider) {
+            // El proveedor público gratuito no requiere clave; usamos una ficticia
+            // (Pollinations acepta cualquier valor) y un modelo por defecto.
+            if (!apiKey) apiKey = 'anonymous';
+            if (!model) model = FREE_DEFAULT_MODEL;
+        }
 
         if (!apiKey) return null;
         if (!model) return null;
@@ -256,11 +324,15 @@ var AiTab = function (props) {
         stopTyping();
 
         var sessionSum = compressSession(sessionRef.current);
-        // Inject current workspace state for AI context
+        var activeMode = props.activeMode || 'blocks';
+        // Inject current workspace state for AI context (los bloques Scratch no
+        // aportan contexto útil en modo 3D, así que se omiten)
         var workspaceContext = '';
-        try {
-            workspaceContext = readWorkspace(props.vm);
-        } catch (_e) {}
+        if (activeMode !== '3d') {
+            try {
+                workspaceContext = readWorkspace(props.vm);
+            } catch (_e) {}
+        }
         // Handle DETALLE:opcode — expand to full block info
         var detailMatch = text.match(/DETALLE:(\w+)/);
         var detailInfo = '';
@@ -272,8 +344,9 @@ var AiTab = function (props) {
         }
         var mentorMode = typeof window !== 'undefined' ? localStorage.getItem('ai_mentor_mode') === 'true' : false;
         var modeTag = mentorMode ? '[MODO MENTOR]' : '[MODO NORMAL]';
-        var enhancedText = modeTag + '\n' + (workspaceContext ? workspaceContext + '\n---\n' : '') + detailInfo + text;
-        var askPromise = service.ask(enhancedText, sessionSum, mentorMode);
+        var activeTag = '[MODO ACTIVO: ' + activeMode + ']';
+        var enhancedText = activeTag + '\n' + modeTag + '\n' + (workspaceContext ? workspaceContext + '\n---\n' : '') + detailInfo + text;
+        var askPromise = service.ask(enhancedText, sessionSum, mentorMode, activeMode);
         askPromise.then(function (response) {
             var assIdx = msgIdx + 1;
             var cleanResponse = (response || '').trim();
@@ -300,6 +373,7 @@ var AiTab = function (props) {
                 localStorage.setItem(LS_SESSION, JSON.stringify(sessionRef.current));
             } catch (e) {}
 
+            var hasBlocks = !mentorMode && activeMode === 'blocks';
             setMessages(function (prev) {
                 return prev.concat([{
                     role: 'assistant',
@@ -307,18 +381,98 @@ var AiTab = function (props) {
                     displayContent: displayText,
                     id: assIdx,
                     typing: true,
-                    hasBlocks: !mentorMode
+                    hasBlocks: hasBlocks
                 }]);
             });
             setSending(false);
             startTyping(assIdx, displayText);
 
-            // Auto-create blocks (normal mode only, sync with typing)
-            if (!mentorMode && props.vm && props.vm.editingTarget) {
-                setCreatingIndex(assIdx);
-                setCreateStatus({type: 'loading', message: 'Creando bloques...'});
-                setTimeout(function () { doCreate(cleanResponse); }, 0);
+            // Modo mentor: solo explica, no aplica nada.
+            if (mentorMode || !props.vm || !props.vm.editingTarget) {
+                return;
             }
+
+            // Enrutar la respuesta según el modo activo.
+            if (activeMode === 'python') {
+                var pythonCode = extractPythonCode(cleanResponse);
+                if (!pythonCode) {
+                    setCreateStatus({type: 'error', message: 'La IA no devolvió código Python. Reformulá la pregunta.'});
+                    setCreatingIndex(assIdx);
+                    setTimeout(function () { setCreateStatus(null); setCreatingIndex(null); }, 5000);
+                    return;
+                }
+                setCreatingIndex(assIdx);
+                setCreateStatus({type: 'loading', message: 'Generando código Python...'});
+                if (props.onPythonCodeGenerated) {
+                    props.onPythonCodeGenerated(pythonCode);
+                }
+                setCreateStatus({type: 'success', message: 'Código Python generado en el panel de Programación.'});
+                setCreatingIndex(null);
+                setTimeout(function () { setCreateStatus(null); }, 5000);
+                return;
+            }
+
+            if (activeMode === 'device') {
+                var arduinoCode = extractArduinoCode(cleanResponse);
+                if (!arduinoCode) {
+                    setCreateStatus({type: 'error', message: 'La IA no devolvió código Arduino. Reformulá la pregunta.'});
+                    setCreatingIndex(assIdx);
+                    setTimeout(function () { setCreateStatus(null); setCreatingIndex(null); }, 5000);
+                    return;
+                }
+                setCreatingIndex(assIdx);
+                setCreateStatus({type: 'loading', message: 'Generando código Arduino...'});
+                if (props.onArduinoCodeGenerated) {
+                    props.onArduinoCodeGenerated(arduinoCode);
+                }
+                setCreateStatus({type: 'success', message: 'Código Arduino generado en el editor.'});
+                setCreatingIndex(null);
+                setTimeout(function () { setCreateStatus(null); }, 5000);
+                return;
+            }
+
+            if (activeMode === '3d') {
+                var script3D = extract3dScript(cleanResponse);
+                if (!script3D) {
+                    setCreateStatus({type: 'error', message: 'La IA no devolvió un script 3D. Reformulá la pregunta.'});
+                    setCreatingIndex(assIdx);
+                    setTimeout(function () { setCreateStatus(null); setCreatingIndex(null); }, 5000);
+                    return;
+                }
+                setCreatingIndex(assIdx);
+                setCreateStatus({type: 'loading', message: 'Interpretando modelo 3D...'});
+                var clearExisting = extractClearExisting(cleanResponse);
+                var shapeResult = props.onShapes3DGenerated ? props.onShapes3DGenerated(script3D, clearExisting) : null;
+                if (shapeResult && typeof shapeResult.then === 'function') {
+                    shapeResult.then(function (res) {
+                        if (res && res.ok) {
+                            if (res.queued) {
+                                setCreateStatus({type: 'warning', message: res.error || 'Formas listas. Abrí Diseño 3D para aplicarlas.'});
+                            } else {
+                                setCreateStatus({type: 'success', message: 'Se generaron ' + (res.count || 0) + ' formas en Diseño 3D.'});
+                            }
+                        } else {
+                            setCreateStatus({type: 'error', message: (res && res.error) || 'Error al generar el modelo 3D.'});
+                        }
+                        setCreatingIndex(null);
+                        setTimeout(function () { setCreateStatus(null); }, 5000);
+                    }).catch(function () {
+                        setCreateStatus({type: 'error', message: 'Error al generar el modelo 3D.'});
+                        setCreatingIndex(null);
+                        setTimeout(function () { setCreateStatus(null); }, 5000);
+                    });
+                } else {
+                    setCreatingIndex(null);
+                    setCreateStatus({type: 'success', message: 'Modelo 3D procesado.'});
+                    setTimeout(function () { setCreateStatus(null); }, 5000);
+                }
+                return;
+            }
+
+            // Auto-create blocks (modo blocks, sync with typing)
+            setCreatingIndex(assIdx);
+            setCreateStatus({type: 'loading', message: 'Creando bloques...'});
+            setTimeout(function () { doCreate(cleanResponse); }, 0);
         }).catch(function (err) {
             var errorMsg = err.message || 'Error desconocido';
             if (errorMsg.indexOf('413') !== -1) {
@@ -338,7 +492,8 @@ var AiTab = function (props) {
             });
             setSending(false);
         });
-    }, [getService, messages.length, startTyping, stopTyping]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [getService, messages.length, startTyping, stopTyping, props.activeMode,
+        props.onPythonCodeGenerated, props.onArduinoCodeGenerated, props.onShapes3DGenerated]); // eslint-disable-line react-hooks/exhaustive-deps
 
     var handleVerify = useCallback(function (msgIndex) {
         var service = getService();
@@ -710,7 +865,11 @@ AiTab.propTypes = {
     onClearExplain: PropTypes.func,
     onMentorGuidance: PropTypes.func,
     onActivateTab: PropTypes.func,
-    reanalyzeTick: PropTypes.number
+    reanalyzeTick: PropTypes.number,
+    activeMode: PropTypes.oneOf(['blocks', 'python', 'device', '3d']),
+    onPythonCodeGenerated: PropTypes.func,
+    onArduinoCodeGenerated: PropTypes.func,
+    onShapes3DGenerated: PropTypes.func
 };
 
 export default AiTab;

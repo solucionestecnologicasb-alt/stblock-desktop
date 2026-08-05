@@ -17,7 +17,9 @@ var PROVIDER_META = {
     openai: {label: 'OpenAI', gratis: false, apiModels: 'https://api.openai.com/v1/models'},
     gemini: {label: 'Gemini', gratis: true, apiModels: null},
     openrouter: {label: 'OpenRouter', gratis: false, apiModels: 'https://openrouter.ai/api/v1/models'},
-    opencodezen: {label: 'OpenCode Zen', gratis: false, apiModels: '/zen/v1/models'}
+    opencodezen: {label: 'OpenCode Zen', gratis: false, apiModels: '/zen/v1/models'},
+    // Proveedor público gratuito sin API key (Pollinations.ai anonymous tier).
+    pollinations: {label: 'Pollinations (Gratis)', gratis: true, apiModels: null}
 };
 
 var FALLBACK_MODELS = {
@@ -50,6 +52,11 @@ var FALLBACK_MODELS = {
         {id: 'gemini-3-flash', label: 'Gemini 3 Flash'},
         {id: 'deepseek-v4-flash-free', label: 'DeepSeek V4 Flash Free (gratis)'},
         {id: 'big-pickle', label: 'Big Pickle (gratis)'}
+    ],
+    pollinations: [
+        {id: 'openai-fast', label: 'OpenAI Fast (GPT-OSS 20B)'},
+        {id: 'openai', label: 'OpenAI (alias)'},
+        {id: 'gpt-oss', label: 'GPT-OSS (alias)'}
     ]
 };
 
@@ -141,7 +148,7 @@ function classifyModels(rawModels, providerId) {
 
         // Determine if free
         var isFree = false;
-        if (providerId === 'groq') {
+        if (providerId === 'groq' || providerId === 'pollinations') {
             isFree = true;
         } else if (providerId === 'openrouter') {
             // OpenRouter API returns pricing: {prompt: "0", completion: "0"} for free models
@@ -214,7 +221,9 @@ class AiMenu extends React.PureComponent {
             'handleMentorToggle',
             'loadModels'
         ]);
-        var savedProvider = typeof window !== 'undefined' ? localStorage.getItem(LS_PROVIDER) || 'groq' : 'groq';
+        // Por defecto usamos Pollinations: servicio público gratuito sin API key,
+        // así la IA funciona desde el primer uso sin configurar nada.
+        var savedProvider = typeof window !== 'undefined' ? localStorage.getItem(LS_PROVIDER) || 'pollinations' : 'pollinations';
         this.state = {
             provider: savedProvider,
             apiKey: typeof window !== 'undefined' ? localStorage.getItem(LS_API_KEY(savedProvider)) || '' : '',
@@ -268,7 +277,14 @@ class AiMenu extends React.PureComponent {
                 this.setState({models: ordered, loading: false});
             } else {
                 // Fallback
-                this.setState({models: FALLBACK_MODELS[providerId] || [], loading: false});
+                var fallback = FALLBACK_MODELS[providerId] || [];
+                var nextModel = this.state.model;
+                if (!nextModel && providerId === 'pollinations' && fallback.length > 0) {
+                    // El proveedor gratuito queda listo para usar de entrada.
+                    nextModel = fallback[0].id;
+                    localStorage.setItem(LS_MODEL(providerId), nextModel);
+                }
+                this.setState({models: fallback, model: nextModel, loading: false});
             }
         }.bind(this));
     }
@@ -349,21 +365,30 @@ class AiMenu extends React.PureComponent {
                                 onChange={this.handleProviderChange}
                             />
                         </div>
-                        <div style={{marginBottom: 8}}>
-                            <label style={labelStyle}>API Key</label>
-                            <input
-                                type="text"
-                                value={this.state.apiKey}
-                                onChange={this.handleKeyChange}
-                                placeholder={
-                                    this.state.provider === 'groq' ? 'gsk_...' :
-                                    this.state.provider === 'gemini' ? 'AIza...' :
-                                    this.state.provider === 'openrouter' ? 'sk-or-...' :
-                                    this.state.provider === 'opencodezen' ? 'oc_...' : 'sk-...'
-                                }
-                                style={inputStyle}
-                            />
-                        </div>
+                        {this.state.provider === 'pollinations' ? (
+                            <div style={{marginBottom: 8}}>
+                                <label style={labelStyle}>API Key</label>
+                                <div style={{color: '#4caf50', fontSize: '0.78rem', padding: '6px 0'}}>
+                                    Sin clave requerida — servicio público gratuito
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{marginBottom: 8}}>
+                                <label style={labelStyle}>API Key</label>
+                                <input
+                                    type="text"
+                                    value={this.state.apiKey}
+                                    onChange={this.handleKeyChange}
+                                    placeholder={
+                                        this.state.provider === 'groq' ? 'gsk_...' :
+                                        this.state.provider === 'gemini' ? 'AIza...' :
+                                        this.state.provider === 'openrouter' ? 'sk-or-...' :
+                                        this.state.provider === 'opencodezen' ? 'oc_...' : 'sk-...'
+                                    }
+                                    style={inputStyle}
+                                />
+                            </div>
+                        )}
                         <div>
                             <label style={labelStyle}>Modelo</label>
                             {this.state.loading ? (

@@ -1,0 +1,47 @@
+Librería de formas reales — SketchForge
+======================================
+
+Los modelos STL se descargan en build desde repositorios GitHub con licencias
+abiertas (Creative Commons). Cada entrada incluye su atribución y licencia.
+
+1. Anillo de rodamiento (Thor) (thor-bearing-ring)
+   Fuente: AngelLM/Thor — https://github.com/AngelLM/Thor
+   Licencia: CC BY-SA 4.0
+   Atribución: AngelLM — Thor (CC BY-SA 4.0)
+   Bbox: 10 × 3.65 × 12.13 mm (unidades raw del STL)
+   Triángulos: 92
+
+2. Tecla KLP Choc 1.5U (klp-keycap-choc)
+   Fuente: braindefender/KLP-Lame-Keycaps — https://github.com/braindefender/KLP-Lame-Keycaps
+   Licencia: CC BY-SA 4.0
+   Atribución: braindefender — KLP-Lame-Keycaps (CC BY-SA 4.0)
+   Bbox: 26.49 × 6.18 × 16.49 mm (unidades raw del STL)
+   Triángulos: 38622
+
+3. Oruga SMARS 18 mm (smars-track-18mm)
+   Fuente: kevinmcaleer/smars — https://github.com/kevinmcaleer/smars
+   Licencia: CC BY-SA 4.0
+   Atribución: Kevin McAleer — SMARS (CC BY-SA 4.0)
+   Bbox: 19 × 7 × 16 mm (unidades raw del STL)
+   Triángulos: 1336
+
+4. Pelícano (pelican)
+   Fuente: raymondben/3d — https://github.com/raymondben/3d
+   Licencia: CC BY
+   Atribución: raymondben — 3d (CC BY)
+   Bbox: 92.99 × 19.5 × 84 mm (unidades raw del STL)
+   Triángulos: 26304
+
+5. Cráneo de ciervo mulo (deer-skull-mule)
+   Fuente: raymondben/3d — https://github.com/raymondben/3d
+   Licencia: CC BY
+   Atribución: raymondben — 3d (CC BY)
+   Bbox: 89 × 9.17 × 50 mm (unidades raw del STL)
+   Triángulos: 71562
+
+6. Cráneo de ciervo de cola blanca (deer-skull-white-tailed)
+   Fuente: raymondben/3d — https://github.com/raymondben/3d
+   Licencia: CC BY
+   Atribución: raymondben — 3d (CC BY)
+   Bbox: 89 × 9.17 × 50 mm (unidades raw del STL)
+   Triángulos: 71562

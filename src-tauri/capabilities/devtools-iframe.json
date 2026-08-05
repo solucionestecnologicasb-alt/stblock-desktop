@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "devtools-iframe",
+  "description": "Permite alternar devtools (F12 / Ctrl+Shift+I) desde el iframe de SketchForge en desarrollo.",
+  "windows": [
+    "*"
+  ],
+  "local": false,
+  "remote": {
+    "urls": [
+      "http://localhost:3000",
+      "http://localhost:8601"
+    ]
+  },
+  "permissions": [
+    "core:webview:allow-internal-toggle-devtools"
+  ]
+}

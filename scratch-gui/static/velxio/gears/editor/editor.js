@@ -55,6 +55,66 @@
   var pieceDragMode = null;
   var piecePivotDragOffset = null;
 
+  window.registerDynamicDeviceBlocks = function(boardId) {
+    function normalizeDeviceShadowXML(xml) {
+      if (typeof xml !== 'string') return xml;
+      return xml.replace(
+        /<shadow\b([^>]*)\btype=(['"])(math_uint8_number|math_half_angle)\2([^>]*)>([\s\S]*?)<\/shadow>/g,
+        function(match, beforeType, quote, _type, afterType, content) {
+          var numMatch = content.match(/<field\b[^>]*\bname=(['"])NUM\1[^>]*>([\s\S]*?)<\/field>/);
+          if (!numMatch) return match;
+          return '<shadow' + beforeType + 'type=' + quote + 'math_number' + quote + afterType + '><field name=' + numMatch[1] + 'NUM' + numMatch[1] + '>' + numMatch[2] + '</field></shadow>';
+        }
+      );
+    }
+
+    var toolboxXml = '';
+    var parentWin = window.parent;
+    var manifests = (parentWin && parentWin.deviceManifests) || window.deviceManifests;
+    if (manifests) {
+      var manifest = manifests[boardId || 'stbBoardV2'];
+      if (manifest && manifest.categories) {
+        manifest.categories.forEach(function(cat) {
+          // Registrar menús (bloques de sombra/dropdowns)
+          if (cat.menus && Array.isArray(cat.menus)) {
+            cat.menus.forEach(function(m) {
+              if (m.json && m.json.type) {
+                if (typeof Blockly !== 'undefined' && !Blockly.Blocks[m.json.type]) {
+                  Blockly.Blocks[m.json.type] = {
+                    init: function() {
+                      this.jsonInit(m.json);
+                    }
+                  };
+                }
+              }
+            });
+          }
+
+          var catXml = '';
+          cat.blocks.forEach(function(b) {
+            if (b.json && b.json.type) {
+              if (typeof Blockly !== 'undefined' && !Blockly.Blocks[b.json.type]) {
+                Blockly.Blocks[b.json.type] = {
+                  init: function() {
+                    this.jsonInit(b.json);
+                  }
+                };
+              }
+            }
+            if (b.xml) {
+              catXml += normalizeDeviceShadowXML(b.xml);
+            }
+          });
+          toolboxXml += '<category name="' + (cat.name || 'Dispositivo') + '" colour="' + (cat.color1 || '#00979C') + '">' + catXml + '</category>';
+        });
+      }
+    }
+    if (!toolboxXml && typeof window.ScratchBlockly !== 'undefined' && typeof window.ScratchBlockly.getArduinoBlocks === 'function') {
+      toolboxXml += '<category name="Arduino" colour="#00979C">' + window.ScratchBlockly.getArduinoBlocks() + '</category>';
+    }
+    return toolboxXml;
+  };
+
   var installedPiecePresets = [{
     schema: 'stblock-piece-preset-v1',
     id: 'servo-sg90',
@@ -349,6 +409,77 @@
       if (onConfirm) onConfirm();
     };
     document.getElementById('confirmNo').onclick = function() {
+      overlay.remove();
+      if (onCancel) onCancel();
+    };
+    overlay.onclick = function(e) {
+      if (e.target === overlay) {
+        overlay.remove();
+        if (onCancel) onCancel();
+      }
+    };
+  }
+
+  function showAlert(message, onOk) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.8);z-index:99999;display:flex;align-items:center;justify-content:center;';
+
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:#1e293b;padding:24px;border-radius:12px;width:90%;max-width:380px;text-align:center;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);border-top: 4px solid #3b82f6;';
+    modal.innerHTML = '<p style="color:#f1f5f9;margin:0 0 20px;font-size:14px;line-height:1.6;font-family:sans-serif;">' + message + '</p>' +
+      '<div style="display:flex;justify-content:center;">' +
+      '<button id="alertOk" style="padding:10px 32px;background:#3b82f6;border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:bold;font-family:sans-serif;font-size:13px;transition:all 0.2s;">Entendido</button>' +
+      '</div>';
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    document.getElementById('alertOk').onclick = function() {
+      overlay.remove();
+      if (onOk) onOk();
+    };
+    overlay.onclick = function(e) {
+      if (e.target === overlay) {
+        overlay.remove();
+        if (onOk) onOk();
+      }
+    };
+  }
+
+  function showPrompt(message, defaultValue, onOk, onCancel) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.8);z-index:99999;display:flex;align-items:center;justify-content:center;';
+
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:#1e293b;padding:24px;border-radius:12px;width:90%;max-width:380px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);border-top: 4px solid #3b82f6;';
+    modal.innerHTML = '<p style="color:#f1f5f9;margin:0 0 14px;font-size:14px;font-weight:bold;line-height:1.5;font-family:sans-serif;">' + message + '</p>' +
+      '<input id="promptInput" type="text" value="' + (defaultValue || '') + '" style="width:100%;box-sizing:border-box;padding:10px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#fff;margin-bottom:20px;outline:none;font-size:13px;font-family:sans-serif;">' +
+      '<div style="display:flex;gap:12px;justify-content:flex-end;">' +
+      '<button id="promptCancel" style="padding:10px 20px;background:#475569;border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-family:sans-serif;">Cancelar</button>' +
+      '<button id="promptSubmit" style="padding:10px 24px;background:#3b82f6;border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:bold;font-size:13px;font-family:sans-serif;">Aceptar</button>' +
+      '</div>';
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    var input = document.getElementById('promptInput');
+    input.focus();
+    input.select();
+    
+    input.onkeydown = function(e) {
+      if (e.key === 'Enter') {
+        var val = input.value;
+        overlay.remove();
+        if (onOk) onOk(val);
+      }
+    };
+
+    document.getElementById('promptSubmit').onclick = function() {
+      var val = input.value;
+      overlay.remove();
+      if (onOk) onOk(val);
+    };
+    document.getElementById('promptCancel').onclick = function() {
       overlay.remove();
       if (onCancel) onCancel();
     };
@@ -2279,6 +2410,28 @@
   async function exportPiecePreset() {
     var json = currentPiecePresetJson();
     var filename = (pieceState.id || 'pieza') + '.piece.json';
+    
+    if (window.__TAURI__) {
+      try {
+        var dialog = window.__TAURI__.dialog;
+        var core = window.__TAURI__.core;
+        if (dialog && dialog.save && core && core.invoke) {
+          var filePath = await dialog.save({
+            defaultPath: filename,
+            filters: [{ name: 'JSON', extensions: ['json'] }]
+          });
+          if (filePath) {
+            var bytes = Array.from(new TextEncoder().encode(json));
+            await core.invoke('save_file', { path: filePath, content: bytes });
+            toast('Preset guardado: ' + filename);
+          }
+          return;
+        }
+      } catch (e) {
+        console.warn('[STBLOCK-PIECES] Error usando Tauri dialog/core:', e);
+      }
+    }
+
     if (window.showSaveFilePicker) {
       try {
         var handle = await window.showSaveFilePicker({
@@ -5112,6 +5265,27 @@
   initRobotEditor();
 
   var editorParams = new URLSearchParams(window.location.search);
+  var isStudentMode = window.location.search.indexOf('mode=student') !== -1;
+  if (isStudentMode) {
+    document.body.classList.add('student-mode');
+    if ($('adminLock')) $('adminLock').style.display = 'none';
+    
+    if (window.ScratchBlockly && typeof window.ScratchBlockly.registerAllBlocks === 'function') {
+      try {
+        window.ScratchBlockly.registerAllBlocks();
+        console.log('[STBLOCK-STUDENT] Bloques de Scratch registrados correctamente para el alumno.');
+      } catch (e) {
+        console.warn('[STBLOCK-STUDENT] Error registrando bloques:', e);
+      }
+    }
+
+    window.addEventListener('message', function(event) {
+      if (event.data && event.data.type === 'load-student-evaluation') {
+        console.log('[STBLOCK-STUDENT] Recibida evaluación del alumno:', event.data.evaluation);
+        previewEvaluacion(event.data.evaluation);
+      }
+    });
+  }
   var adminMode = editorParams.get('adminMode') || editorParams.get('mode');
   var returnRobotId = editorParams.get('robotId');
   var returnMapId = editorParams.get('mapId');
@@ -5293,7 +5467,12 @@
     bloques_completar: { nombre: 'Completar Bloques', color: '#4C97FF', icono: '🧩', esBloque: true },
     bloques_ordenar: { nombre: 'Ordenar Bloques', color: '#FFAB19', icono: '🔢', esBloque: true },
     bloques_armar: { nombre: 'Armar Programa', color: '#9966FF', icono: '🏗️', esBloque: true },
-    bloques_corregir: { nombre: 'Corregir Bloques', color: '#ef4444', icono: '🔧', esBloque: true }
+    bloques_corregir: { nombre: 'Corregir Bloques', color: '#ef4444', icono: '🔧', esBloque: true },
+    // Ejercicios de electrónica con simulador Velxio
+    circuito_armar: { nombre: 'Armar Circuito', color: '#00979C', icono: '🔌' },
+    circuito_depurar: { nombre: 'Depurar Circuito', color: '#ef4444', icono: '🔧' },
+    circuito_cuestionario: { nombre: 'Circuito + Quiz', color: '#3b82f6', icono: '☑️' },
+    circuito_codigo: { nombre: 'Circuito + Código', color: '#FF8C1A', icono: '💻' }
   };
 
   // Plantillas predefinidas
@@ -5362,6 +5541,12 @@
       tags: [],
       ejercicios: [],
       notificarResultado: 'avanzar',
+      reglaSalida: 'continuar',
+      ejerciciosAzar: 0,
+      tiempoAlerta: 1,
+      permitirRetroceder: true,
+      entorno: 'robotica',
+      tarjeta: 'stbBoardV2',
       fechaCreacion: new Date().toISOString(),
       fechaModificacion: new Date().toISOString()
     };
@@ -5373,6 +5558,7 @@
       tipo: tipo,
       enunciado: '',
       puntos: 10,
+      intentosMax: -1,
       pista: '',
       explicacion: ''
     };
@@ -5453,6 +5639,32 @@
         base.pistas = [];
         base.bloquesState = null;
         break;
+      case 'circuito_armar':
+        base.circuitoSolucion = null;
+        base.circuitoDiagrama = null;
+        break;
+      case 'circuito_depurar':
+        base.circuitoSolucion = null;
+        base.circuitoInicial = null;
+        base.circuitoDiagrama = null;
+        break;
+      case 'circuito_cuestionario':
+        base.circuitoInicial = null;
+        base.opciones = [
+          { texto: 'Opción A', correcta: true },
+          { texto: 'Opción B', correcta: false },
+          { texto: 'Opción C', correcta: false }
+        ];
+        break;
+      case 'circuito_codigo':
+        base.circuitoSolucion = null;
+        base.arduinoSimTime = 2000;
+        base.arduinoSimExpected = '';
+        base.circuitoDiagrama = null;
+        base.progMode = 'codigo';        // 'codigo' o 'bloques'
+        base.ocultar = 'programacion';   // 'programacion' o 'circuito'
+        base.bloquesInfo = null;         // Si progMode === 'bloques'
+        break;
     }
 
     return base;
@@ -5465,7 +5677,7 @@
     console.log('[STBLOCK-DEBUG] Initializing Evaluaciones Editor');
 
     // Sincronizar estado desde el form
-    ['evalTitulo', 'evalId', 'evalDescripcion', 'evalNivel', 'evalTiempo', 'evalTags', 'evalNotificarResultado'].forEach(function(id) {
+    ['evalTitulo', 'evalId', 'evalDescripcion', 'evalNivel', 'evalEntorno', 'evalTarjeta', 'evalTiempo', 'evalTags', 'evalNotificarResultado', 'evalReglaSalida', 'evalEjerciciosAzar', 'evalTiempoAlerta', 'evalPermitirRetroceder'].forEach(function(id) {
       var el = $(id);
       if (el) {
         el.addEventListener('change', syncEvaluacionStateFromForm);
@@ -5473,11 +5685,54 @@
       }
     });
 
+    if ($('evalEntorno')) {
+      $('evalEntorno').addEventListener('change', function() {
+        var isDevices = $('evalEntorno').value === 'dispositivos';
+        if ($('lblEvalTarjeta')) $('lblEvalTarjeta').style.display = isDevices ? 'block' : 'none';
+        var opt = $('evalModoCodigoOption');
+        if (opt) {
+          opt.textContent = isDevices ? 'Código (Arduino/texto)' : 'Código (Python/texto)';
+        }
+        var ej = getSelectedEjercicio();
+        if (ej) showBloquesEditor(ej);
+        filterEjerciciosByMode();
+      });
+    }
+
+    if ($('evalTarjeta')) {
+      $('evalTarjeta').addEventListener('change', function() {
+        var ej = getSelectedEjercicio();
+        if (ej) showBloquesEditor(ej);
+      });
+    }
+
     // Filtrar ejercicios según el modo seleccionado
     if ($('evalModo')) {
       $('evalModo').addEventListener('change', filterEjerciciosByMode);
-      // Aplicar filtro inicial
       filterEjerciciosByMode();
+    }
+
+    // Configurar la carga de resultados del estudiante
+    if ($('btnSubirResultados') && $('fileResultados')) {
+      $('btnSubirResultados').onclick = function() {
+        $('fileResultados').click();
+      };
+      $('fileResultados').onchange = function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        var r = new FileReader();
+        r.onload = function(evt) {
+          try {
+            var res = verifyAndLoadResult(evt.target.result);
+            mostrarReporteResultado(res);
+            toast('Reporte cargado correctamente');
+          } catch(err) {
+            showAlert('Error al leer reporte: ' + err.message);
+          }
+        };
+        r.readAsText(file);
+        e.target.value = '';
+      };
     }
 
     // Botones de agregar ejercicio
@@ -5542,7 +5797,7 @@
     });
 
     // Campos del inspector de ejercicio
-    ['ejercicioEnunciado', 'ejercicioPuntos', 'ejercicioPista', 'ejercicioExplicacion'].forEach(function(id) {
+    ['ejercicioEnunciado', 'ejercicioPuntos', 'ejercicioIntentosMax', 'ejercicioPista', 'ejercicioExplicacion'].forEach(function(id) {
       var el = $(id);
       if (el) {
         el.addEventListener('change', syncEjercicioFromForm);
@@ -5676,6 +5931,19 @@
       };
     }
 
+    if ($('arduinoSimTime')) {
+      $('arduinoSimTime').oninput = function() {
+        var ej = getSelectedEjercicio();
+        if (ej) ej.arduinoSimTime = parseInt($('arduinoSimTime').value) || 2000;
+      };
+    }
+    if ($('arduinoSimExpected')) {
+      $('arduinoSimExpected').oninput = function() {
+        var ej = getSelectedEjercicio();
+        if (ej) ej.arduinoSimExpected = $('arduinoSimExpected').value;
+      };
+    }
+
     // Reto
     if ($('descReto')) {
       $('descReto').oninput = function() {
@@ -5707,11 +5975,215 @@
         if (ej) ej.maxBloques = parseInt($('maxBloques').value) || 0;
       };
     }
+
+    // Armar circuito (Velxio)
+    if ($('btnEditarCircuitoSolucion')) {
+      $('btnEditarCircuitoSolucion').onclick = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        abrirEditorCircuitoSolucion(ej, 'circuitoSolucion');
+      };
+    }
+    if ($('circuitoDiagramaFile')) {
+      $('circuitoDiagramaFile').onchange = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        var file = this.files[0];
+        if (file) {
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            var base64 = e.target.result;
+            ej.circuitoDiagrama = base64;
+            actualizarCircuitoEditorUI(ej);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+    }
+    if ($('btnEliminarCircuitoDiagrama')) {
+      $('btnEliminarCircuitoDiagrama').onclick = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        ej.circuitoDiagrama = null;
+        if ($('circuitoDiagramaFile')) $('circuitoDiagramaFile').value = '';
+        actualizarCircuitoEditorUI(ej);
+      };
+    }
+
+    // Depurar circuito (Velxio)
+    if ($('btnEditarCircuitoInicial')) {
+      $('btnEditarCircuitoInicial').onclick = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        abrirEditorCircuitoSolucion(ej, 'circuitoInicial');
+      };
+    }
+    if ($('btnEditarCircuitoSolucionDepurar')) {
+      $('btnEditarCircuitoSolucionDepurar').onclick = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        abrirEditorCircuitoSolucion(ej, 'circuitoSolucion');
+      };
+    }
+    if ($('circuitoDepurarDiagramaFile')) {
+      $('circuitoDepurarDiagramaFile').onchange = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        var file = this.files[0];
+        if (file) {
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            var base64 = e.target.result;
+            ej.circuitoDiagrama = base64;
+            actualizarCircuitoDepurarEditorUI(ej);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+    }
+    if ($('btnEliminarCircuitoDepurarDiagrama')) {
+      $('btnEliminarCircuitoDepurarDiagrama').onclick = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        ej.circuitoDiagrama = null;
+        if ($('circuitoDepurarDiagramaFile')) $('circuitoDepurarDiagramaFile').value = '';
+        actualizarCircuitoDepurarEditorUI(ej);
+      };
+    }
+
+    // Circuito + Quiz (Velxio)
+    if ($('btnEditarCircuitoCuestionario')) {
+      $('btnEditarCircuitoCuestionario').onclick = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        abrirEditorCircuitoSolucion(ej, 'circuitoInicial');
+      };
+    }
+    if ($('addOpcionCircuitoQuiz')) {
+      $('addOpcionCircuitoQuiz').onclick = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        if (!ej.opciones) ej.opciones = [];
+        ej.opciones.push({ texto: 'Nueva Opción', correcta: false });
+        renderOpcionesCircuitoQuiz();
+        syncEjercicioFromForm();
+      };
+    }
+
+    // Circuito + Código (Velxio)
+    if ($('circuitoCodigoProgMode')) {
+      $('circuitoCodigoProgMode').onchange = function() {
+        var ej = getSelectedEjercicio();
+        if (ej) {
+          ej.progMode = this.value;
+          actualizarCircuitoCodigoEditorUI(ej);
+          renderEjercicioEditorCentral(ej);
+        }
+      };
+    }
+    if ($('circuitoCodigoOcultar')) {
+      $('circuitoCodigoOcultar').onchange = function() {
+        var ej = getSelectedEjercicio();
+        if (ej) {
+          ej.ocultar = this.value;
+          actualizarCircuitoCodigoEditorUI(ej);
+          renderEjercicioEditorCentral(ej);
+        }
+      };
+    }
+    if ($('btnEditarCircuitoCodigoBloquesSolucion')) {
+      $('btnEditarCircuitoCodigoBloquesSolucion').onclick = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        abrirEditorBloquesSolucion(ej);
+      };
+    }
+    if ($('btnEditarCircuitoCodigoSolucion')) {
+      $('btnEditarCircuitoCodigoSolucion').onclick = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        abrirEditorCircuitoSolucion(ej, 'circuitoSolucion');
+      };
+    }
+    if ($('circuitoCodigoSimTime')) {
+      $('circuitoCodigoSimTime').oninput = function() {
+        var ej = getSelectedEjercicio();
+        if (ej) ej.arduinoSimTime = parseInt(this.value) || 2000;
+      };
+    }
+    if ($('circuitoCodigoSimExpected')) {
+      $('circuitoCodigoSimExpected').oninput = function() {
+        var ej = getSelectedEjercicio();
+        if (ej) ej.arduinoSimExpected = this.value;
+      };
+    }
+    if ($('circuitoCodigoTextSolucion')) {
+      $('circuitoCodigoTextSolucion').oninput = function() {
+        var ej = getSelectedEjercicio();
+        if (ej) {
+          if (!ej.circuitoSolucion) {
+            ej.circuitoSolucion = { boards: [], components: [], wires: [], fileGroups: [] };
+          }
+          if (!ej.circuitoSolucion.fileGroups) {
+            ej.circuitoSolucion.fileGroups = [];
+          }
+          
+          var fileGroups = ej.circuitoSolucion.fileGroups;
+          var foundFile = null;
+          fileGroups.forEach(function(g) {
+            if (g.files) {
+              g.files.forEach(function(f) {
+                if (f.name.endsWith('.ino') || f.name.endsWith('.cpp')) {
+                  foundFile = f;
+                }
+              });
+            }
+          });
+          
+          if (foundFile) {
+            foundFile.content = this.value;
+          } else {
+            fileGroups.push({
+              id: 'sketch',
+              name: 'sketch',
+              files: [{ name: 'main.ino', content: this.value }]
+            });
+          }
+          actualizarCircuitoCodigoEditorUI(ej);
+        }
+      };
+    }
+    if ($('circuitoCodigoDiagramaFile')) {
+      $('circuitoCodigoDiagramaFile').onchange = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        var file = this.files[0];
+        if (file) {
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            var base64 = e.target.result;
+            ej.circuitoDiagrama = base64;
+            actualizarCircuitoCodigoEditorUI(ej);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+    }
+    if ($('btnEliminarCircuitoCodigoDiagrama')) {
+      $('btnEliminarCircuitoCodigoDiagrama').onclick = function() {
+        var ej = getSelectedEjercicio();
+        if (!ej) return;
+        ej.circuitoDiagrama = null;
+        if ($('circuitoCodigoDiagramaFile')) $('circuitoCodigoDiagramaFile').value = '';
+        actualizarCircuitoCodigoEditorUI(ej);
+      };
+    }
   }
 
-  // Filtrar los botones de ejercicios según el modo seleccionado
+  // Filtrar los botones de ejercicios según el modo seleccionado y entorno
   function filterEjerciciosByMode() {
     var modo = $('evalModo') ? $('evalModo').value : 'mixto';
+    var entorno = (evaluacionState && evaluacionState.entorno) || 'robotica';
     var grid = $('ejerciciosGrid');
     if (!grid) return;
 
@@ -5722,15 +6194,16 @@
       var grupos = el.getAttribute('data-grupo').split(' ');
       var mostrar = false;
 
-      if (modo === 'mixto') {
-        // Mostrar todos
-        mostrar = true;
-      } else if (modo === 'codigo') {
-        // Mostrar solo los que tienen 'codigo' en sus grupos
-        mostrar = grupos.indexOf('codigo') !== -1;
-      } else if (modo === 'bloques') {
-        // Mostrar solo los que tienen 'bloques' en sus grupos
-        mostrar = grupos.indexOf('bloques') !== -1;
+      if (grupos.indexOf('electronica') !== -1) {
+        mostrar = (entorno === 'dispositivos');
+      } else {
+        if (modo === 'mixto') {
+          mostrar = true;
+        } else if (modo === 'codigo') {
+          mostrar = grupos.indexOf('codigo') !== -1;
+        } else if (modo === 'bloques') {
+          mostrar = grupos.indexOf('bloques') !== -1;
+        }
       }
 
       el.style.display = mostrar ? '' : 'none';
@@ -5747,10 +6220,16 @@
     evaluacionState.id = ($('evalId') && $('evalId').value) || 'nueva-evaluacion';
     evaluacionState.descripcion = ($('evalDescripcion') && $('evalDescripcion').value) || '';
     evaluacionState.nivel = ($('evalNivel') && $('evalNivel').value) || 'basico';
+    evaluacionState.entorno = ($('evalEntorno') && $('evalEntorno').value) || 'robotica';
+    evaluacionState.tarjeta = ($('evalTarjeta') && $('evalTarjeta').value) || 'stbBoardV2';
     evaluacionState.tiempoLimite = parseInt(($('evalTiempo') && $('evalTiempo').value) || '15');
     evaluacionState.tags = ($('evalTags') && $('evalTags').value) ? $('evalTags').value.split(',').map(function(t) { return t.trim(); }).filter(Boolean) : [];
     evaluacionState.modo = ($('evalModo') && $('evalModo').value) || 'mixto';
     evaluacionState.notificarResultado = ($('evalNotificarResultado') && $('evalNotificarResultado').value) || 'avanzar';
+    evaluacionState.reglaSalida = ($('evalReglaSalida') && $('evalReglaSalida').value) || 'continuar';
+    evaluacionState.ejerciciosAzar = parseInt(($('evalEjerciciosAzar') && $('evalEjerciciosAzar').value) || '0');
+    evaluacionState.tiempoAlerta = parseInt(($('evalTiempoAlerta') && $('evalTiempoAlerta').value) || '1');
+    evaluacionState.permitirRetroceder = $('evalPermitirRetroceder') ? $('evalPermitirRetroceder').checked : true;
     evaluacionState.fechaModificacion = new Date().toISOString();
   }
 
@@ -5759,9 +6238,23 @@
     if ($('evalId')) $('evalId').value = evaluacionState.id;
     if ($('evalDescripcion')) $('evalDescripcion').value = evaluacionState.descripcion || '';
     if ($('evalNivel')) $('evalNivel').value = evaluacionState.nivel;
+    if ($('evalEntorno')) {
+      $('evalEntorno').value = evaluacionState.entorno || 'robotica';
+      var isDevices = evaluacionState.entorno === 'dispositivos';
+      if ($('lblEvalTarjeta')) $('lblEvalTarjeta').style.display = isDevices ? 'block' : 'none';
+      var opt = $('evalModoCodigoOption');
+      if (opt) {
+        opt.textContent = isDevices ? 'Código (Arduino/texto)' : 'Código (Python/texto)';
+      }
+    }
+    if ($('evalTarjeta')) $('evalTarjeta').value = evaluacionState.tarjeta || 'stbBoardV2';
     if ($('evalTiempo')) $('evalTiempo').value = evaluacionState.tiempoLimite;
     if ($('evalTags')) $('evalTags').value = (evaluacionState.tags || []).join(', ');
     if ($('evalNotificarResultado')) $('evalNotificarResultado').value = evaluacionState.notificarResultado || 'avanzar';
+    if ($('evalReglaSalida')) $('evalReglaSalida').value = evaluacionState.reglaSalida || 'continuar';
+    if ($('evalEjerciciosAzar')) $('evalEjerciciosAzar').value = evaluacionState.ejerciciosAzar !== undefined ? evaluacionState.ejerciciosAzar : 0;
+    if ($('evalTiempoAlerta')) $('evalTiempoAlerta').value = evaluacionState.tiempoAlerta !== undefined ? evaluacionState.tiempoAlerta : 1;
+    if ($('evalPermitirRetroceder')) $('evalPermitirRetroceder').checked = evaluacionState.permitirRetroceder !== undefined ? evaluacionState.permitirRetroceder : true;
 
     // Restaurar modo de ejercicios y filtrar botones
     if ($('evalModo')) {
@@ -5841,6 +6334,7 @@
     // Actualizar campos básicos
     if ($('ejercicioEnunciado')) $('ejercicioEnunciado').value = ej.enunciado || '';
     if ($('ejercicioPuntos')) $('ejercicioPuntos').value = ej.puntos || 10;
+    if ($('ejercicioIntentosMax')) $('ejercicioIntentosMax').value = (ej.intentosMax !== undefined ? ej.intentosMax : -1);
     if ($('ejercicioPista')) $('ejercicioPista').value = ej.pista || '';
     if ($('ejercicioExplicacion')) $('ejercicioExplicacion').value = ej.explicacion || '';
 
@@ -5860,7 +6354,8 @@
     // Ocultar todos los editores de tipo
     var editores = ['opcionesQuizEditor', 'opcionesVFEditor', 'opcionesCompletarEditor',
                     'opcionesOrdenarEditor', 'opcionesQueHaceEditor', 'opcionesEscribirEditor',
-                    'opcionesRelacionarEditor', 'opcionesDepurarEditor', 'opcionesRetoEditor'];
+                    'opcionesRelacionarEditor', 'opcionesDepurarEditor', 'opcionesRetoEditor', 
+                    'opcionesCircuitoEditor', 'opcionesCircuitoDepurarEditor', 'opcionesCircuitoCuestionarioEditor', 'opcionesCircuitoCodigoEditor'];
     editores.forEach(function(id) {
       var el = $(id);
       if (el) el.hidden = true;
@@ -5898,6 +6393,13 @@
         if ($('opcionesEscribirEditor')) $('opcionesEscribirEditor').hidden = false;
         if ($('codigoSolucion')) $('codigoSolucion').value = ej.solucion || '';
         if ($('palabrasClave')) $('palabrasClave').value = (ej.palabrasClave || []).join(', ');
+        
+        var isDevices = evaluacionState && evaluacionState.entorno === 'dispositivos';
+        if ($('arduinoSimulationConfig')) {
+          $('arduinoSimulationConfig').style.display = isDevices ? 'block' : 'none';
+          if ($('arduinoSimTime')) $('arduinoSimTime').value = ej.arduinoSimTime || 2000;
+          if ($('arduinoSimExpected')) $('arduinoSimExpected').value = ej.arduinoSimExpected || '';
+        }
         break;
       case 'relacionar':
         if ($('opcionesRelacionarEditor')) $('opcionesRelacionarEditor').hidden = false;
@@ -5916,7 +6418,452 @@
         if ($('bloquesPermitidos')) $('bloquesPermitidos').value = (ej.bloquesPermitidos || []).join(', ');
         if ($('maxBloques')) $('maxBloques').value = ej.maxBloques || 0;
         break;
+      case 'circuito_armar':
+        if ($('opcionesCircuitoEditor')) $('opcionesCircuitoEditor').hidden = false;
+        actualizarCircuitoEditorUI(ej);
+        break;
+      case 'circuito_depurar':
+        if ($('opcionesCircuitoDepurarEditor')) $('opcionesCircuitoDepurarEditor').hidden = false;
+        actualizarCircuitoDepurarEditorUI(ej);
+        break;
+      case 'circuito_cuestionario':
+        if ($('opcionesCircuitoCuestionarioEditor')) $('opcionesCircuitoCuestionarioEditor').hidden = false;
+        actualizarCircuitoCuestionarioEditorUI(ej);
+        break;
+      case 'circuito_codigo':
+        if ($('opcionesCircuitoCodigoEditor')) $('opcionesCircuitoCodigoEditor').hidden = false;
+        actualizarCircuitoCodigoEditorUI(ej);
+        break;
     }
+  }
+
+  function actualizarCircuitoEditorUI(ej) {
+    var estado = $('estadoCircuitoSolucion');
+    if (estado) {
+      if (ej.circuitoSolucion && ej.circuitoSolucion.components) {
+        var numComp = ej.circuitoSolucion.components.length;
+        var numWires = (ej.circuitoSolucion.wires || []).length;
+        estado.textContent = '🔌 Circuito guardado: ' + numComp + ' comp., ' + numWires + ' conex.';
+        estado.style.background = '#022c22';
+        estado.style.borderColor = '#0f5132';
+        estado.style.color = '#34d399';
+      } else {
+        estado.textContent = 'Sin circuito guardado';
+        estado.style.background = '#1e293b';
+        estado.style.borderColor = '#334155';
+        estado.style.color = '#94a3b8';
+      }
+    }
+
+    var preview = $('circuitoDiagramaPreview');
+    var delBtn = $('btnEliminarCircuitoDiagrama');
+    if (preview) {
+      if (ej.circuitoDiagrama) {
+        preview.innerHTML = '<img src="' + ej.circuitoDiagrama + '" style="max-width: 100%; max-height: 100%; object-fit: contain;">';
+        if (delBtn) delBtn.style.display = 'block';
+      } else {
+        preview.innerHTML = '<span style="color: #64748b; font-size: 11px;">Sin imagen cargada</span>';
+        if (delBtn) delBtn.style.display = 'none';
+      }
+    }
+  }
+
+  function actualizarCircuitoDepurarEditorUI(ej) {
+    var estInit = $('estadoCircuitoInicial');
+    if (estInit) {
+      if (ej.circuitoInicial && ej.circuitoInicial.components) {
+        estInit.textContent = '🔌 Circuito Inicial: ' + ej.circuitoInicial.components.length + ' comp.';
+        estInit.style.background = '#3b0764';
+        estInit.style.borderColor = '#581c87';
+        estInit.style.color = '#c084fc';
+      } else {
+        estInit.textContent = 'Sin circuito inicial';
+        estInit.style.background = '#1e293b';
+        estInit.style.borderColor = '#334155';
+        estInit.style.color = '#94a3b8';
+      }
+    }
+
+    var estSol = $('estadoCircuitoSolucionDepurar');
+    if (estSol) {
+      if (ej.circuitoSolucion && ej.circuitoSolucion.components) {
+        estSol.textContent = '🔌 Circuito Solución: ' + ej.circuitoSolucion.components.length + ' comp.';
+        estSol.style.background = '#022c22';
+        estSol.style.borderColor = '#0f5132';
+        estSol.style.color = '#34d399';
+      } else {
+        estSol.textContent = 'Sin circuito solución';
+        estSol.style.background = '#1e293b';
+        estSol.style.borderColor = '#334155';
+        estSol.style.color = '#94a3b8';
+      }
+    }
+
+    var preview = $('circuitoDepurarDiagramaPreview');
+    var delBtn = $('btnEliminarCircuitoDepurarDiagrama');
+    if (preview) {
+      if (ej.circuitoDiagrama) {
+        preview.innerHTML = '<img src="' + ej.circuitoDiagrama + '" style="max-width: 100%; max-height: 100%; object-fit: contain;">';
+        if (delBtn) delBtn.style.display = 'block';
+      } else {
+        preview.innerHTML = '<span style="color: #64748b; font-size: 11px;">Sin imagen cargada</span>';
+        if (delBtn) delBtn.style.display = 'none';
+      }
+    }
+  }
+
+  function actualizarCircuitoCuestionarioEditorUI(ej) {
+    var estado = $('estadoCircuitoCuestionario');
+    if (estado) {
+      if (ej.circuitoInicial && ej.circuitoInicial.components) {
+        estado.textContent = '🔌 Circuito guardado: ' + ej.circuitoInicial.components.length + ' comp.';
+        estado.style.background = '#022c22';
+        estado.style.borderColor = '#0f5132';
+        estado.style.color = '#34d399';
+      } else {
+        estado.textContent = 'Sin circuito guardado';
+        estado.style.background = '#1e293b';
+        estado.style.borderColor = '#334155';
+        estado.style.color = '#94a3b8';
+      }
+    }
+    renderOpcionesCircuitoQuiz();
+  }
+
+  function renderOpcionesCircuitoQuiz() {
+    var ej = getSelectedEjercicio();
+    var container = $('opcionesCircuitoQuizList');
+    if (!ej || !container) return;
+
+    container.innerHTML = '';
+    (ej.opciones || []).forEach(function(op, idx) {
+      var div = document.createElement('div');
+      div.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px; padding: 8px; background: #1e293b; border-radius: 4px;';
+      div.innerHTML =
+        '<input type="radio" name="opcionCircuitoQuizCorrecta" ' + (op.correcta ? 'checked' : '') + ' data-idx="' + idx + '" style="width: 18px; height: 18px;">' +
+        '<input type="text" value="' + (op.texto || '').replace(/"/g, '&quot;') + '" data-idx="' + idx + '" style="flex: 1; padding: 6px; background: #0f172a; border: 1px solid #334155; border-radius: 4px; color: #e2e8f0; font-size: 11px;">' +
+        '<button data-delete="' + idx + '" style="padding: 4px 8px; background: #ef4444; border: none; border-radius: 4px; color: white; cursor: pointer;">×</button>';
+      
+      div.querySelector('input[type="radio"]').onchange = function() {
+        ej.opciones.forEach(function(o, i) {
+          o.correcta = (i === idx);
+        });
+        syncEjercicioFromForm();
+      };
+
+      div.querySelector('input[type="text"]').oninput = function() {
+        op.texto = this.value;
+        syncEjercicioFromForm();
+      };
+
+      div.querySelector('button').onclick = function() {
+        ej.opciones.splice(idx, 1);
+        renderOpcionesCircuitoQuiz();
+        syncEjercicioFromForm();
+      };
+
+      container.appendChild(div);
+    });
+  }
+
+function checkHasCode(fileGroups) {
+    if (!fileGroups) return false;
+    var hasCode = false;
+    if (typeof fileGroups.forEach === 'function') {
+      fileGroups.forEach(function(g) {
+        if (g && g.files && g.files.length > 0) hasCode = true;
+      });
+    } else if (typeof fileGroups === 'object') {
+      Object.keys(fileGroups).forEach(function(k) {
+        var g = fileGroups[k];
+        if (g && g.files && g.files.length > 0) hasCode = true;
+      });
+    }
+    return hasCode;
+  }
+
+  function extractArduinoCode(fileGroups) {
+    var code = "";
+    if (!fileGroups) return code;
+    function processFiles(files) {
+      if (!files) return;
+      files.forEach(function(f) {
+        if (f && f.name && (f.name === 'main.ino' || f.name === 'sketch.ino' || f.name.endsWith('.ino') || f.name.endsWith('.cpp'))) {
+          code = f.content || "";
+        }
+      });
+    }
+    if (typeof fileGroups.forEach === 'function') {
+      fileGroups.forEach(function(g) {
+        if (g && g.files) processFiles(g.files);
+      });
+    } else if (typeof fileGroups === 'object') {
+      Object.keys(fileGroups).forEach(function(k) {
+        var g = fileGroups[k];
+        if (g && g.files) processFiles(g.files);
+      });
+    }
+    return code;
+  }
+
+  function actualizarCircuitoCodigoEditorUI(ej) {
+    var estado = $('estadoCircuitoCodigoSolucion');
+    if (estado) {
+      if (ej.circuitoSolucion && ej.circuitoSolucion.components) {
+        var hasCode = checkHasCode(ej.circuitoSolucion.fileGroups);
+        estado.textContent = '🔌 Circuito Solución + ' + (hasCode ? 'Código Solución' : 'Sin Código');
+        estado.style.background = '#022c22';
+        estado.style.borderColor = '#0f5132';
+        estado.style.color = '#34d399';
+      } else {
+        estado.textContent = 'Sin solución guardada';
+        estado.style.background = '#1e293b';
+        estado.style.borderColor = '#334155';
+        estado.style.color = '#94a3b8';
+      }
+    }
+
+    if ($('circuitoCodigoProgMode')) {
+      $('circuitoCodigoProgMode').value = ej.progMode || 'codigo';
+    }
+    if ($('circuitoCodigoOcultar')) {
+      $('circuitoCodigoOcultar').value = ej.ocultar || 'programacion';
+    }
+
+    var blocksContainer = $('circuitoCodigoBloquesSolucionContainer');
+    if (blocksContainer) {
+      blocksContainer.style.display = (ej.progMode === 'bloques') ? 'block' : 'none';
+    }
+
+    var blocksStatus = $('estadoCircuitoCodigoBloquesSolucion');
+    if (blocksStatus) {
+      var blocksCount = ej.bloquesInfo ? ej.bloquesInfo.length : 0;
+      if (blocksCount > 0) {
+        blocksStatus.textContent = '🧩 ' + blocksCount + ' bloques solución guardados';
+        blocksStatus.style.background = '#022c22';
+        blocksStatus.style.borderColor = '#0f5132';
+        blocksStatus.style.color = '#34d399';
+      } else {
+        blocksStatus.textContent = 'Sin bloques guardados';
+        blocksStatus.style.background = '#1e293b';
+        blocksStatus.style.borderColor = '#334155';
+        blocksStatus.style.color = '#94a3b8';
+      }
+    }
+
+    if ($('circuitoCodigoSimTime')) $('circuitoCodigoSimTime').value = ej.arduinoSimTime || 2000;
+    if ($('circuitoCodigoSimExpected')) $('circuitoCodigoSimExpected').value = ej.arduinoSimExpected || '';
+
+    var textCodeContainer = $('circuitoCodigoTextSolucionContainer');
+    if (textCodeContainer) {
+      textCodeContainer.style.display = (ej.progMode === 'codigo') ? 'block' : 'none';
+    }
+
+    var textCodeInput = $('circuitoCodigoTextSolucion');
+    if (textCodeInput) {
+      if (document.activeElement !== textCodeInput) {
+        var currentCode = extractArduinoCode(ej.circuitoSolucion ? ej.circuitoSolucion.fileGroups : null) || '';
+        textCodeInput.value = currentCode;
+      }
+    }
+
+    var preview = $('circuitoCodigoDiagramaPreview');
+    var delBtn = $('btnEliminarCircuitoCodigoDiagrama');
+    if (preview) {
+      if (ej.circuitoDiagrama) {
+        preview.innerHTML = '<img src="' + ej.circuitoDiagrama + '" style="max-width: 100%; max-height: 100%; object-fit: contain;">';
+        if (delBtn) delBtn.style.display = 'block';
+      } else {
+        preview.innerHTML = '<span style="color: #64748b; font-size: 11px;">Sin imagen cargada</span>';
+        if (delBtn) delBtn.style.display = 'none';
+      }
+    }
+  }
+
+  function initializeVelxioBoard(win, stbBoardId) {
+    var BOARD_COMPAT_MAP = {
+      arduinoUno: 'arduino-uno',
+      stBoardExtension: 'arduino-uno',
+      arduinoNano: 'arduino-nano',
+      arduinoLeonardo: 'arduino-uno',
+      arduinoMega2560: 'arduino-mega',
+      arduinoMega: 'arduino-mega',
+      stbBoardV2: 'arduino-mega',
+      arduinoUnoR4Minima: 'arduino-uno',
+      arduinoUnoR4Wifi: 'arduino-uno',
+      esp32: 'esp32',
+      esp32s3: 'esp32-s3',
+      arduinoEsp32: 'esp32',
+      arduinoEsp32S3: 'esp32-s3',
+      arduinoEsp8266NodeMCU: 'arduino-uno',
+      arduinoK210MaixDock: 'arduino-uno',
+      arduinoK210Maixduino: 'arduino-uno',
+      raspberryPiPico: 'raspberry-pi-pico',
+      arduinoRaspberryPiPico: 'raspberry-pi-pico',
+      arduinoRaspberryPiPicoW: 'pi-pico-w',
+      arduinoRaspberryPiPico2: 'raspberry-pi-pico',
+      arduinoRaspberryPiPico2W: 'pi-pico-w'
+    };
+    var compatBoard = BOARD_COMPAT_MAP[stbBoardId] || 'arduino-uno';
+
+    if (win.__VELXIO_ADD_BOARD && win.__VELXIO_GET_BOARDS && win.__VELXIO_REMOVE_BOARD) {
+      try {
+        var existing = win.__VELXIO_GET_BOARDS();
+        existing.forEach(function(b) {
+          win.__VELXIO_REMOVE_BOARD(b.id);
+        });
+        var addedBoardId = win.__VELXIO_ADD_BOARD(compatBoard, 200, 200);
+        if (win.__VELXIO_SET_ACTIVE_BOARD) {
+          win.__VELXIO_SET_ACTIVE_BOARD(addedBoardId || compatBoard);
+        }
+        if (win.__VELXIO_KEEP_ONLY_BOARD) {
+          win.__VELXIO_KEEP_ONLY_BOARD(addedBoardId || compatBoard);
+        }
+      } catch (e) {
+        console.warn('[Velxio Editor] Error initializing board:', e);
+      }
+    }
+  }
+
+  function abrirEditorCircuitoSolucion(ejercicio, targetKey) {
+    var key = targetKey || 'circuitoSolucion';
+    var isInit = (key === 'circuitoInicial');
+    
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.95); z-index: 99999; display: flex; flex-direction: column; font-family: sans-serif; color: #e2e8f0;';
+
+    var header = document.createElement('div');
+    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #0f172a; border-bottom: 1px solid #1e293b;';
+    
+    var titleText = isInit ? '🔌 Diseñador de Circuito Inicial (Velxio)' : '🔌 Diseñador de Circuito Solución (Velxio)';
+    var descText = isInit ? 'Diseña el estado inicial del circuito (con errores o incompleto) que el alumno tendrá que corregir.' : 'Diseña el circuito correcto y funcional que servirá para verificar la respuesta del alumno.';
+    
+    header.innerHTML = '<div>' +
+      '  <h3 style="margin: 0; font-size: 16px; font-weight: bold; color: ' + (isInit ? '#ef4444' : '#00979C') + ';">' + titleText + '</h3>' +
+      '  <span style="font-size: 11px; color: #64748b;">' + descText + '</span>' +
+      '</div>';
+
+    var container = document.createElement('div');
+    container.style.cssText = 'flex: 1; position: relative; background: #0f172a;';
+
+    var iframe = document.createElement('iframe');
+    iframe.src = '../../index.html#/editor';
+    iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
+    container.appendChild(iframe);
+
+    var footer = document.createElement('div');
+    footer.style.cssText = 'display: flex; justify-content: flex-end; gap: 12px; padding: 12px 20px; background: #0f172a; border-top: 1px solid #1e293b;';
+    
+    var btnCancel = document.createElement('button');
+    btnCancel.textContent = 'Cancelar';
+    btnCancel.className = 'danger';
+    btnCancel.style.padding = '8px 16px';
+    btnCancel.onclick = function() {
+      overlay.remove();
+    };
+
+    var btnSave = document.createElement('button');
+    btnSave.textContent = isInit ? 'Guardar Circuito Inicial' : 'Guardar Circuito Solución';
+    btnSave.className = 'primary';
+    btnSave.style.padding = '8px 16px';
+    btnSave.onclick = function() {
+      try {
+        var win = iframe.contentWindow;
+        var boardStore = win.__VELXIO_BOARD_STORE;
+        var fileStore = win.__VELXIO_FILE_STORE;
+        if (!boardStore || typeof boardStore.getState !== 'function') {
+          alert('El simulador aún se está inicializando. Por favor espera.');
+          return;
+        }
+
+        var boardState = boardStore.getState();
+        var state = {
+          boards: boardState.boards || [],
+          activeBoardId: boardState.activeBoardId || null,
+          components: boardState.components || [],
+          wires: boardState.wires || [],
+          fileGroups: null
+        };
+
+        if (fileStore && typeof fileStore.getState === 'function') {
+          var fileState = fileStore.getState();
+          if (fileState && fileState.fileGroups) {
+            state.fileGroups = fileState.fileGroups;
+            state.activeGroupId = fileState.activeGroupId || null;
+            state.activeGroupFileId = fileState.activeGroupFileId || {};
+            state.openGroupFileIds = fileState.openGroupFileIds || {};
+          }
+        }
+
+        if (state.components.length === 0) {
+          alert('Por favor agrega componentes al simulador antes de guardar.');
+          return;
+        }
+
+        ejercicio[key] = state;
+        
+        // Actualizar la UI del editor de opciones según el tipo
+        if (ejercicio.tipo === 'circuito_armar') {
+          actualizarCircuitoEditorUI(ejercicio);
+        } else if (ejercicio.tipo === 'circuito_depurar') {
+          actualizarCircuitoDepurarEditorUI(ejercicio);
+        } else if (ejercicio.tipo === 'circuito_cuestionario') {
+          actualizarCircuitoCuestionarioEditorUI(ejercicio);
+        } else if (ejercicio.tipo === 'circuito_codigo') {
+          actualizarCircuitoCodigoEditorUI(ejercicio);
+        }
+        
+        toast('Esquema de circuito guardado con éxito');
+        overlay.remove();
+      } catch (e) {
+        console.error('Error al guardar circuito:', e);
+        alert('Ocurrió un error al guardar el circuito: ' + e.message);
+      }
+    };
+
+    footer.appendChild(btnCancel);
+    footer.appendChild(btnSave);
+
+    overlay.appendChild(header);
+    overlay.appendChild(container);
+    overlay.appendChild(footer);
+
+    document.body.appendChild(overlay);
+
+    var pollAttempts = 0;
+    var maxPollAttempts = 50;
+    var pollInterval = setInterval(function() {
+      pollAttempts++;
+      try {
+        var win = iframe.contentWindow;
+        var boardStore = win.__VELXIO_BOARD_STORE;
+        var fileStore = win.__VELXIO_FILE_STORE;
+        if (boardStore && typeof boardStore.getState === 'function') {
+          clearInterval(pollInterval);
+          
+          if (ejercicio[key]) {
+            var storeState = boardStore.getState();
+            if (storeState.loadProjectState) {
+              storeState.loadProjectState(ejercicio[key]);
+            }
+            if (ejercicio[key].fileGroups && fileStore && typeof fileStore.getState === 'function') {
+              var fStoreState = fileStore.getState();
+              if (fStoreState.loadFileGroups) {
+                fStoreState.loadFileGroups(ejercicio[key].fileGroups);
+              }
+            }
+          } else {
+            var boardId = evaluacionState.tarjeta || 'stbBoardV2';
+            initializeVelxioBoard(win, boardId);
+          }
+        }
+      } catch (e) {
+      }
+      if (pollAttempts >= maxPollAttempts) {
+        clearInterval(pollInterval);
+        console.warn('[Velxio Editor] Timed out waiting for stores to initialize.');
+      }
+    }, 200);
   }
 
   function renderOpcionesQuiz() {
@@ -6202,6 +7149,100 @@
         html += '</div>';
         html += '</div>';
         break;
+      case 'circuito_armar':
+        html += '<div style="background: #0f172a; border-radius: 8px; padding: 16px;">';
+        html += '<div style="color: #94a3b8; font-size: 11px; margin-bottom: 8px;">🔌 EJERCICIO DE ARMAR CIRCUITO (VELXIO)</div>';
+        if (ej.circuitoSolucion && ej.circuitoSolucion.components) {
+          var numComp = ej.circuitoSolucion.components.length;
+          var numWires = (ej.circuitoSolucion.wires || []).length;
+          html += '<div style="color: #22c55e; font-size: 12px; font-weight: bold;">✓ Circuito solución guardado: ' + numComp + ' componentes y ' + numWires + ' conexiones.</div>';
+        } else {
+          html += '<div style="color: #f59e0b; font-size: 12px;">⚠ Sin circuito solución guardado. Usa el botón "Diseñar Circuito Solución" en la pestaña Opciones.</div>';
+        }
+        if (ej.circuitoDiagrama) {
+          html += '<div style="margin-top: 12px;">';
+          html += '<span style="color: #3b82f6; font-size: 11px; display: block; margin-bottom: 6px;">Diagrama de Conexión (Referencia):</span>';
+          html += '<img src="' + ej.circuitoDiagrama + '" style="max-width: 100%; max-height: 150px; border: 1px solid #334155; border-radius: 6px; object-fit: contain; background: #0b0f19; padding: 4px;">';
+          html += '</div>';
+        }
+        html += '</div>';
+        break;
+      case 'circuito_depurar':
+        html += '<div style="background: #0f172a; border-radius: 8px; padding: 16px;">';
+        html += '<div style="color: #94a3b8; font-size: 11px; margin-bottom: 8px;">🔧 EJERCICIO DE DEPURAR CIRCUITO (VELXIO)</div>';
+        html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px;">';
+        
+        var compInit = ej.circuitoInicial && ej.circuitoInicial.components ? ej.circuitoInicial.components.length + ' comp.' : 'No definido';
+        html += '<div>';
+        html += '<div style="color: #ef4444; font-size: 11px; margin-bottom: 6px;">❌ CIRCUITO INICIAL (CON ERRORES)</div>';
+        html += '<div style="padding: 12px; background: #ef444422; border: 1px solid #ef4444; border-radius: 6px; color: #fca5a5; font-size: 11px; text-align: center;">' + compInit + '</div>';
+        html += '</div>';
+
+        var compSol = ej.circuitoSolucion && ej.circuitoSolucion.components ? ej.circuitoSolucion.components.length + ' comp.' : 'No definido';
+        html += '<div>';
+        html += '<div style="color: #22c55e; font-size: 11px; margin-bottom: 6px;">✓ CIRCUITO SOLUCIÓN (CORRECTO)</div>';
+        html += '<div style="padding: 12px; background: #22c55e22; border: 1px solid #22c55e; border-radius: 6px; color: #86efac; font-size: 11px; text-align: center;">' + compSol + '</div>';
+        html += '</div>';
+        
+        html += '</div>';
+        if (ej.circuitoDiagrama) {
+          html += '<div style="margin-top: 12px;">';
+          html += '<span style="color: #3b82f6; font-size: 11px; display: block; margin-bottom: 6px;">Diagrama de Conexión (Referencia):</span>';
+          html += '<img src="' + ej.circuitoDiagrama + '" style="max-width: 100%; max-height: 150px; border: 1px solid #334155; border-radius: 6px; object-fit: contain; background: #0b0f19; padding: 4px;">';
+          html += '</div>';
+        }
+        html += '</div>';
+        break;
+      case 'circuito_cuestionario':
+        html += '<div style="background: #0f172a; border-radius: 8px; padding: 16px;">';
+        html += '<div style="color: #94a3b8; font-size: 11px; margin-bottom: 8px;">☑️ EJERCICIO DE CIRCUITO + QUIZ (VELXIO)</div>';
+        
+        if (ej.circuitoInicial && ej.circuitoInicial.components) {
+          html += '<div style="color: #22c55e; font-size: 12px; font-weight: bold; margin-bottom: 12px;">✓ Circuito de inspección guardado (' + ej.circuitoInicial.components.length + ' componentes).</div>';
+        } else {
+          html += '<div style="color: #f59e0b; font-size: 12px; margin-bottom: 12px;">⚠ Sin circuito de inspección guardado. Usa el botón "Diseñar Circuito" en la pestaña Opciones.</div>';
+        }
+
+        html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+        (ej.opciones || []).forEach(function(op, idx) {
+          var icon = '○';
+          var correct = op.correcta ? ' ✓ (Correcta)' : '';
+          html += '<div style="padding: 10px 14px; background: ' + (op.correcta ? '#22c55e22' : '#0f172a') + '; border: 1px solid ' + (op.correcta ? '#22c55e' : '#334155') + '; border-radius: 6px; color: #e2e8f0; font-size: 12px;">' + icon + ' ' + (op.texto || 'Opción ' + (idx + 1)) + correct + '</div>';
+        });
+        html += '</div>';
+        html += '</div>';
+        break;
+      case 'circuito_codigo':
+        html += '<div style="background: #0f172a; border-radius: 8px; padding: 16px;">';
+        html += '<div style="color: #94a3b8; font-size: 11px; margin-bottom: 8px;">💻 EJERCICIO DE CIRCUITO + PROGRAMACIÓN (VELXIO)</div>';
+        
+        var pMode = ej.progMode || 'codigo';
+        var hideMode = ej.ocultar || 'programacion';
+        html += '<div style="display: flex; gap: 8px; margin-bottom: 12px;">';
+        html += '  <span style="background: #3b82f622; color: #3b82f6; border: 1px solid #3b82f644; padding: 2px 8px; border-radius: 4px; font-size: 10px;">' + (pMode === 'bloques' ? '🧩 Bloques' : '💻 Código Texto') + '</span>';
+        html += '  <span style="background: #ef444422; color: #f87171; border: 1px solid #ef444444; padding: 2px 8px; border-radius: 4px; font-size: 10px;">Ocultar: ' + (hideMode === 'programacion' ? 'Programación' : 'Circuito') + '</span>';
+        html += '</div>';
+
+        if (ej.circuitoSolucion && ej.circuitoSolucion.components) {
+          var hasCode = (pMode === 'bloques') ? (ej.bloquesInfo && ej.bloquesInfo.length > 0) : checkHasCode(ej.circuitoSolucion.fileGroups);
+          html += '<div style="color: #22c55e; font-size: 12px; font-weight: bold;">✓ Solución guardada: ' + ej.circuitoSolucion.components.length + ' componentes y ' + (hasCode ? 'programa configurado' : 'sin programa') + '.</div>';
+        } else {
+          html += '<div style="color: #f59e0b; font-size: 12px;">⚠ Sin circuito ni solución guardada. Usa la pestaña Opciones.</div>';
+        }
+
+        html += '<div style="margin-top: 12px; font-size: 11px; color: #94a3b8; display: flex; flex-direction: column; gap: 4px;">';
+        html += '  <div><strong>Tiempo de simulación:</strong> ' + (ej.arduinoSimTime || 2000) + ' ms</div>';
+        html += '  <div><strong>Estados de pines esperados:</strong> <code style="background: #1e293b; padding: 2px 6px; border-radius: 4px; color: #38bdf8;">' + (ej.arduinoSimExpected || '{}') + '</code></div>';
+        html += '</div>';
+
+        if (ej.circuitoDiagrama) {
+          html += '<div style="margin-top: 12px;">';
+          html += '<span style="color: #3b82f6; font-size: 11px; display: block; margin-bottom: 6px;">Diagrama de Conexión (Referencia):</span>';
+          html += '<img src="' + ej.circuitoDiagrama + '" style="max-width: 100%; max-height: 150px; border: 1px solid #334155; border-radius: 6px; object-fit: contain; background: #0b0f19; padding: 4px;">';
+          html += '</div>';
+        }
+        html += '</div>';
+        break;
     }
 
     html += '</div>';
@@ -6227,6 +7268,7 @@
 
     ej.enunciado = $('ejercicioEnunciado') ? $('ejercicioEnunciado').value : '';
     ej.puntos = parseInt($('ejercicioPuntos') ? $('ejercicioPuntos').value : '10');
+    ej.intentosMax = parseInt($('ejercicioIntentosMax') ? $('ejercicioIntentosMax').value : '-1');
     ej.pista = $('ejercicioPista') ? $('ejercicioPista').value : '';
     ej.explicacion = $('ejercicioExplicacion') ? $('ejercicioExplicacion').value : '';
 
@@ -6316,13 +7358,49 @@
   function exportEvaluacion() {
     syncEvaluacionStateFromForm();
     var json = JSON.stringify(evaluacionState, null, 2);
+    var filename = (evaluacionState.id || 'evaluacion') + '.json';
+    
+    if (window.__TAURI__) {
+      try {
+        var dialog = window.__TAURI__.dialog;
+        var core = window.__TAURI__.core;
+        if (dialog && dialog.save && core && core.invoke) {
+          dialog.save({
+            defaultPath: filename,
+            filters: [{ name: 'JSON', extensions: ['json'] }]
+          }).then(function(filePath) {
+            if (filePath) {
+              var bytes = Array.from(new TextEncoder().encode(json));
+              core.invoke('save_file', { path: filePath, content: bytes })
+                .then(function() {
+                  toast('JSON guardado: ' + filename);
+                })
+                .catch(function(err) {
+                  console.error('[Editor] Error en save_file:', err);
+                  showAlert('Error al guardar archivo: ' + err.message);
+                });
+            }
+          }).catch(function(err) {
+            console.error('[Editor] Error en dialog.save:', err);
+          });
+          return;
+        }
+      } catch (e) {
+        console.warn('[Editor] Error al usar Tauri dialog/core:', e);
+      }
+    }
+    
     var blob = new Blob([json], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = evaluacionState.id + '.json';
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+    
     toast('Evaluación exportada');
   }
 
@@ -6439,16 +7517,106 @@
     if ($('statTotalEjercicios')) $('statTotalEjercicios').textContent = totalEjercicios;
   }
 
+  window.simulateArduinoCode = function(cppCode, maxDurationMs) {
+    var pins = {};
+    var timeline = [];
+    var currentTime = 0;
+    
+    var code = cppCode.replace(/\/\/.*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    
+    var setupMatch = code.match(/void\s+setup\s*\(\s*\)\s*\{([\s\S]*?)\}/);
+    var loopMatch = code.match(/void\s+loop\s*\(\s*\)\s*\{([\s\S]*?)\}/);
+    
+    if (!setupMatch || !loopMatch) {
+      return { error: 'No se encontraron las funciones setup() o loop().' };
+    }
+    
+    var setupContent = setupMatch[1];
+    var loopContent = loopMatch[1];
+    
+    function pinMode(pin, mode) {
+      pins[pin] = { mode: mode, val: 0 };
+      timeline.push({ t: currentTime, pin: pin, mode: mode });
+    }
+    
+    function digitalWrite(pin, val) {
+      var valNum = (val === 'HIGH' || val === 1 || val === '1') ? 1 : 0;
+      if (!pins[pin]) pins[pin] = { mode: 'OUTPUT' };
+      pins[pin].val = valNum;
+      timeline.push({ t: currentTime, pin: pin, val: valNum });
+    }
+    
+    function analogWrite(pin, val) {
+      if (!pins[pin]) pins[pin] = { mode: 'OUTPUT' };
+      pins[pin].val = val;
+      timeline.push({ t: currentTime, pin: pin, val: val, type: 'PWM' });
+    }
+    
+    function delay(ms) {
+      currentTime += parseInt(ms) || 0;
+    }
+    
+    function transpile(block) {
+      return block
+        .replace(/\bint\b/g, 'var')
+        .replace(/\bconst\s+var\b/g, 'var')
+        .replace(/\bconst\b/g, 'var')
+        .replace(/pinMode\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'pinMode($1, "$2")')
+        .replace(/digitalWrite\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/g, 'digitalWrite($1, "$2")')
+        .replace(/analogWrite\s*\(\s*(\w+)\s*,\s*([\w+\-*\/ ]+)\s*\)/g, 'analogWrite($1, $2)')
+        .replace(/delay\s*\(\s*([\w+\-*\/ ]+)\s*\)/g, 'delay($1)')
+        .replace(/HIGH/g, '1')
+        .replace(/LOW/g, '0')
+        .replace(/OUTPUT/g, '"OUTPUT"')
+        .replace(/INPUT/g, '"INPUT"');
+    }
+    
+    var jsSetup = transpile(setupContent);
+    var jsLoop = transpile(loopContent);
+    
+    try {
+      var runnerSetup = new Function('pinMode', 'digitalWrite', 'analogWrite', 'delay', jsSetup);
+      runnerSetup(pinMode, digitalWrite, analogWrite, delay);
+      
+      var runnerLoop = new Function('pinMode', 'digitalWrite', 'analogWrite', 'delay', jsLoop);
+      var iterations = 0;
+      while (currentTime < maxDurationMs && iterations < 100) {
+        runnerLoop(pinMode, digitalWrite, analogWrite, delay);
+        iterations++;
+      }
+    } catch (e) {
+      return { error: 'Error de sintaxis lógica en tu código: ' + e.message };
+    }
+    
+    return { pins: pins, timeline: timeline, duration: currentTime };
+  };
+
   function previewEvaluacion(specificEval) {
     var isEvent = (specificEval && (specificEval instanceof Event || typeof specificEval.preventDefault === 'function'));
     if (isEvent || !specificEval) {
       syncEvaluacionStateFromForm();
     }
     var targetEval = isEvent ? evaluacionState : (specificEval || evaluacionState);
+    targetEval = JSON.parse(JSON.stringify(targetEval)); // Clonar para evitar mutar el estado original en memoria
+    window.targetEval = targetEval; // Exponer globalmente para la inicialización de Blockly en vista previa
+
+    // Mezcla aleatoria si se configuró ejercicios al azar y no hay progreso previo
+    var hasSavedProgress = false;
+    try {
+      if (isStudentMode && targetEval) {
+        hasSavedProgress = !!localStorage.getItem('stblock_student_progress_' + targetEval.id);
+      }
+    } catch(e) {}
+    if (!hasSavedProgress && targetEval.ejercicios && targetEval.ejercicios.length > 0 && targetEval.ejerciciosAzar > 0) {
+      var poolSize = targetEval.ejercicios.length;
+      var count = Math.min(targetEval.ejerciciosAzar, poolSize);
+      var shuffled = targetEval.ejercicios.slice().sort(function() { return 0.5 - Math.random(); });
+      targetEval.ejercicios = shuffled.slice(0, count);
+      console.log('[STBLOCK-STUDENT] Primera carga: Selección aleatoria de ejercicios. Seleccionados:', count, 'de', poolSize);
+    }
 
     console.log('[STBLOCK-DEBUG-PREVIEW] previewEvaluacion iniciada.');
     console.log('[STBLOCK-DEBUG-PREVIEW] targetEval:', targetEval);
-    console.log('[STBLOCK-DEBUG-PREVIEW] targetEval.ejercicios:', targetEval ? targetEval.ejercicios : 'undefined');
 
     var numEjercicios = targetEval.ejercicios ? targetEval.ejercicios.length : 0;
     console.log('[STBLOCK-DEBUG-PREVIEW] numEjercicios calculado:', numEjercicios);
@@ -6463,9 +7631,11 @@
     overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;';
 
     var modal = document.createElement('div');
+    modal.id = 'evalPreviewModal';
     modal.style.cssText = 'background: #1e293b; border-radius: 12px; width: 100%; max-width: 800px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column;';
 
     var header = document.createElement('div');
+    header.id = 'evalPreviewHeader';
     header.style.cssText = 'padding: 16px 20px; background: #19663d; display: flex; justify-content: space-between; align-items: center;';
     
     var headerHtml = '<div><h2 style="margin: 0; color: white;">' + targetEval.titulo + '</h2>' +
@@ -6483,6 +7653,7 @@
     content.style.cssText = 'flex: 1; overflow-y: auto; padding: 20px;';
 
     var footer = document.createElement('div');
+    footer.id = 'evalPreviewFooter';
     footer.style.cssText = 'padding: 16px 20px; background: #0f172a; display: flex; justify-content: space-between; align-items: center;';
     footer.innerHTML = '<div id="previewProgress" style="color: #94a3b8;">Presentación</div><div style="display: flex; gap: 8px;"><button id="prevEj" class="ghost" style="padding: 8px 16px;">← Anterior</button><button id="nextEj" class="primary" style="padding: 8px 16px;">Siguiente →</button></div>';
 
@@ -6494,7 +7665,76 @@
 
     var currentIdx = -1; // Portada
     var respuestas = [];
+    var respuestasDetalladas = [];
+    var intentosRealizados = {};
     window._showingExerciseIntro = false;
+    window._evaluacionFinalizada = false;
+
+    // Sincronizar evaluacionState para handlers globales si viene specificEval
+    if (!isEvent && specificEval) {
+      evaluacionState = specificEval;
+    }
+
+    // Regla de salida: bloqueo estricto (ocultar botón de cerrar en cabecera)
+    if (targetEval.reglaSalida === 'bloqueo' && $('closePreview')) {
+      $('closePreview').style.display = 'none';
+    }
+
+    // Función para guardar el progreso del estudiante en tiempo real (en localStorage)
+    function syncStudentProgressToParent() {
+      if (isStudentMode && targetEval) {
+        var progress = {
+          evalId: targetEval.id,
+          currentIdx: currentIdx,
+          respuestas: respuestas,
+          intentosRealizados: intentosRealizados,
+          timeLeft: timeLeft,
+          timestamp: Date.now(),
+          ejercicios: targetEval.ejercicios
+        };
+        localStorage.setItem('stblock_student_progress_' + targetEval.id, JSON.stringify(progress));
+      }
+    }
+
+    // Intentar recuperar progreso previo para el alumno
+    if (isStudentMode && targetEval) {
+      try {
+        var savedStr = localStorage.getItem('stblock_student_progress_' + targetEval.id);
+        if (savedStr) {
+          var parsed = JSON.parse(savedStr);
+          var elapsedSecs = Math.floor((Date.now() - parsed.timestamp) / 1000);
+          var calculatedTimeLeft = parsed.timeLeft - elapsedSecs;
+          
+          if (calculatedTimeLeft > 0) {
+            timeLeft = calculatedTimeLeft;
+            if (parsed.ejercicios) {
+              targetEval.ejercicios = parsed.ejercicios;
+              numEjercicios = targetEval.ejercicios.length;
+            }
+            if (parsed.intentosRealizados) {
+              intentosRealizados = parsed.intentosRealizados;
+            }
+            if (targetEval.reglaSalida === 'reiniciar') {
+              respuestas = [];
+              currentIdx = -1;
+              intentosRealizados = {};
+              console.log('[STBLOCK-STUDENT] Progreso reiniciado (Regla: reiniciar). Tiempo restante:', timeLeft);
+            } else {
+              respuestas = parsed.respuestas || [];
+              currentIdx = parsed.currentIdx;
+              console.log('[STBLOCK-STUDENT] Progreso restaurado. Ejercicio:', currentIdx, 'Tiempo:', timeLeft);
+            }
+          } else {
+            console.log('[STBLOCK-STUDENT] El tiempo de la prueba expiró mientras el alumno estaba fuera.');
+            localStorage.removeItem('stblock_student_progress_' + targetEval.id);
+            timeLeft = 0;
+            timeWasAgotado = true;
+          }
+        }
+      } catch (e) {
+        console.warn('[STBLOCK-STUDENT] Error cargando progreso guardado:', e);
+      }
+    }
 
     function cleanupTimer() {
       if (timerInterval) {
@@ -6523,6 +7763,7 @@
           return;
         }
         timeLeft--;
+        syncStudentProgressToParent();
         
         var mins = Math.floor(timeLeft / 60);
         var secs = timeLeft % 60;
@@ -6530,8 +7771,11 @@
           clockEl.textContent = (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
         }
         
-        if (timeLeft <= 60 && clockEl) {
-          clockEl.style.color = '#ef4444';
+        var warningSecs = parseInt(targetEval.tiempoAlerta !== undefined ? targetEval.tiempoAlerta : 1) * 60;
+        if (timeLeft <= warningSecs && clockEl) {
+          clockEl.style.color = '#f87171';
+          clockEl.style.borderColor = '#ef4444';
+          clockEl.style.animation = 'btn-pulse 1s infinite alternate';
         }
       }, 1000);
     }
@@ -6562,41 +7806,70 @@
     }
 
     function showFinalResults() {
+      window._evaluacionFinalizada = true;
       cleanupTimer();
+      if (isStudentMode && targetEval) {
+        localStorage.removeItem('stblock_student_progress_' + targetEval.id);
+      }
       var total = respuestas.length;
       var correctas = respuestas.filter(function(r) { return r === true; }).length;
       var aprobado = correctas === total;
 
-      var htmlFinal = '<div style="text-align: center; padding: 40px; background: #1e293b; color: #e2e8f0;">';
+      var htmlFinal = '';
       
       if (targetEval && targetEval.notificarResultado === 'silencio') {
-        htmlFinal += '<div style="font-size: 64px; margin-bottom: 20px;">🎉</div>' +
-                     '<h2 style="color: #10b981; font-size: 24px; margin-bottom: 10px;">¡Evaluación completada!</h2>' +
-                     '<p style="color: #94a3b8; font-size: 14px; margin-bottom: 20px;">Has terminado todos los ejercicios de esta evaluación.</p>';
+        htmlFinal = '<div style="text-align: center; padding: 50px 30px; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); max-width: 600px; margin: 20px auto; border-top: 5px solid #10b981;">' +
+                     '  <div class="animated-float" style="font-size: 72px; margin-bottom: 24px; animation-duration: 3s;">🏁</div>' +
+                     '  <h2 style="color: #0f172a; font-size: 26px; font-weight: 800; margin: 0 0 10px 0;">¡Evaluación completada!</h2>' +
+                     '  <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 0 auto 30px; max-width: 400px;">Has terminado todos los ejercicios de esta evaluación de forma exitosa. Tus respuestas han sido registradas.</p>' +
+                     '</div>';
       } else {
         if (aprobado) {
-          htmlFinal += '<div style="font-size: 64px; margin-bottom: 20px;">🎉</div>' +
-                       '<h2 style="color: #10b981; font-size: 24px; margin-bottom: 10px;">¡Evaluación aprobada!</h2>' +
-                       '<p style="color: #94a3b8; font-size: 14px; margin-bottom: 20px;">Has resuelto todos los ejercicios correctamente.</p>' +
-                       '<div style="font-size: 48px; font-weight: bold; color: #10b981; margin-bottom: 20px;">' + correctas + ' / ' + total + '</div>' +
-                       '<div style="font-size: 14px; color: #64748b;">Puntaje: 100%</div>';
+          htmlFinal = '<div style="text-align: center; padding: 50px 30px; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); max-width: 600px; margin: 20px auto; border-top: 5px solid #10b981;">' +
+                       '  <div class="animated-float" style="font-size: 72px; margin-bottom: 24px; filter: drop-shadow(0 10px 15px rgba(16,185,129,0.2));">🏆</div>' +
+                       '  <h2 style="color: #0f172a; font-size: 26px; font-weight: 800; margin: 0 0 10px 0;">¡Evaluación aprobada!</h2>' +
+                       '  <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 0 auto 24px; max-width: 400px;">¡Excelente trabajo! Has resuelto todos los retos de forma impecable.</p>' +
+                       '  <div style="display: flex; align-items: center; justify-content: center; gap: 20px; margin-bottom: 24px;">' +
+                       '    <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 12px 24px; text-align: center;">' +
+                       '      <div style="font-size: 10px; color: #047857; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">Aciertos</div>' +
+                       '      <div style="font-size: 28px; font-weight: 800; color: #10b981;">' + correctas + ' <span style="font-size: 18px; font-weight: 400; color: #6b7280;">/ ' + total + '</span></div>' +
+                       '    </div>' +
+                       '    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px 24px; text-align: center;">' +
+                       '      <div style="font-size: 10px; color: #15803d; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">Puntaje</div>' +
+                       '      <div style="font-size: 28px; font-weight: 800; color: #15803d;">100%</div>' +
+                       '    </div>' +
+                       '  </div>' +
+                       '</div>';
         } else {
-          htmlFinal += '<div style="font-size: 64px; margin-bottom: 20px;">❌</div>' +
-                       '<h2 style="color: #ef4444; font-size: 24px; margin-bottom: 10px;">Evaluación no aprobada</h2>' +
-                       '<p style="color: #94a3b8; font-size: 14px; margin-bottom: 20px;">Algunos ejercicios tienen respuestas incorrectas o faltantes.</p>' +
-                       '<div style="font-size: 48px; font-weight: bold; color: #ef4444; margin-bottom: 20px;">' + correctas + ' / ' + total + '</div>' +
-                       '<div style="font-size: 14px; color: #64748b; margin-bottom: 20px;">Puntaje: ' + Math.round((correctas / total) * 100) + '%</div>' +
-                       '<button id="btnReintentarEval" style="padding: 10px 20px; background: #3b82f6; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: bold; font-size: 14px;">🔄 Reintentar evaluación</button>';
+          var porcentaje = Math.round((correctas / total) * 100);
+          htmlFinal = '<div style="text-align: center; padding: 50px 30px; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); max-width: 600px; margin: 20px auto; border-top: 5px solid #ef4444;">' +
+                       '  <div class="btn-pulse" style="font-size: 72px; margin-bottom: 24px; display: inline-block; filter: drop-shadow(0 10px 15px rgba(239,68,68,0.15)); animation-duration: 2s;">❌</div>' +
+                       '  <h2 style="color: #0f172a; font-size: 26px; font-weight: 800; margin: 0 0 10px 0;">Evaluación no aprobada</h2>' +
+                       '  <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 0 auto 24px; max-width: 400px;">Algunos ejercicios tienen respuestas incorrectas o faltantes. ¡Sigue practicando para mejorar!</p>' +
+                       '  <div style="display: flex; align-items: center; justify-content: center; gap: 20px; margin-bottom: 30px;">' +
+                       '    <div style="background: #fef2f2; border: 1px solid #fca5a5; border-radius: 10px; padding: 12px 24px; text-align: center;">' +
+                       '      <div style="font-size: 10px; color: #b91c1c; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">Aciertos</div>' +
+                       '      <div style="font-size: 28px; font-weight: 800; color: #ef4444;">' + correctas + ' <span style="font-size: 18px; font-weight: 400; color: #6b7280;">/ ' + total + '</span></div>' +
+                       '    </div>' +
+                       '    <div style="background: #fff5f5; border: 1px solid #feb2b2; border-radius: 10px; padding: 12px 24px; text-align: center;">' +
+                       '      <div style="font-size: 10px; color: #c53030; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">Puntaje</div>' +
+                       '      <div style="font-size: 28px; font-weight: 800; color: #c53030;">' + porcentaje + '%</div>' +
+                       '    </div>' +
+                       '  </div>' +
+                       '  <button id="btnReintentarEval" class="primary btn-pulse" style="padding: 14px 32px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: none; border-radius: 9999px; color: white; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 4px 6px -1px rgba(59,130,246,0.3); transition: all 0.2s;">🔄 Reintentar evaluación</button>' +
+                       '</div>';
         }
       }
-      htmlFinal += '</div>';
 
       content.innerHTML = htmlFinal;
-      footer.innerHTML = '<div></div><button id="closePreviewBtn" class="primary" style="padding: 12px 24px;">Cerrar vista previa</button>';
-      $('closePreviewBtn').onclick = function() { overlay.remove(); cleanupTimer(); };
+      var btnLabel = isStudentMode ? 'Finalizar y Salir 🏁' : 'Cerrar vista previa';
+      footer.innerHTML = '<div></div><button id="closePreviewBtn" class="primary" style="padding: 12px 24px;">' + btnLabel + '</button>';
+      $('closePreviewBtn').onclick = closeAction;
 
       if (targetEval && targetEval.notificarResultado !== 'silencio' && !aprobado) {
         $('btnReintentarEval').onclick = function() {
+          window._evaluacionFinalizada = false;
+          intentosRealizados = {};
           currentIdx = 0;
           window._showingExerciseIntro = true;
           respuestas = [];
@@ -6609,6 +7882,16 @@
     }
 
     function renderPreviewEjercicio() {
+      function escapeHtml(text) {
+        if (!text) return '';
+        return text.toString()
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
       if (timeWasAgotado) {
         timeIsUp();
         return;
@@ -6616,14 +7899,15 @@
 
       if (currentIdx === -1) {
         // Renderizar Portada/Presentación de la Evaluación
-        var html = '<div style="padding: 10px; color: #e2e8f0; display: flex; flex-direction: column; gap: 20px;">';
+        var html = '<div class="intro-card-fancy" style="padding: 10px; display: flex; flex-direction: column; gap: 12px; text-align: center;">';
         
-        // Título
+        // Icono animado y título
         html += '<div>';
-        html += '<h1 style="margin: 0 0 8px 0; color: #fff; font-size: 26px; font-weight: bold; background: linear-gradient(135deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🚀 ' + (targetEval.titulo || 'Nueva Evaluación') + '</h1>';
+        html += '  <div class="animated-float" style="font-size: 52px; margin-bottom: 8px; filter: drop-shadow(0 4px 6px rgba(16,185,129,0.2));">🚀</div>';
+        html += '  <h1 style="margin: 0 0 6px 0; font-size: 24px; font-weight: 800; background: linear-gradient(135deg, #10b981, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">' + (targetEval.titulo || 'Nueva Evaluación') + '</h1>';
         
         // Nivel y Tags
-        html += '<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px;">';
+        html += '  <div style="display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; margin-bottom: 12px;">';
         
         var colorNivel = '#10b981';
         var textNivel = 'Básico';
@@ -6635,55 +7919,66 @@
           textNivel = 'Avanzado';
         }
         
-        html += '<span style="display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: bold; background: ' + colorNivel + '22; color: ' + colorNivel + '; border: 1px solid ' + colorNivel + ';">⚡ ' + textNivel + '</span>';
+        html += '    <span style="display: inline-block; padding: 3px 10px; border-radius: 9999px; font-size: 10px; font-weight: bold; background: ' + colorNivel + '1a; color: ' + colorNivel + '; border: 1px solid ' + colorNivel + '33;">⚡ ' + textNivel + '</span>';
         
         var tags = (targetEval.tags || []);
         tags.forEach(function(tag) {
           if (!tag.trim()) return;
-          html += '<span style="display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 11px; background: #334155; color: #cbd5e1; border: 1px solid #475569;">🏷️ ' + tag.trim() + '</span>';
+          html += '    <span style="display: inline-block; padding: 3px 8px; border-radius: 9999px; font-size: 10px; background: #e2e8f0; color: #475569; border: 1px solid #cbd5e1;">🏷️ ' + tag.trim() + '</span>';
         });
         
+        html += '  </div>';
+        html += '</div>';
+
+        // Mascotita/Burbuja de bienvenida interactiva
+        html += '<div class="welcome-bubble" style="text-align: left; margin: 0 auto 8px; max-width: 780px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);">';
+        html += '  <span class="animated-float" style="font-size: 32px; animation-duration: 4s !important;">🤖</span>';
+        html += '  <div>';
+        html += '    <strong style="color: #047857; font-size: 13px;">¡Hola, futuro programador!</strong>';
+        html += '    <p style="margin: 2px 0 0 0; font-size: 12px; color: #065f46; line-height: 1.4;">Prepara tu ingenio y tus bloques de lógica. Lee la descripción del reto y pulsa el botón de abajo para arrancar.</p>';
+        html += '  </div>';
         html += '</div>';
         
         // Descripción
-        html += '<div style="padding: 16px; background: #0f172a; border-radius: 8px; border-left: 4px solid #38bdf8; font-size: 14px; line-height: 1.6; color: #cbd5e1; margin-bottom: 12px;">';
-        html += '<p style="margin: 0; font-style: italic;">' + (targetEval.descripcion || 'Esta evaluación no contiene una descripción detallada.') + '</p>';
+        var descText = targetEval.descripcion || 'Esta evaluación no contiene una descripción detallada.';
+        html += '<div style="padding: 12px 16px; background: #f4f7ff; border-radius: 8px; border-left: 4px solid #38bdf8; font-size: 13px; line-height: 1.5; color: #4b5563; text-align: left; max-width: 780px; margin: 0 auto 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01);">';
+        html += '  <p style="margin: 0; font-style: italic;">' + descText + '</p>';
         html += '</div>';
 
         // Detalles / Parámetros
-        html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 10px; margin-bottom: 20px;">';
+        html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; max-width: 800px; margin: 4px auto 12px; width: 100%;">';
         
         // Tiempo
-        html += '<div style="padding: 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; display: flex; align-items: center; gap: 12px;">';
-        html += '<span style="font-size: 24px;">⏱️</span>';
-        html += '<div><div style="font-size: 10px; color: #64748b;">TIEMPO LÍMITE</div><div style="font-weight: bold; font-size: 14px; color: #f1f5f9;">' + (targetEval.tiempoLimite || '15') + ' minutos</div></div>';
-        html += '</div>';
+        html += '  <div class="parameter-card-fancy" style="padding: 10px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; align-items: center; gap: 10px; text-align: left;">';
+        html += '    <span style="font-size: 22px;">⏱️</span>';
+        html += '    <div><div style="font-size: 9px; color: #64748b; font-weight: bold; letter-spacing: 0.05em;">TIEMPO LÍMITE</div><div style="font-weight: bold; font-size: 12px; color: #1f2937;">' + (targetEval.tiempoLimite || '15') + ' minutos</div></div>';
+        html += '  </div>';
 
         // Modo
-        var labelModo = 'Mixto (Preguntas + Bloques)';
+        var labelModo = 'Mixto (Bloques+Preguntas)';
         if (targetEval.modo === 'bloques') labelModo = 'Bloques Visuales';
         else if (targetEval.modo === 'preguntas') labelModo = 'Solo Preguntas';
         
-        html += '<div style="padding: 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; display: flex; align-items: center; gap: 12px;">';
-        html += '<span style="font-size: 24px;">🧩</span>';
-        html += '<div><div style="font-size: 10px; color: #64748b;">MODO DE EJERCICIO</div><div style="font-weight: bold; font-size: 14px; color: #f1f5f9;">' + labelModo + '</div></div>';
-        html += '</div>';
+        html += '  <div class="parameter-card-fancy" style="padding: 10px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; align-items: center; gap: 10px; text-align: left;">';
+        html += '    <span style="font-size: 22px;">🧩</span>';
+        html += '    <div><div style="font-size: 9px; color: #64748b; font-weight: bold; letter-spacing: 0.05em;">MODO RETO</div><div style="font-weight: bold; font-size: 12px; color: #1f2937;">' + labelModo + '</div></div>';
+        html += '  </div>';
 
         // Feedback
-        var labelNotif = 'Al Avanzar (Siguiente/Finalizar)';
-        if (targetEval.notificarResultado === 'instante') labelNotif = 'Al Instante (Tiempo real)';
-        else if (targetEval.notificarResultado === 'silencio') labelNotif = 'Al Finalizar (Silencioso)';
+        var labelNotif = 'Al Avanzar';
+        if (targetEval.notificarResultado === 'instante') labelNotif = 'Al Instante';
+        else if (targetEval.notificarResultado === 'silencio') labelNotif = 'Al Finalizar';
         
-        html += '<div style="padding: 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; display: flex; align-items: center; gap: 12px;">';
-        html += '<span style="font-size: 24px;">📢</span>';
-        html += '<div><div style="font-size: 10px; color: #64748b;">MÉTODO DE FEEDBACK</div><div style="font-weight: bold; font-size: 14px; color: #f1f5f9;">' + labelNotif + '</div></div>';
-        html += '</div>';
+        html += '  <div class="parameter-card-fancy" style="padding: 10px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; align-items: center; gap: 10px; text-align: left;">';
+        html += '    <span style="font-size: 22px;">📢</span>';
+        html += '    <div><div style="font-size: 9px; color: #64748b; font-weight: bold; letter-spacing: 0.05em;">RESPUESTAS</div><div style="font-weight: bold; font-size: 12px; color: #1f2937;">' + labelNotif + '</div></div>';
+        html += '  </div>';
 
         html += '</div>'; // Fin grid
 
         // Botón comenzar
-        html += '<div style="text-align: center; margin-top: 10px;">';
-        html += '<button id="btnComenzarEvaluacion" class="primary" style="padding: 12px 36px; font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; transition: all 0.2s;">Comenzar Evaluación 🚀</button>';
+        html += '<div style="text-align: center; margin-top: 6px;">';
+        html += '  <button id="btnComenzarEvaluacion" class="primary btn-pulse" style="padding: 12px 32px; font-size: 14px; font-weight: bold; border-radius: 9999px; cursor: pointer; border: none; transition: all 0.2s; outline: none;">¡Comenzar Evaluación! 🚀</button>';
         html += '</div>';
 
         html += '</div>'; // Fin portada
@@ -6773,6 +8068,30 @@
           case 'bloques_corregir':
             descTipo = 'Corregir error en programa (Depuración).';
             queHacer = 'Se te presenta un programa completo pero que contiene un error de lógica. Analiza el código y haz clic sobre el bloque culpable que contiene el error para seleccionarlo y marcar la respuesta.';
+            break;
+          case 'completar_codigo':
+            descTipo = 'Completar código con huecos.';
+            queHacer = 'Verás un fragmento de código con algunos espacios vacíos marcados como ?. Escribe la respuesta correcta en cada caja de texto para completar el programa.';
+            break;
+          case 'ordenar_bloques':
+            descTipo = 'Ordenar líneas de código.';
+            queHacer = 'Las líneas del programa están desordenadas. Usa los botones ▲ y ▼ para ordenar las líneas de arriba hacia abajo hasta reconstruir el código correcto.';
+            break;
+          case 'que_hace_codigo':
+            descTipo = '¿Qué hace el código?';
+            queHacer = 'Analiza detalladamente el código que se te presenta y escribe el resultado exacto de su ejecución.';
+            break;
+          case 'escribir_codigo':
+            descTipo = 'Escribir código libre.';
+            queHacer = 'Escribe un programa desde cero en el editor. Asegúrate de incluir todas las palabras clave indicadas en la parte superior.';
+            break;
+          case 'depurar_codigo':
+            descTipo = 'Depurar código.';
+            queHacer = 'El programa presentado contiene un error. Identifica la línea con el error, edítala directamente en el editor y corrígela.';
+            break;
+          case 'reto_ejecucion':
+            descTipo = 'Reto de ejecución en arena 3D.';
+            queHacer = 'Completa el reto de ejecución. Cuando estés listo, haz clic en "Simular Ejecución 3D" para verificar que se cumplen todas las condiciones de éxito.';
             break;
           default:
             descTipo = 'Ejercicio interactivo.';
@@ -6901,6 +8220,836 @@
           html += '</div>';
           html += '</div>';
           break;
+
+        case 'completar_codigo':
+          var htmlCode = (ej.codigo || '');
+          var parts = htmlCode.split('___');
+          var codeHtml = '';
+          parts.forEach(function(part, idx) {
+            codeHtml += escapeHtml(part);
+            if (idx < parts.length - 1) {
+              var expected = (ej.respuestas && ej.respuestas[idx] || '').trim();
+              var w = Math.max(50, expected.length * 9);
+              codeHtml += '<input type="text" class="completar-input" data-idx="' + idx + '" data-expected="' + expected.toLowerCase().replace(/"/g, '&quot;') + '" placeholder="?" style="background: #1e293b; border: 1px solid #475569; border-radius: 4px; color: #f59e0b; padding: 2px 8px; width: ' + w + 'px; font-family: monospace; font-weight: bold; text-align: center; margin: 0 4px; outline: none; transition: all 0.2s;">';
+            }
+          });
+          html += '<pre style="background: #0f172a; padding: 16px; border-radius: 6px; color: #e2e8f0; font-family: monospace; font-size: 14px; white-space: pre-wrap; margin: 0; border: 1px solid #334155;">' + codeHtml + '</pre>';
+          
+          setTimeout(function() {
+            content.querySelectorAll('.completar-input').forEach(function(inp) {
+              inp.oninput = function() {
+                if (targetEval && targetEval.notificarResultado === 'instante') {
+                  var val = inp.value.trim().toLowerCase();
+                  var expected = inp.getAttribute('data-expected');
+                  if (val === expected) {
+                    inp.style.borderColor = '#10b981';
+                    inp.style.background = '#10b9811a';
+                    inp.style.color = '#10b981';
+                  } else {
+                    inp.style.borderColor = '#ef4444';
+                    inp.style.background = '#ef44441a';
+                    inp.style.color = '#ef4444';
+                  }
+                }
+              };
+            });
+          }, 50);
+          break;
+
+        case 'ordenar_bloques':
+          if (!window._ordenarActivos || window._shuffledExerciseId !== ej.id) {
+            var allBlocks = [];
+            (ej.bloques || []).forEach(function(b, i) {
+              allBlocks.push({ text: b, isDistractor: false, id: 'b-' + i });
+            });
+            if (ej.distractores && ej.distractores.length > 0) {
+              ej.distractores.forEach(function(d, i) {
+                allBlocks.push({ text: d, isDistractor: true, id: 'd-' + i });
+              });
+            }
+            // Shuffle
+            for (var i = allBlocks.length - 1; i > 0; i--) {
+              var j = Math.floor(Math.random() * (i + 1));
+              var temp = allBlocks[i];
+              allBlocks[i] = allBlocks[j];
+              allBlocks[j] = temp;
+            }
+            window._ordenarActivos = [];
+            window._ordenarDisponibles = allBlocks;
+            window._shuffledExerciseId = ej.id;
+          }
+          
+          html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; min-height: 250px;">';
+          
+          // Secuencia activa
+          html += '<div style="background: #0f172a; padding: 12px; border: 2px dashed #334155; border-radius: 8px; display: flex; flex-direction: column; gap: 8px;">';
+          html += '<h4 style="margin: 0 0 8px 0; color: #38bdf8; font-size: 11px; text-transform: uppercase;">Secuencia Activa (Tu Solución)</h4>';
+          if (window._ordenarActivos.length === 0) {
+            html += '<div id="activePlaceholder" style="flex: 1; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 13px; font-style: italic; min-height: 150px; text-align: center;">Agrega bloques de código desde la derecha pulsando ➕</div>';
+          } else {
+            window._ordenarActivos.forEach(function(item, idx) {
+              html += '<div class="ord-active-item" style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #3b82f61a; border: 1px solid #3b82f6; border-radius: 6px; font-family: monospace; color: #f1f5f9; font-size: 13px;">';
+              html += '<span>' + escapeHtml(item.text) + '</span>';
+              html += '<div style="display: flex; gap: 4px; align-items: center;">';
+              html += '<button class="ord-move-up" data-idx="' + idx + '" style="padding: 2px 6px; background: #1e293b; border: 1px solid #334155; color: #38bdf8; border-radius: 3px; cursor: pointer; font-size: 10px;">▲</button>';
+              html += '<button class="ord-move-down" data-idx="' + idx + '" style="padding: 2px 6px; background: #1e293b; border: 1px solid #334155; color: #38bdf8; border-radius: 3px; cursor: pointer; font-size: 10px;">▼</button>';
+              html += '<button class="ord-remove" data-idx="' + idx + '" style="padding: 2px 6px; background: #ef444422; border: 1px solid #ef4444; color: #ef4444; border-radius: 3px; cursor: pointer; font-size: 10px;">🗑️</button>';
+              html += '</div>';
+              html += '</div>';
+            });
+          }
+          html += '</div>';
+
+          // Bloques disponibles
+          html += '<div style="background: #1e293b; padding: 12px; border: 1px solid #334155; border-radius: 8px; display: flex; flex-direction: column; gap: 8px;">';
+          html += '<h4 style="margin: 0 0 8px 0; color: #f59e0b; font-size: 11px; text-transform: uppercase;">Bloques Disponibles</h4>';
+          if (window._ordenarDisponibles.length === 0) {
+            html += '<div style="flex: 1; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 13px; font-style: italic; min-height: 150px;">No quedan bloques disponibles</div>';
+          } else {
+            window._ordenarDisponibles.forEach(function(item, idx) {
+              html += '<div class="ord-avail-item" style="display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; font-family: monospace; color: #94a3b8; font-size: 13px;">';
+              html += '<span>' + escapeHtml(item.text) + '</span>';
+              html += '<button class="ord-add" data-idx="' + idx + '" style="padding: 2px 8px; background: #f59e0b22; border: 1px solid #f59e0b; color: #f59e0b; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: bold;">➕</button>';
+              html += '</div>';
+            });
+          }
+          html += '</div>';
+          html += '</div>';
+          
+          setTimeout(function() {
+            var container = content;
+            container.querySelectorAll('.ord-add').forEach(function(btn) {
+              btn.onclick = function() {
+                var idx = parseInt(btn.getAttribute('data-idx'));
+                var item = window._ordenarDisponibles.splice(idx, 1)[0];
+                window._ordenarActivos.push(item);
+                renderPreviewEjercicio();
+              };
+            });
+            container.querySelectorAll('.ord-remove').forEach(function(btn) {
+              btn.onclick = function() {
+                var idx = parseInt(btn.getAttribute('data-idx'));
+                var item = window._ordenarActivos.splice(idx, 1)[0];
+                window._ordenarDisponibles.push(item);
+                renderPreviewEjercicio();
+              };
+            });
+            container.querySelectorAll('.ord-move-up').forEach(function(btn) {
+              btn.onclick = function() {
+                var idx = parseInt(btn.getAttribute('data-idx'));
+                if (idx > 0) {
+                  var temp = window._ordenarActivos[idx];
+                  window._ordenarActivos[idx] = window._ordenarActivos[idx - 1];
+                  window._ordenarActivos[idx - 1] = temp;
+                  renderPreviewEjercicio();
+                }
+              };
+            });
+            container.querySelectorAll('.ord-move-down').forEach(function(btn) {
+              btn.onclick = function() {
+                var idx = parseInt(btn.getAttribute('data-idx'));
+                if (idx < window._ordenarActivos.length - 1) {
+                  var temp = window._ordenarActivos[idx];
+                  window._ordenarActivos[idx] = window._ordenarActivos[idx + 1];
+                  window._ordenarActivos[idx + 1] = temp;
+                  renderPreviewEjercicio();
+                }
+              };
+            });
+          }, 50);
+          break;
+
+        case 'que_hace_codigo':
+          html += '<pre style="background: #0f172a; padding: 16px; border-radius: 6px; color: #e2e8f0; font-family: monospace; font-size: 14px; white-space: pre-wrap; margin: 0 0 16px 0; border: 1px solid #334155;">' + escapeHtml(ej.codigo || '') + '</pre>';
+          html += '<div style="display: flex; flex-direction: column; gap: 8px;">';
+          html += '<label style="color: #94a3b8; font-size: 12px; font-weight: bold; text-transform: uppercase;">Tu Respuesta:</label>';
+          html += '<input type="text" id="queHaceInput" placeholder="Escribe aquí tu análisis..." style="width: 100%; background: #0f172a; border: 2px solid #334155; border-radius: 8px; color: #fff; padding: 12px; font-size: 14px; outline: none; transition: border 0.2s;">';
+          html += '</div>';
+          break;
+
+        case 'escribir_codigo':
+          html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+          if (ej.palabrasClave && ej.palabrasClave.length > 0) {
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">';
+            html += '<span style="color: #94a3b8; font-size: 11px; font-weight: bold;">PALABRAS CLAVE REQUERIDAS:</span>';
+            ej.palabrasClave.forEach(function(kw) {
+              html += '<code class="kw-badge" data-kw="' + kw + '" style="background: #1e293b; border: 1px solid #334155; padding: 3px 8px; border-radius: 4px; color: #f59e0b; font-size: 11px; font-family: monospace; transition: all 0.2s;">' + escapeHtml(kw) + '</code>';
+            });
+            html += '</div>';
+          }
+          
+          var initialVal = (respuestasDetalladas[currentIdx] !== undefined) ? respuestasDetalladas[currentIdx] : '';
+          if (!initialVal && targetEval && targetEval.entorno === 'dispositivos') {
+            initialVal = "void setup() {\n  // Configura aquí tus pines virtuales\n}\n\nvoid loop() {\n  // Tu código repetitivo aquí\n}";
+          }
+          
+          html += '<div style="display: flex; border: 2px solid #334155; border-radius: 8px; background: #0f172a; overflow: hidden; font-family: monospace; font-size: 14px;">';
+          html += '<div id="codeGutter" style="background: #1e293b; padding: 12px 8px; color: #64748b; text-align: right; user-select: none; border-right: 1px solid #334155; min-width: 32px; line-height: 1.5;">1</div>';
+          html += '<textarea id="escribirCodigoTextarea" placeholder="Escribe tu código aquí..." style="flex: 1; height: 180px; background: transparent; border: none; color: #e2e8f0; padding: 12px; outline: none; resize: vertical; line-height: 1.5; font-family: monospace; font-size: 14px; margin: 0;">' + escapeHtml(initialVal) + '</textarea>';
+          html += '</div>';
+          html += '</div>';
+          
+          setTimeout(function() {
+            var ta = document.getElementById('escribirCodigoTextarea');
+            var gutter = document.getElementById('codeGutter');
+            if (ta && gutter) {
+              ta.onkeydown = function(e) {
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  var start = ta.selectionStart;
+                  var end = ta.selectionEnd;
+                  ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
+                  ta.selectionStart = ta.selectionEnd = start + 2;
+                  ta.oninput();
+                }
+              };
+
+              ta.oninput = function() {
+                var lines = ta.value.split('\n').length;
+                var gutterHtml = '';
+                for (var i = 1; i <= lines; i++) {
+                  gutterHtml += i + '<br>';
+                }
+                gutter.innerHTML = gutterHtml;
+
+                var code = ta.value.toLowerCase();
+                content.querySelectorAll('.kw-badge').forEach(function(badge) {
+                  var kw = badge.getAttribute('data-kw').toLowerCase();
+                  if (code.indexOf(kw) !== -1) {
+                    badge.style.borderColor = '#10b981';
+                    badge.style.background = '#10b98122';
+                    badge.style.color = '#10b981';
+                  } else {
+                    badge.style.borderColor = '#334155';
+                    badge.style.background = '#1e293b';
+                    badge.style.color = '#f59e0b';
+                  }
+                });
+              };
+              ta.oninput();
+            }
+          }, 50);
+          break;
+
+        case 'depurar_codigo':
+          html += '<div style="margin-bottom: 12px; padding: 8px 12px; background: #ef44441a; border: 1px solid #ef444433; border-radius: 6px; display: inline-block;">';
+          html += '<span style="color: #ef4444; font-size: 11px; font-weight: bold; text-transform: uppercase;">⚠️ TIPO DE ERROR:</span> ';
+          var labelError = 'Sintaxis';
+          if (ej.tipoError === 'logica') labelError = 'Lógica';
+          else if (ej.tipoError === 'ejecucion') labelError = 'Ejecución';
+          html += '<span style="color: #f1f5f9; font-size: 12px; font-weight: bold;">' + labelError + '</span>';
+          html += '</div>';
+
+          html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px;">';
+          // Original
+          html += '<div>';
+          html += '<label style="color: #94a3b8; font-size: 11px; font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 6px;">Código Original (Con Error):</label>';
+          html += '<pre style="background: #ef44440a; border: 1px solid #ef444433; border-radius: 6px; padding: 12px; color: #f87171; font-family: monospace; font-size: 13px; margin: 0; line-height: 1.5; white-space: pre-wrap; height: 180px; overflow-y: auto;">' + escapeHtml(ej.codigoError || '') + '</pre>';
+          html += '</div>';
+          
+          // Editor de corrección
+          var initialDepurarCode = (respuestasDetalladas[currentIdx] !== undefined) ? respuestasDetalladas[currentIdx] : (ej.codigoError || '');
+          html += '<div>';
+          html += '<label style="color: #94a3b8; font-size: 11px; font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 6px;">Tu Corrección:</label>';
+          html += '<div style="display: flex; border: 2px solid #334155; border-radius: 8px; background: #0f172a; overflow: hidden; font-family: monospace; font-size: 13px; height: 180px;">';
+          html += '<div id="depurarGutter" style="background: #1e293b; padding: 12px 8px; color: #64748b; text-align: right; user-select: none; border-right: 1px solid #334155; min-width: 32px; line-height: 1.5;">1</div>';
+          html += '<textarea id="depurarCodigoTextarea" style="flex: 1; background: transparent; border: none; color: #e2e8f0; padding: 12px; outline: none; resize: none; line-height: 1.5; font-family: monospace; font-size: 13px; margin: 0; overflow-y: auto;">' + escapeHtml(initialDepurarCode) + '</textarea>';
+          html += '</div>';
+          html += '</div>';
+          html += '</div>';
+          
+          setTimeout(function() {
+            var ta = document.getElementById('depurarCodigoTextarea');
+            var gutter = document.getElementById('depurarGutter');
+            if (ta && gutter) {
+              ta.onkeydown = function(e) {
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  var start = ta.selectionStart;
+                  var end = ta.selectionEnd;
+                  ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
+                  ta.selectionStart = ta.selectionEnd = start + 2;
+                  ta.oninput();
+                }
+              };
+
+              ta.oninput = function() {
+                var lines = ta.value.split('\n').length;
+                var gutterHtml = '';
+                for (var i = 1; i <= lines; i++) {
+                  gutterHtml += i + '<br>';
+                }
+                gutter.innerHTML = gutterHtml;
+              };
+              ta.oninput();
+            }
+          }, 50);
+          break;
+
+        case 'reto_ejecucion':
+          html += '<div style="display: flex; flex-direction: column; gap: 16px; background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155;">';
+          html += '<div>';
+          html += '<h4 style="margin: 0 0 6px 0; color: #38bdf8; font-size: 11px; text-transform: uppercase;">Objetivo del Reto</h4>';
+          html += '<p style="margin: 0; color: #cbd5e1; font-size: 14px; line-height: 1.5;">' + escapeHtml(ej.descripcionReto || 'Completar el reto de ejecución.') + '</p>';
+          html += '</div>';
+          
+          html += '<div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; align-items: start;">';
+          // Condiciones
+          html += '<div>';
+          if (ej.maxBloques > 0 || (ej.bloquesPermitidos && ej.bloquesPermitidos.length > 0)) {
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 12px; padding: 10px; background: #1e293b; border-radius: 6px; font-size: 12px; margin-bottom: 12px;">';
+            if (ej.maxBloques > 0) {
+              html += '<div><span style="color: #94a3b8;">Límite de bloques:</span> <strong style="color: #f59e0b;">' + ej.maxBloques + '</strong></div>';
+            }
+            if (ej.bloquesPermitidos && ej.bloquesPermitidos.length > 0) {
+              html += '<div><span style="color: #94a3b8;">Permitidos:</span> <strong style="color: #38bdf8;">' + ej.bloquesPermitidos.join(', ') + '</strong></div>';
+            }
+            html += '</div>';
+          }
+          
+          html += '<h4 style="margin: 0 0 8px 0; color: #a78bfa; font-size: 11px; text-transform: uppercase;">Condiciones de éxito</h4>';
+          html += '<div style="display: flex; flex-direction: column; gap: 6px;">';
+          var conds = ej.condiciones || {};
+          var condKeys = Object.keys(conds);
+          if (condKeys.length === 0) {
+            html += '<div style="color: #64748b; font-size: 13px; font-style: italic;">No se definieron condiciones específicas.</div>';
+          } else {
+            condKeys.forEach(function(k) {
+              html += '<div class="reto-cond-item" data-key="' + k + '" style="display: flex; align-items: center; gap: 8px; color: #cbd5e1; font-size: 13px;">';
+              html += '<span class="cond-checkbox" style="display: inline-block; width: 14px; height: 14px; border: 2px solid #64748b; border-radius: 3px; background: transparent;"></span>';
+              html += '<span>' + escapeHtml(k + ': ' + JSON.stringify(conds[k])) + '</span>';
+              html += '</div>';
+            });
+          }
+          html += '</div>';
+          html += '</div>';
+          
+          // Simulador Grid 2D
+          html += '<div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">';
+          html += '<label style="color: #94a3b8; font-size: 11px; font-weight: bold; text-transform: uppercase;">Arena de Física 3D</label>';
+          html += '<div id="arenaGrid" style="width: 160px; height: 160px; background: #0b0f19; border: 2px solid #334155; border-radius: 8px; position: relative; overflow: hidden; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr);">';
+          for (var g = 0; g < 25; g++) {
+            html += '<div style="border: 1px solid rgba(51, 65, 85, 0.2);"></div>';
+          }
+          html += '<div id="robotDot" style="position: absolute; width: 16px; height: 16px; background: #8b5cf6; border-radius: 50%; left: 16px; top: 120px; transition: all 0.6s ease-in-out; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px #8b5cf6;"><span style="font-size: 9px; color: white;">🤖</span></div>';
+          html += '<div id="targetDot" style="position: absolute; width: 16px; height: 16px; background: #10b981; border-radius: 50%; left: 120px; top: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px #10b981;"><span style="font-size: 9px; color: white;">🎯</span></div>';
+          html += '</div>';
+          html += '<button id="btnSimularReto" style="width: 100%; padding: 10px; background: #8b5cf6; border: none; border-radius: 6px; color: #fff; font-weight: bold; cursor: pointer; transition: all 0.2s; font-size: 13px;">⚡ Iniciar Simulación</button>';
+          html += '<div id="simStatus" style="font-size: 11px; color: #94a3b8; font-style: italic; text-align: center; height: 16px; margin-top: 4px;"></div>';
+          html += '</div>';
+
+          html += '</div>'; // Fin sub-grid
+          html += '</div>';
+          
+          window._retoSuperado = false;
+          setTimeout(function() {
+            var btn = document.getElementById('btnSimularReto');
+            var status = document.getElementById('simStatus');
+            var robot = document.getElementById('robotDot');
+            if (btn && robot) {
+              btn.onclick = function() {
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+                status.textContent = 'Simulando física...';
+                
+                setTimeout(function() {
+                  robot.style.left = '80px';
+                  robot.style.top = '80px';
+                  var items = content.querySelectorAll('.reto-cond-item');
+                  if (items.length > 0) {
+                    var firstCheckbox = items[0].querySelector('.cond-checkbox');
+                    firstCheckbox.style.border = '2px solid #10b981';
+                    firstCheckbox.style.background = '#10b981';
+                    firstCheckbox.innerHTML = '<span style="color: #fff; font-size: 9px; display: block; text-align: center; line-height: 10px;">✓</span>';
+                    items[0].style.color = '#10b981';
+                  }
+                }, 800);
+
+                setTimeout(function() {
+                  robot.style.left = '120px';
+                  robot.style.top = '20px';
+                  var items = content.querySelectorAll('.reto-cond-item');
+                  for (var idx = 1; idx < items.length; idx++) {
+                    var cb = items[idx].querySelector('.cond-checkbox');
+                    cb.style.border = '2px solid #10b981';
+                    cb.style.background = '#10b981';
+                    cb.innerHTML = '<span style="color: #fff; font-size: 9px; display: block; text-align: center; line-height: 10px;">✓</span>';
+                    items[idx].style.color = '#10b981';
+                  }
+                  status.textContent = '🎉 ¡Simulación completada!';
+                  status.style.color = '#10b981';
+                  window._retoSuperado = true;
+                }, 1800);
+              };
+            }
+          }, 50);
+          break;
+        case 'circuito_armar':
+        case 'circuito_depurar':
+          html += '<div style="display: flex; flex-direction: column; gap: 12px; height: 600px;">';
+          
+          if (ej.circuitoDiagrama) {
+            html += '<div style="display: flex; justify-content: flex-start; margin-bottom: 8px;">';
+            html += '  <button id="btnVerDiagramaRef" style="padding: 8px 16px; background: #00979C; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12px; transition: all 0.2s;">';
+            html += '    🖼️ Ver diagrama de conexión';
+            html += '  </button>';
+            html += '</div>';
+          }
+
+          html += '<div style="flex: 1; border: 2px solid #334155; border-radius: 8px; overflow: hidden; background: #0b0f19; min-height: 400px; position: relative;">';
+          html += '  <iframe id="velxioPlayerIframe" src="../../index.html#/editor" style="width: 100%; height: 100%; border: none;"></iframe>';
+          html += '</div>';
+          html += '</div>';
+
+          // Instanciar eventos en diferido
+          setTimeout(function() {
+            if (ej.circuitoDiagrama) {
+              var btnRef = document.getElementById('btnVerDiagramaRef');
+              if (btnRef) {
+                btnRef.onclick = function() {
+                  var lightbox = document.createElement('div');
+                  lightbox.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.95); z-index: 100000; display: flex; align-items: center; justify-content: center; cursor: pointer;';
+                  
+                  var img = document.createElement('img');
+                  img.src = ej.circuitoDiagrama;
+                  img.style.cssText = 'max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 8px; border: 2px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);';
+                  
+                  lightbox.onclick = function() {
+                    lightbox.remove();
+                  };
+                  
+                  lightbox.appendChild(img);
+                  document.body.appendChild(lightbox);
+                };
+              }
+            }
+
+            var playerIframe = document.getElementById('velxioPlayerIframe');
+            if (playerIframe) {
+              var pollAttempts = 0;
+              var maxPollAttempts = 50;
+              var pollInterval = setInterval(function() {
+                pollAttempts++;
+                try {
+                  var win = playerIframe.contentWindow;
+                  var boardStore = win.__VELXIO_BOARD_STORE;
+                  var fileStore = win.__VELXIO_FILE_STORE;
+                  if (boardStore && typeof boardStore.getState === 'function') {
+                    clearInterval(pollInterval);
+                    
+                    var savedProgress = null;
+                    try {
+                      var key = 'stblock_student_circuit_' + targetEval.id + '_' + ej.id;
+                      var data = localStorage.getItem(key);
+                      if (data) savedProgress = JSON.parse(data);
+                    } catch(e) {}
+
+                    if (savedProgress) {
+                      var storeState = boardStore.getState();
+                      if (storeState.loadProjectState) {
+                        storeState.loadProjectState(savedProgress);
+                      }
+                      if (savedProgress.fileGroups && fileStore && typeof fileStore.getState === 'function') {
+                        var fStoreState = fileStore.getState();
+                        if (fStoreState.loadFileGroups) {
+                          fStoreState.loadFileGroups(savedProgress.fileGroups);
+                        }
+                      }
+                    } else if (ej.circuitoInicial) {
+                      var storeState = boardStore.getState();
+                      if (storeState.loadProjectState) {
+                        storeState.loadProjectState(ej.circuitoInicial);
+                      }
+                      if (ej.circuitoInicial.fileGroups && fileStore && typeof fileStore.getState === 'function') {
+                        var fStoreState = fileStore.getState();
+                        if (fStoreState.loadFileGroups) {
+                          fStoreState.loadFileGroups(ej.circuitoInicial.fileGroups);
+                        }
+                      }
+                    } else {
+                      var boardId = targetEval.tarjeta || 'stbBoardV2';
+                      initializeVelxioBoard(win, boardId);
+                    }
+                  }
+                } catch(e) {}
+                if (pollAttempts >= maxPollAttempts) {
+                  clearInterval(pollInterval);
+                  console.warn('[Velxio Player] Timed out waiting for stores to initialize.');
+                }
+              }, 200);
+            }
+          }, 50);
+          break;
+
+        case 'circuito_codigo':
+          var pMode = ej.progMode || 'codigo';
+          var hideMode = ej.ocultar || 'programacion';
+          
+          // Toolbar superior para alternar vistas
+          html += '<div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 12px; background: #1e293b; padding: 6px; border-radius: 30px; border: 1px solid #334155; width: fit-content; margin-left: auto; margin-right: auto; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">';
+          html += '  <button id="btnToggleProgOnly" style="background: transparent; color: #94a3b8; border: none; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">';
+          html += '    🧩 Programación';
+          html += '  </button>';
+          html += '  <button id="btnToggleSplit" style="background: #334155; color: #fff; border: none; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">';
+          html += '    🌗 Vista Dividida';
+          html += '  </button>';
+          html += '  <button id="btnToggleCircuitOnly" style="background: transparent; color: #94a3b8; border: none; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">';
+          html += '    🔌 Circuito';
+          html += '  </button>';
+          html += '</div>';
+
+          // Contenedor Grid principal
+          html += '<div id="circuitoCodigoGridContainer" style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px; height: 600px;">';
+          
+          // Izquierda: Blockly/Código Panel
+          html += '  <div id="leftPanelCircuitoCodigo" style="display: flex; flex-direction: column; background: #0f172a; border-radius: 8px; border: 1px solid #334155; overflow: hidden; height: 100%;">';
+          html += '    <div style="padding: 10px 16px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;">';
+          if (pMode === 'bloques') {
+            html += '      <strong style="color: #e2e8f0; font-size: 13px;">🧩 Programación por Bloques</strong>';
+            if (hideMode === 'circuito') {
+              html += '      <span style="font-size: 11px; color: #10b981; font-weight: bold;">✓ Solución en Bloques (Lectura)</span>';
+            }
+          } else {
+            if (hideMode === 'circuito') {
+              html += '      <strong style="color: #e2e8f0; font-size: 13px;">💻 Código Arduino de Control (Lectura)</strong>';
+            } else {
+              html += '      <strong style="color: #e2e8f0; font-size: 13px;">💻 Código Arduino de Control (Escritura)</strong>';
+            }
+          }
+          html += '    </div>';
+          
+          if (pMode === 'bloques') {
+            html += '    <div style="display: flex; flex: 1; min-height: 0;">';
+            if (hideMode === 'programacion') {
+              html += '      <div id="toolboxPreviewArea" style="width: 200px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column;">';
+              html += '        <div style="padding: 12px 16px; border-bottom: 1px solid #334155;"><h4 style="margin: 0; color: #e2e8f0; font-size: 13px;">📦 Bloques disponibles</h4></div>';
+              html += '        <div id="toolboxBlocklyContainer" style="flex: 1; min-height: 200px;"></div>';
+              html += '      </div>';
+            } else {
+              html += '      <div id="toolboxPreviewArea" style="display: none;">';
+              html += '        <div id="toolboxBlocklyContainer"></div>';
+              html += '      </div>';
+            }
+            html += '      <div id="workspacePreviewArea" style="flex: 1; display: flex; flex-direction: column; position: relative;">';
+            html += '        <div id="mainBlocklyContainer" style="flex: 1; height: 100%; width: 100%;"></div>';
+            html += '      </div>';
+            html += '    </div>';
+          } else {
+            // Modo código
+            if (hideMode === 'circuito') {
+              var solutionCode = extractArduinoCode(ej.circuitoSolucion ? ej.circuitoSolucion.fileGroups : null) || "// No hay código de solución configurado.";
+              html += '    <pre style="flex: 1; margin: 0; padding: 16px; background: #0b0f19; color: #38bdf8; font-family: monospace; font-size: 13px; line-height: 1.5; overflow: auto; white-space: pre-wrap;">' + escapeHtml(solutionCode) + '</pre>';
+            } else {
+              var initialCode = "";
+              try {
+                var key = 'stblock_student_circuit_' + targetEval.id + '_' + ej.id;
+                var val = localStorage.getItem(key);
+                if (val) {
+                  var saved = JSON.parse(val);
+                  initialCode = extractArduinoCode(saved.fileGroups) || "";
+                }
+              } catch(e) {}
+              if (!initialCode && ej.circuitoSolucion && ej.circuitoSolucion.fileGroups) {
+                initialCode = extractArduinoCode(ej.circuitoSolucion.fileGroups) || "";
+              }
+              html += '    <div style="flex: 1; display: flex; font-family: monospace; font-size: 13px; min-height: 0; background: #0b0f19;">';
+              html += '      <div id="studentCodeGutter" style="background: #1e293b; padding: 12px 8px; color: #64748b; text-align: right; user-select: none; border-right: 1px solid #334155; min-width: 32px; line-height: 1.5;">1</div>';
+              html += '      <textarea id="studentCodeTextarea" style="flex: 1; background: transparent; border: none; color: #38bdf8; padding: 12px; outline: none; resize: none; line-height: 1.5; font-family: monospace; font-size: 13px; margin: 0; overflow-y: auto;" placeholder="// Escribe tu código Arduino aquí...">' + escapeHtml(initialCode) + '</textarea>';
+              html += '    </div>';
+            }
+          }
+          html += '  </div>';
+
+          // Derecha: Velxio / Circuit Panel
+          html += '  <div id="rightPanelCircuitoCodigo" style="display: flex; flex-direction: column; gap: 12px; height: 100%;">';
+          if (ej.circuitoDiagrama) {
+            html += '    <div style="display: flex; justify-content: flex-start;">';
+            html += '      <button id="btnVerDiagramaRef" style="padding: 8px 16px; background: #00979C; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12px; transition: all 0.2s;">';
+            html += '        🖼️ Ver diagrama de conexión';
+            html += '      </button>';
+            html += '    </div>';
+          }
+          html += '    <div style="flex: 1; border: 2px solid #334155; border-radius: 8px; overflow: hidden; background: #0b0f19;">';
+          html += '      <iframe id="velxioPlayerIframe" src="../../index.html#/editor" style="width: 100%; height: 100%; border: none;"></iframe>';
+          html += '    </div>';
+          html += '  </div>';
+
+          html += '</div>';
+
+          // Inicializar eventos en diferido para circuito_codigo
+          setTimeout(function() {
+            var btnProg = document.getElementById('btnToggleProgOnly');
+            var btnSplit = document.getElementById('btnToggleSplit');
+            var btnCirc = document.getElementById('btnToggleCircuitOnly');
+            var gridContainer = document.getElementById('circuitoCodigoGridContainer');
+            var leftPanel = document.getElementById('leftPanelCircuitoCodigo');
+            var rightPanel = document.getElementById('rightPanelCircuitoCodigo');
+
+            function setViewMode(mode) {
+              if (mode === 'prog') {
+                leftPanel.style.display = 'flex';
+                rightPanel.style.display = 'none';
+                gridContainer.style.display = 'block'; // Ocupa todo
+                
+                btnProg.style.background = '#38bdf8';
+                btnProg.style.color = '#0f172a';
+                btnSplit.style.background = 'transparent';
+                btnSplit.style.color = '#94a3b8';
+                btnCirc.style.background = 'transparent';
+                btnCirc.style.color = '#94a3b8';
+              } else if (mode === 'circ') {
+                leftPanel.style.display = 'none';
+                rightPanel.style.display = 'flex';
+                gridContainer.style.display = 'block';
+                
+                btnProg.style.background = 'transparent';
+                btnProg.style.color = '#94a3b8';
+                btnSplit.style.background = 'transparent';
+                btnSplit.style.color = '#94a3b8';
+                btnCirc.style.background = '#38bdf8';
+                btnCirc.style.color = '#0f172a';
+              } else {
+                leftPanel.style.display = 'flex';
+                rightPanel.style.display = 'flex';
+                gridContainer.style.display = 'grid';
+                gridContainer.style.gridTemplateColumns = '1fr 1.2fr';
+                
+                btnProg.style.background = 'transparent';
+                btnProg.style.color = '#94a3b8';
+                btnSplit.style.background = '#334155';
+                btnSplit.style.color = '#fff';
+                btnCirc.style.background = 'transparent';
+                btnCirc.style.color = '#94a3b8';
+              }
+              if (pMode === 'bloques' && window._previewWorkspace) {
+                setTimeout(function() {
+                  Blockly.svgResize(window._previewWorkspace);
+                }, 100);
+              }
+            }
+
+            if (btnProg && btnSplit && btnCirc) {
+              btnProg.onclick = function() { setViewMode('prog'); };
+              btnSplit.onclick = function() { setViewMode('split'); };
+              btnCirc.onclick = function() { setViewMode('circ'); };
+            }
+
+            if (pMode === 'bloques') {
+              var isReadOnly = (hideMode === 'circuito');
+              var cats = ej.categoriasPermitidas || ['motion', 'looks', 'sound', 'events', 'control', 'sensing', 'operators', 'variables', 'lists', 'custom', 'pen', 'music', 'logic', 'state', 'debug', 'gravity', 'physics'];
+              initPreviewBlockly(ej, cats, !isReadOnly);
+              // Redimensionar Blockly después de que se renderice en el DOM para evitar que colapse a altura 0
+              setTimeout(function() {
+                if (window._previewWorkspace) {
+                  Blockly.svgResize(window._previewWorkspace);
+                }
+              }, 400);
+            } else if (pMode === 'codigo' && hideMode === 'programacion') {
+              var ta = document.getElementById('studentCodeTextarea');
+              var gutter = document.getElementById('studentCodeGutter');
+              if (ta && gutter) {
+                ta.onkeydown = function(e) {
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    var start = ta.selectionStart;
+                    var end = ta.selectionEnd;
+                    ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
+                    ta.selectionStart = ta.selectionEnd = start + 2;
+                    ta.oninput();
+                  }
+                };
+                ta.oninput = function() {
+                  var lines = ta.value.split('\n').length;
+                  var gutterHtml = '';
+                  for (var i = 1; i <= lines; i++) {
+                    gutterHtml += i + '<br>';
+                  }
+                  gutter.innerHTML = gutterHtml;
+                  
+                  // Sincronizar el código del textarea hacia el fileStore del Iframe de Velxio
+                  var playerIframe = document.getElementById('velxioPlayerIframe');
+                  if (playerIframe) {
+                    try {
+                      var win = playerIframe.contentWindow;
+                      var fileStore = win.__VELXIO_FILE_STORE;
+                      if (fileStore && typeof fileStore.getState === 'function') {
+                        var fStoreState = fileStore.getState();
+                        if (fStoreState.fileGroups) {
+                          var foundFile = null;
+                          fStoreState.fileGroups.forEach(function(g) {
+                            if (g.files) {
+                              g.files.forEach(function(f) {
+                                if (f.name.endsWith('.ino') || f.name.endsWith('.cpp')) {
+                                  foundFile = f;
+                                }
+                              });
+                            }
+                          });
+                          if (foundFile) {
+                            foundFile.content = ta.value;
+                          }
+                        }
+                      }
+                    } catch(ex) {}
+                  }
+                };
+                ta.oninput();
+              }
+            }
+
+            if (ej.circuitoDiagrama) {
+              var btnRef = document.getElementById('btnVerDiagramaRef');
+              if (btnRef) {
+                btnRef.onclick = function() {
+                  var lightbox = document.createElement('div');
+                  lightbox.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.95); z-index: 100000; display: flex; align-items: center; justify-content: center; cursor: pointer;';
+                  var img = document.createElement('img');
+                  img.src = ej.circuitoDiagrama;
+                  img.style.cssText = 'max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 8px; border: 2px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);';
+                  lightbox.onclick = function() { lightbox.remove(); };
+                  lightbox.appendChild(img);
+                  document.body.appendChild(lightbox);
+                };
+              }
+            }
+
+            var playerIframe = document.getElementById('velxioPlayerIframe');
+            if (playerIframe) {
+              var pollAttempts = 0;
+              var maxPollAttempts = 50;
+              var pollInterval = setInterval(function() {
+                pollAttempts++;
+                try {
+                  var win = playerIframe.contentWindow;
+                  var boardStore = win.__VELXIO_BOARD_STORE;
+                  var fileStore = win.__VELXIO_FILE_STORE;
+                  if (boardStore && typeof boardStore.getState === 'function') {
+                    clearInterval(pollInterval);
+                    
+                    var savedProgress = null;
+                    try {
+                      var key = 'stblock_student_circuit_' + targetEval.id + '_' + ej.id;
+                      var data = localStorage.getItem(key);
+                      if (data) savedProgress = JSON.parse(data);
+                    } catch(e) {}
+
+                    if (savedProgress) {
+                      var storeState = boardStore.getState();
+                      if (storeState.loadProjectState) {
+                        storeState.loadProjectState(savedProgress);
+                      }
+                      if (savedProgress.fileGroups && fileStore && typeof fileStore.getState === 'function') {
+                        var fStoreState = fileStore.getState();
+                        if (fStoreState.loadFileGroups) {
+                          fStoreState.loadFileGroups(savedProgress.fileGroups);
+                        }
+                      }
+                    } else if (hideMode === 'programacion') {
+                      var storeState = boardStore.getState();
+                      if (storeState.loadProjectState && ej.circuitoSolucion) {
+                        var circuitOnly = Object.assign({}, ej.circuitoSolucion);
+                        circuitOnly.fileGroups = null; // Quitar el código solución
+                        storeState.loadProjectState(circuitOnly);
+                      } else {
+                        var boardId = targetEval.tarjeta || 'stbBoardV2';
+                        initializeVelxioBoard(win, boardId);
+                      }
+                    } else {
+                      var storeState = boardStore.getState();
+                      var startCircuit = ej.circuitoInicial || { boards: [{ id: 'uno', type: targetEval.tarjeta || 'stbBoardV2' }], components: [], wires: [] };
+                      if (storeState.loadProjectState) {
+                        storeState.loadProjectState(startCircuit);
+                      }
+                      if (ej.circuitoSolucion && ej.circuitoSolucion.fileGroups && fileStore && typeof fileStore.getState === 'function') {
+                        var fStoreState = fileStore.getState();
+                        if (fStoreState.loadFileGroups) {
+                          fStoreState.loadFileGroups(ej.circuitoSolucion.fileGroups);
+                        }
+                      }
+                    }
+                  }
+                } catch(e) {}
+                if (pollAttempts >= maxPollAttempts) {
+                  clearInterval(pollInterval);
+                  console.warn('[Velxio Player] Timed out waiting for stores to initialize.');
+                }
+              }, 200);
+            }
+          }, 100);
+          break;
+        case 'circuito_cuestionario':
+          html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; height: 600px;">';
+          
+          // Izquierda: Quiz
+          html += '  <div style="display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 16px; background: #0f172a; border-radius: 8px; border: 1px solid #334155;">';
+          html += '    <h3 style="margin: 0 0 8px 0; color: #e2e8f0; font-size: 14px;">Elige la respuesta correcta:</h3>';
+          html += '    <div style="display: flex; flex-direction: column; gap: 8px;">';
+          (ej.opciones || []).forEach(function(op, idx) {
+            var inputId = 'cuestionarioOpt_' + ej.id + '_' + idx;
+            var isChecked = respuestasDetalladas[currentIdx] === op.texto;
+            html += '      <label for="' + inputId + '" class="preview-option' + (isChecked ? ' selected' : '') + '" data-idx="' + idx + '" style="display: flex; align-items: center; gap: 10px; padding: 12px; background: #1e293b; border: 1px solid #334155; border-radius: 6px; cursor: pointer; color: #e2e8f0; font-size: 13px; transition: all 0.2s;">';
+            html += '        <input type="radio" id="' + inputId + '" name="circuitoQuizRadio_' + ej.id + '" value="' + op.texto + '" ' + (isChecked ? 'checked' : '') + ' style="width: 18px; height: 18px; cursor: pointer;">';
+            html += '        <span>' + op.texto + '</span>';
+            html += '      </label>';
+          });
+          html += '    </div>';
+          html += '  </div>';
+
+          // Derecha: Velxio
+          html += '  <div style="border: 2px solid #334155; border-radius: 8px; overflow: hidden; background: #0b0f19; min-height: 400px;">';
+          html += '    <iframe id="velxioPlayerIframe" src="../../index.html#/editor" style="width: 100%; height: 100%; border: none;"></iframe>';
+          html += '  </div>';
+          html += '</div>';
+
+          // Instanciar eventos en diferido
+          setTimeout(function() {
+            var optionsEls = document.querySelectorAll('.preview-option[data-idx]');
+            optionsEls.forEach(function(el) {
+              el.onclick = function(e) {
+                optionsEls.forEach(function(other) {
+                  other.classList.remove('selected');
+                  var otherInput = other.querySelector('input');
+                  if (otherInput) otherInput.checked = false;
+                });
+                el.classList.add('selected');
+                var radio = el.querySelector('input');
+                if (radio) {
+                  radio.checked = true;
+                  respuestasDetalladas[currentIdx] = radio.value;
+                }
+              };
+            });
+
+            var playerIframe = document.getElementById('velxioPlayerIframe');
+            if (playerIframe) {
+              var pollAttempts = 0;
+              var maxPollAttempts = 50;
+              var pollInterval = setInterval(function() {
+                pollAttempts++;
+                try {
+                  var win = playerIframe.contentWindow;
+                  var boardStore = win.__VELXIO_BOARD_STORE;
+                  if (boardStore && typeof boardStore.getState === 'function') {
+                    clearInterval(pollInterval);
+                    
+                    if (ej.circuitoInicial) {
+                      var storeState = boardStore.getState();
+                      if (storeState.loadProjectState) {
+                        storeState.loadProjectState(ej.circuitoInicial);
+                      }
+                    } else {
+                      var boardId = targetEval.tarjeta || 'stbBoardV2';
+                      initializeVelxioBoard(win, boardId);
+                    }
+                  }
+                } catch(e) {}
+                if (pollAttempts >= maxPollAttempts) {
+                  clearInterval(pollInterval);
+                }
+              }, 200);
+            }
+          }, 50);
+          break;
         default:
           html += '<div style="padding: 40px; background: #0f172a; border-radius: 8px; text-align: center; color: #64748b;">Vista previa de "' + tipo.nombre + '" disponible en la versión para estudiantes</div>';
       }
@@ -6979,7 +9128,15 @@
       }
       var prevBtn = $('prevEj');
       if (prevBtn) {
-        prevBtn.disabled = currentIdx === -1;
+        if (targetEval.permitirRetroceder === false) {
+          prevBtn.disabled = true;
+          prevBtn.style.opacity = '0.4';
+          prevBtn.style.cursor = 'not-allowed';
+        } else {
+          prevBtn.disabled = currentIdx === -1;
+          prevBtn.style.opacity = '';
+          prevBtn.style.cursor = '';
+        }
       }
       var nextBtn = $('nextEj');
       if (nextBtn) {
@@ -7175,11 +9332,87 @@
 
         actualizarEstilosRelacionar();
       }
+      syncStudentProgressToParent();
     }
 
     renderPreviewEjercicio();
 
-    $('closePreview').onclick = function() { overlay.remove(); cleanupTimer(); };
+    var closeAction = function() {
+      var isCompleted = (currentIdx === -1 || window._evaluacionFinalizada === true);
+      
+      if (targetEval && targetEval.reglaSalida === 'bloqueo') {
+        if (!isCompleted) {
+          showAlert('No puedes abandonar la evaluación actual hasta que la completes.');
+          return;
+        }
+      }
+
+      if (isStudentMode && targetEval && window._evaluacionFinalizada === true) {
+        showPrompt('Por favor, ingresa tu nombre completo para descargar tu comprobante de resultados:', '', function(nombreAlumno) {
+          if (!nombreAlumno || !nombreAlumno.trim()) {
+            showAlert('Debes ingresar tu nombre completo para finalizar y descargar el comprobante.', function() {
+              closeAction(); // Volver a pedir el nombre
+            });
+            return;
+          }
+
+          var total = respuestas.length;
+          var correctas = respuestas.filter(function(r) { return r === true; }).length;
+
+          var detalles = targetEval.ejercicios.map(function(ej, idx) {
+            return {
+              enunciado: ej.enunciado,
+              tipo: ej.tipo,
+              puntos: ej.puntos,
+              correcto: respuestas[idx] === true,
+              respuestaAlumno: respuestasDetalladas[idx] || null
+            };
+          });
+
+          var tiempoMax = parseInt(targetEval.tiempoLimite || 15) * 60;
+          var tiempoTranscurrido = tiempoMax - timeLeft;
+
+          var resultData = {
+            alumno: nombreAlumno.trim(),
+            evalId: targetEval.id,
+            evalTitulo: targetEval.titulo,
+            fecha: new Date().toISOString(),
+            tiempoTotalSegundos: tiempoTranscurrido,
+            aciertos: correctas,
+            total: total,
+            porcentaje: Math.round((correctas / total) * 100),
+            ejerciciosDetalle: detalles
+          };
+
+          try {
+            var secureContent = generateSecureResult(resultData);
+            downloadFile(secureContent, 'resultado_' + nombreAlumno.trim().replace(/\s+/g, '_') + '_' + targetEval.id + '.stbeval', function(saved) {
+              if (saved) {
+                proceedClose();
+              } else {
+                showAlert('El archivo no se guardó. Puedes volver a intentarlo haciendo clic en Finalizar.');
+              }
+            });
+          } catch(e) {
+            console.error('Error al generar comprobante:', e);
+            showAlert('Error al generar el comprobante. Intenta de nuevo.');
+          }
+        });
+        return;
+      }
+
+      proceedClose();
+
+      function proceedClose() {
+        overlay.remove();
+        cleanupTimer();
+        localStorage.removeItem('stblock_student_progress_' + targetEval.id);
+        if (isStudentMode && window.parent) {
+          window.parent.postMessage({ type: 'student-evaluacion-finished' }, '*');
+        }
+      }
+    };
+    $('closePreview').onclick = closeAction;
     $('prevEj').onclick = function() { 
       if (currentIdx > -1) { 
         if (window._showingExerciseIntro) {
@@ -7220,61 +9453,817 @@
       var esCorrecto = false;
       var currentEj = targetEval.ejercicios[currentIdx];
 
+      function normalizeText(t) {
+        if (!t) return '';
+        return t.toString().toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?'"]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
       if (currentEj.tipo.startsWith('bloques_')) {
         var res = window.verificarRespuestaBloques(currentEj, (targetEval && targetEval.notificarResultado === 'silencio'));
         esCorrecto = (res && res.porcentaje === 100);
+        if (window._previewWorkspace) {
+          try {
+            var xmlDom = Blockly.Xml.workspaceToDom(window._previewWorkspace);
+            respuestasDetalladas[currentIdx] = Blockly.Xml.domToText(xmlDom);
+          } catch(e) {
+            console.error('[Preview] Error serializing block workspace:', e);
+          }
+        }
+      } else if (currentEj.tipo === 'circuito_armar' || currentEj.tipo === 'circuito_depurar' || currentEj.tipo === 'circuito_codigo') {
+        var isCircuitoCodigo = (currentEj.tipo === 'circuito_codigo');
+        var progMode = isCircuitoCodigo ? (currentEj.progMode || 'codigo') : 'circuitoOnly';
+        var hideMode = isCircuitoCodigo ? (currentEj.ocultar || 'programacion') : 'circuitoOnly';
+
+        if (isCircuitoCodigo && progMode === 'bloques' && hideMode === 'programacion') {
+          // Caso: Bloques y Ocultar Programación (Alumno escribe bloques, circuito ya prearmado y correcto)
+          var res = window.verificarRespuestaBloques(currentEj, (targetEval && targetEval.notificarResultado === 'silencio'));
+          esCorrecto = (res && res.porcentaje === 100);
+          
+          if (window._previewWorkspace) {
+            try {
+              var xmlDom = ScratchBlockly.Xml.workspaceToDom(window._previewWorkspace);
+              var xmlText = ScratchBlockly.Xml.domToText(xmlDom);
+              respuestasDetalladas[currentIdx] = xmlText;
+              localStorage.setItem('stblock_student_blocks_' + targetEval.id + '_' + currentEj.id, xmlText);
+            } catch(e) {}
+          }
+        } else {
+          // Caso regular o híbrido (donde se valida el circuito en Velxio)
+          var res = window.verificarRespuestaCircuito(currentEj, (isCircuitoCodigo || (targetEval && targetEval.notificarResultado === 'silencio')));
+          esCorrecto = (res && res.porcentaje === 100);
+
+          var playerIframe = document.getElementById('velxioPlayerIframe');
+          if (playerIframe) {
+            try {
+              var win = playerIframe.contentWindow;
+              var boardStore = win.__VELXIO_BOARD_STORE;
+              var fileStore = win.__VELXIO_FILE_STORE;
+              if (boardStore && typeof boardStore.getState === 'function') {
+                var boardState = boardStore.getState();
+                var stateToSave = {
+                  boards: boardState.boards || [],
+                  activeBoardId: boardState.activeBoardId || null,
+                  components: boardState.components || [],
+                  wires: boardState.wires || [],
+                  fileGroups: null
+                };
+
+                if (fileStore && typeof fileStore.getState === 'function') {
+                  var fileState = fileStore.getState();
+                  if (fileState && fileState.fileGroups) {
+                    stateToSave.fileGroups = fileState.fileGroups;
+                  }
+                }
+
+                // Asegurar que si hay un textarea de código activo, guardamos ese contenido en fileGroups
+                var ta = document.getElementById('studentCodeTextarea');
+                if (ta) {
+                  var studentTextCode = ta.value;
+                  if (!stateToSave.fileGroups) {
+                    stateToSave.fileGroups = [{ id: 'sketch', name: 'sketch', files: [{ name: 'main.ino', content: studentTextCode }] }];
+                  } else {
+                    var found = false;
+                    stateToSave.fileGroups.forEach(function(g) {
+                      if (g.files) {
+                        g.files.forEach(function(f) {
+                          if (f.name.endsWith('.ino') || f.name.endsWith('.cpp')) {
+                            f.content = studentTextCode;
+                            found = true;
+                          }
+                        });
+                      }
+                    });
+                    if (!found) {
+                      stateToSave.fileGroups.push({
+                        id: 'sketch',
+                        name: 'sketch',
+                        files: [{ name: 'main.ino', content: studentTextCode }]
+                      });
+                    }
+                  }
+                }
+
+                var stateStr = JSON.stringify(stateToSave);
+                respuestasDetalladas[currentIdx] = stateStr;
+                
+                var key = 'stblock_student_circuit_' + targetEval.id + '_' + currentEj.id;
+                localStorage.setItem(key, stateStr);
+
+                if (isCircuitoCodigo) {
+                  if (progMode === 'codigo' && hideMode === 'programacion') {
+                    // Alumno escribe código C++, validamos con simulación de hardware
+                    var studentCode = ta ? ta.value : extractArduinoCode(stateToSave.fileGroups);
+                    if (esCorrecto) {
+                      if (currentEj.arduinoSimExpected) {
+                        try {
+                          var expected = JSON.parse(currentEj.arduinoSimExpected);
+                          var simResult = window.simulateArduinoCode(studentCode, currentEj.arduinoSimTime || 2000);
+                          if (simResult.error) {
+                            esCorrecto = false;
+                            var msg = 'Error en código: ' + simResult.error;
+                            mostrarResultadoVerificacion(0, 2, 0, [], msg);
+                          } else {
+                            var pinsMatch = true;
+                            var failedPin = null;
+                            Object.keys(expected).forEach(function(pin) {
+                              var expectedVal = parseInt(expected[pin]);
+                              var actualPinState = simResult.pins[pin];
+                              if (!actualPinState || actualPinState.val !== expectedVal) {
+                                pinsMatch = false;
+                                failedPin = pin;
+                              }
+                            });
+                            esCorrecto = pinsMatch;
+                            
+                            var finalPct = esCorrecto ? 100 : 80;
+                            var msg = esCorrecto ? '¡Excelente! Circuito armado y código correcto.' :
+                                      'Circuito armado correctamente, pero el pin ' + failedPin + ' no tiene el estado esperado.';
+                            mostrarResultadoVerificacion(esCorrecto ? 2 : 1, 2, finalPct, [], msg);
+                          }
+                        } catch (e) {
+                          console.error('[ArduinoSim] JSON expected parse error:', e);
+                        }
+                      } else {
+                        mostrarResultadoVerificacion(2, 2, 100, [], '¡Excelente! Circuito y código guardados.');
+                      }
+                    }
+                  }
+                }
+              }
+            } catch(e) {
+              console.error('[Preview] Error serializing circuit state:', e);
+            }
+          }
+        }
+      } else if (currentEj.tipo === 'circuito_cuestionario') {
+        var correctOption = currentEj.opciones.find(function(o) { return o.correcta === true || o.correcta === 'true'; });
+        var userSelection = respuestasDetalladas[currentIdx];
+        esCorrecto = (correctOption && userSelection === correctOption.texto);
+        
+        var percentage = esCorrecto ? 100 : 0;
+        var msg = esCorrecto ? '¡Respuesta correcta!' : 'Respuesta incorrecta. Revisa tu inspección del circuito.';
+        mostrarResultadoVerificacion(esCorrecto ? 1 : 0, 1, percentage, [], msg);
+
+        var playerIframe = document.getElementById('velxioPlayerIframe');
+        if (playerIframe) {
+          try {
+            var win = playerIframe.contentWindow;
+            var boardStore = win.__VELXIO_BOARD_STORE;
+            if (boardStore && typeof boardStore.getState === 'function') {
+              var boardState = boardStore.getState();
+              var stateToSave = {
+                boards: boardState.boards || [],
+                activeBoardId: boardState.activeBoardId || null,
+                components: boardState.components || [],
+                wires: boardState.wires || []
+              };
+              var stateStr = JSON.stringify(stateToSave);
+              var key = 'stblock_student_circuit_' + targetEval.id + '_' + currentEj.id;
+              localStorage.setItem(key, stateStr);
+            }
+          } catch(e) {}
+        }
       } else {
         if (currentEj.tipo === 'multiple_respuesta') {
           var correctCount = 0;
           var totalCount = currentEj.opciones.length;
+          var userSelections = [];
           
           currentEj.opciones.forEach(function(op, idx) {
             var optEl = content.querySelector('.preview-option[data-idx="' + idx + '"]');
             var isSelected = optEl && optEl.classList.contains('selected');
+            if (isSelected) userSelections.push(op.texto);
             var isCorrect = (op.correcta === true || op.correcta === 'true');
             if (isSelected === isCorrect) {
               correctCount++;
             }
           });
           esCorrecto = (correctCount === totalCount);
+          respuestasDetalladas[currentIdx] = userSelections.join(', ');
         } else if (currentEj.tipo === 'relacionar') {
           var correctConnections = 0;
           var totalPares = currentEj.pares.length;
+          var userPairs = [];
           
           if (window._relacionarConexiones && window._relacionarConexiones.length === totalPares) {
             window._relacionarConexiones.forEach(function(conn) {
               var expectedDerecha = currentEj.pares[conn.leftIdx].derecha;
+              var izquierda = currentEj.pares[conn.leftIdx].izquierda;
+              userPairs.push(izquierda + ' ↔ ' + conn.rightVal);
               if (expectedDerecha === conn.rightVal) {
                 correctConnections++;
               }
             });
           }
           esCorrecto = (correctConnections === totalPares);
+          respuestasDetalladas[currentIdx] = userPairs.join('; ');
+        } else if (currentEj.tipo === 'completar_codigo') {
+          var inputs = content.querySelectorAll('.completar-input');
+          var respuestasCorrectas = currentEj.respuestas || [];
+          var todosCorrectos = true;
+          var userInputs = [];
+          inputs.forEach(function(inp) {
+            var idx = parseInt(inp.getAttribute('data-idx'));
+            var val = inp.value.trim().toLowerCase();
+            userInputs.push(inp.value.trim());
+            var expected = (respuestasCorrectas[idx] || '').trim().toLowerCase();
+            if (val !== expected) {
+              todosCorrectos = false;
+              if (targetEval && targetEval.notificarResultado === 'instante') {
+                inp.style.borderColor = '#ef4444';
+                inp.style.color = '#ef4444';
+              }
+            } else {
+              if (targetEval && targetEval.notificarResultado === 'instante') {
+                inp.style.borderColor = '#10b981';
+                inp.style.color = '#10b981';
+              }
+            }
+          });
+          esCorrecto = todosCorrectos;
+          respuestasDetalladas[currentIdx] = userInputs.join(', ');
+        } else if (currentEj.tipo === 'ordenar_bloques') {
+          var userOrder = window._ordenarActivos || [];
+          var expectedOrder = currentEj.bloques || [];
+          var esCorrectoList = true;
+          if (userOrder.length !== expectedOrder.length) {
+            esCorrectoList = false;
+          } else {
+            for (var k = 0; k < expectedOrder.length; k++) {
+              if (userOrder[k] !== expectedOrder[k]) {
+                esCorrectoList = false;
+                break;
+              }
+            }
+          }
+          esCorrecto = esCorrectoList;
+          respuestasDetalladas[currentIdx] = userOrder.join(' → ');
+        } else if (currentEj.tipo === 'que_hace_codigo') {
+          var inp = content.querySelector('#queHaceInput');
+          var val = inp ? inp.value.trim().toLowerCase() : '';
+          var expected = (currentEj.resultado || '').trim().toLowerCase();
+          esCorrecto = (val === expected);
+          respuestasDetalladas[currentIdx] = inp ? inp.value.trim() : '';
+          if (targetEval && targetEval.notificarResultado === 'instante' && inp) {
+            if (esCorrecto) {
+              inp.style.borderColor = '#10b981';
+              inp.style.background = '#10b98111';
+            } else {
+              inp.style.borderColor = '#ef4444';
+              inp.style.background = '#ef444411';
+            }
+          }
+        } else if (currentEj.tipo === 'escribir_codigo') {
+          var ta = content.querySelector('#escribirCodigoTextarea');
+          var codeVal = ta ? ta.value : '';
+          var val = codeVal.toLowerCase();
+          var keywords = currentEj.palabrasClave || [];
+          var allKeywordsPresent = true;
+          keywords.forEach(function(kw) {
+            if (val.indexOf(kw.toLowerCase()) === -1) {
+              allKeywordsPresent = false;
+            }
+          });
+          esCorrecto = allKeywordsPresent;
+          
+          if (esCorrecto && targetEval.entorno === 'dispositivos' && currentEj.arduinoSimExpected) {
+            try {
+              var expected = JSON.parse(currentEj.arduinoSimExpected);
+              var simResult = window.simulateArduinoCode(codeVal, currentEj.arduinoSimTime || 2000);
+              if (simResult.error) {
+                esCorrecto = false;
+                console.error('[ArduinoSim] Error:', simResult.error);
+              } else {
+                var pinsMatch = true;
+                Object.keys(expected).forEach(function(pin) {
+                  var expectedVal = parseInt(expected[pin]);
+                  var actualPinState = simResult.pins[pin];
+                  if (!actualPinState || actualPinState.val !== expectedVal) {
+                    pinsMatch = false;
+                  }
+                });
+                esCorrecto = pinsMatch;
+              }
+            } catch (e) {
+              console.error('[ArduinoSim] JSON expected parse error:', e);
+            }
+          }
+          
+          respuestasDetalladas[currentIdx] = codeVal;
+          if (targetEval && targetEval.notificarResultado === 'instante' && ta) {
+            if (esCorrecto) {
+              ta.style.borderColor = '#10b981';
+              ta.style.background = '#10b98111';
+            } else {
+              ta.style.borderColor = '#ef4444';
+              ta.style.background = '#ef444411';
+            }
+          }
+        } else if (currentEj.tipo === 'depurar_codigo') {
+          var ta = content.querySelector('#depurarCodigoTextarea');
+          var val = ta ? ta.value.trim().replace(/\r\n/g, '\n') : '';
+          var expected = (currentEj.codigoCorregido || '').trim().replace(/\r\n/g, '\n');
+          esCorrecto = (val === expected);
+          respuestasDetalladas[currentIdx] = ta ? ta.value : '';
+          if (targetEval && targetEval.notificarResultado === 'instante' && ta) {
+            if (esCorrecto) {
+              ta.style.borderColor = '#10b981';
+              ta.style.color = '#10b981';
+              ta.style.background = '#10b98111';
+            } else {
+              ta.style.borderColor = '#ef4444';
+              ta.style.color = '#ef4444';
+              ta.style.background = '#ef444411';
+            }
+          }
+        } else if (currentEj.tipo === 'reto_ejecucion') {
+          esCorrecto = (window._retoSuperado === true);
+          respuestasDetalladas[currentIdx] = 'Simulación 3D';
         } else {
           var selectedOpt = content.querySelector('.preview-option.selected');
           if (selectedOpt) {
             if (currentEj.tipo === 'quiz') {
               var idx = parseInt(selectedOpt.getAttribute('data-idx'));
               esCorrecto = (currentEj.opciones[idx] && (currentEj.opciones[idx].correcta === true || currentEj.opciones[idx].correcta === 'true'));
+              respuestasDetalladas[currentIdx] = selectedOpt.textContent.trim();
             } else if (currentEj.tipo === 'verdadero_falso') {
               var val = selectedOpt.getAttribute('data-value') === 'true';
               esCorrecto = (currentEj.respuesta === val || currentEj.respuesta.toString() === val.toString());
+              respuestasDetalladas[currentIdx] = val ? 'Verdadero' : 'Falso';
             }
           }
         }
       }
 
-      respuestas[currentIdx] = esCorrecto;
-
-      if (currentIdx < targetEval.ejercicios.length - 1) {
-        currentIdx++;
-        window._showingExerciseIntro = true;
-        renderPreviewEjercicio();
+      if (targetEval.notificarResultado === 'instante') {
+        if (esCorrecto) {
+          respuestas[currentIdx] = true;
+          syncStudentProgressToParent();
+          if (currentIdx < targetEval.ejercicios.length - 1) {
+            currentIdx++;
+            window._showingExerciseIntro = true;
+            renderPreviewEjercicio();
+          } else {
+            showFinalResults();
+          }
+        } else {
+          intentosRealizados[currentIdx] = (intentosRealizados[currentIdx] || 0) + 1;
+          var maxAttempts = (currentEj.intentosMax !== undefined && currentEj.intentosMax !== null) ? parseInt(currentEj.intentosMax) : -1;
+          var allowedAttempts = maxAttempts >= 0 ? maxAttempts + 1 : Infinity;
+          var remaining = allowedAttempts - intentosRealizados[currentIdx];
+          
+          if (remaining > 0) {
+            toast('❌ Respuesta incorrecta. Te quedan ' + remaining + ' intento(s).');
+            syncStudentProgressToParent();
+          } else {
+            showAlert('❌ Respuesta incorrecta. Has agotado tus ' + allowedAttempts + ' intento(s) para este ejercicio. Avanzando al siguiente.', function() {
+              respuestas[currentIdx] = false;
+              syncStudentProgressToParent();
+              if (currentIdx < targetEval.ejercicios.length - 1) {
+                currentIdx++;
+                window._showingExerciseIntro = true;
+                renderPreviewEjercicio();
+              } else {
+                showFinalResults();
+              }
+            });
+          }
+        }
       } else {
-        showFinalResults();
+        respuestas[currentIdx] = esCorrecto;
+        syncStudentProgressToParent();
+        if (currentIdx < targetEval.ejercicios.length - 1) {
+          currentIdx++;
+          window._showingExerciseIntro = true;
+          renderPreviewEjercicio();
+        } else {
+          showFinalResults();
+        }
       }
     };
     overlay.onclick = function(e) { if (e.target === overlay) { overlay.remove(); cleanupTimer(); } };
+  }
+
+  function generateSecureResult(resultData) {
+    var rawJson = JSON.stringify(resultData);
+    var checksum = 0;
+    for (var i = 0; i < rawJson.length; i++) {
+      checksum = (checksum + rawJson.charCodeAt(i) * (i + 1)) % 1000000007;
+    }
+    var packageObj = {
+      d: rawJson,
+      c: checksum
+    };
+    return btoa(unescape(encodeURIComponent(JSON.stringify(packageObj))));
+  }
+
+  function verifyAndLoadResult(encodedStr) {
+    try {
+      var decodedPackage = JSON.parse(decodeURIComponent(escape(atob(encodedStr))));
+      var rawJson = decodedPackage.d;
+      var expectedChecksum = decodedPackage.c;
+      
+      var actualChecksum = 0;
+      for (var i = 0; i < rawJson.length; i++) {
+        actualChecksum = (actualChecksum + rawJson.charCodeAt(i) * (i + 1)) % 1000000007;
+      }
+      
+      if (actualChecksum !== expectedChecksum) {
+        throw new Error('La firma de seguridad no coincide. El archivo ha sido manipulado.');
+      }
+      
+      return JSON.parse(rawJson);
+    } catch(e) {
+      throw new Error('Archivo inválido o formato corrupto: ' + e.message);
+    }
+  }
+
+  function downloadFile(content, fileName, callback) {
+    if (window.__TAURI__) {
+      try {
+        var dialog = window.__TAURI__.dialog;
+        var core = window.__TAURI__.core;
+        if (dialog && dialog.save && core && core.invoke) {
+          dialog.save({
+            defaultPath: fileName,
+            filters: [{ name: 'STBlock Eval Result', extensions: ['stbeval'] }]
+          }).then(function(filePath) {
+            if (filePath) {
+              var bytes = Array.from(new TextEncoder().encode(content));
+              core.invoke('save_file', { path: filePath, content: bytes })
+                .then(function() {
+                  toast('Resultado guardado correctamente');
+                  if (typeof callback === 'function') callback(true);
+                })
+                .catch(function(err) {
+                  console.error('[Editor] Error en save_file:', err);
+                  showAlert('Error al guardar archivo: ' + err.message);
+                  if (typeof callback === 'function') callback(false);
+                });
+            } else {
+              if (typeof callback === 'function') callback(false);
+            }
+          }).catch(function(err) {
+            console.error('[Editor] Error en dialog.save:', err);
+            if (typeof callback === 'function') callback(false);
+          });
+          return;
+        }
+      } catch(e) {
+        console.error('Error al invocar Tauri save dialog:', e);
+      }
+    }
+
+    try {
+      var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function() {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        if (typeof callback === 'function') callback(true);
+      }, 1000);
+    } catch(err) {
+      console.error('Error en descarga web:', err);
+      if (typeof callback === 'function') callback(false);
+    }
+  }
+
+  function abrirVisualizadorCircuitoAlumno(alumnoName, stateStr, title) {
+    var state = null;
+    try {
+      state = JSON.parse(stateStr);
+    } catch(e) {
+      alert('Error al leer el estado del circuito');
+      return;
+    }
+
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(15,23,42,0.95); z-index: 12000; display: flex; flex-direction: column; font-family: sans-serif;';
+
+    var header = document.createElement('div');
+    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #0f172a; border-bottom: 1px solid #1e293b; color: white;';
+    header.innerHTML = '<div>' +
+      '  <h3 style="margin: 0; font-size: 16px; font-weight: bold; color: #38bdf8;">🔌 Circuito Enviado por ' + escapeHtml(alumnoName) + '</h3>' +
+      '  <span style="font-size: 11px; color: #64748b;">Ejercicio: ' + escapeHtml(title) + '</span>' +
+      '</div>';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Cerrar';
+    closeBtn.className = 'danger';
+    closeBtn.style.padding = '8px 16px';
+    closeBtn.onclick = function() { overlay.remove(); };
+    header.appendChild(closeBtn);
+
+    var container = document.createElement('div');
+    container.style.cssText = 'flex: 1; position: relative; background: #0b0f19;';
+
+    var iframe = document.createElement('iframe');
+    iframe.src = '../../index.html#/editor';
+    iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
+    container.appendChild(iframe);
+
+    overlay.appendChild(header);
+    overlay.appendChild(container);
+    document.body.appendChild(overlay);
+
+    // Poll to load student progress
+    var pollAttempts = 0;
+    var maxPollAttempts = 50;
+    var pollInterval = setInterval(function() {
+      pollAttempts++;
+      try {
+        var win = iframe.contentWindow;
+        var boardStore = win.__VELXIO_BOARD_STORE;
+        var fileStore = win.__VELXIO_FILE_STORE;
+        if (boardStore && typeof boardStore.getState === 'function') {
+          clearInterval(pollInterval);
+          var storeState = boardStore.getState();
+          if (storeState.loadProjectState) {
+            storeState.loadProjectState(state);
+          }
+          if (state.fileGroups && fileStore && typeof fileStore.getState === 'function') {
+            var fStoreState = fileStore.getState();
+            if (fStoreState.loadFileGroups) {
+              fStoreState.loadFileGroups(state.fileGroups);
+            }
+          }
+        }
+      } catch(e) {}
+      if (pollAttempts >= maxPollAttempts) {
+        clearInterval(pollInterval);
+      }
+    }, 200);
+  }
+
+  function abrirVisualizadorBloquesAlumno(alumnoName, xmlText, title) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(15,23,42,0.95); z-index: 12000; display: flex; flex-direction: column; font-family: sans-serif;';
+
+    var header = document.createElement('div');
+    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #0f172a; border-bottom: 1px solid #1e293b; color: white;';
+    header.innerHTML = '<div>' +
+      '  <h3 style="margin: 0; font-size: 16px; font-weight: bold; color: #a78bfa;">🧩 Bloques Enviados por ' + escapeHtml(alumnoName) + '</h3>' +
+      '  <span style="font-size: 11px; color: #64748b;">Ejercicio: ' + escapeHtml(title) + '</span>' +
+      '</div>';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Cerrar';
+    closeBtn.className = 'danger';
+    closeBtn.style.padding = '8px 16px';
+    closeBtn.onclick = function() { overlay.remove(); };
+    header.appendChild(closeBtn);
+
+    var container = document.createElement('div');
+    container.id = 'studentBlocksViewerContainer';
+    container.style.cssText = 'flex: 1; position: relative; background: #0b0f19;';
+
+    overlay.appendChild(header);
+    overlay.appendChild(container);
+    document.body.appendChild(overlay);
+
+    setTimeout(function() {
+      if (window.ScratchBlockly) {
+        var workspace = window.ScratchBlockly.inject(container, {
+          readOnly: true,
+          scrollbars: true,
+          zoom: { controls: true, wheel: true }
+        });
+        try {
+          var xml = window.ScratchBlockly.Xml.textToDom(xmlText);
+          window.ScratchBlockly.Xml.domToWorkspace(xml, workspace);
+        } catch(e) {
+          console.error('[Viewer] Error loading blocks XML:', e);
+        }
+      }
+    }, 50);
+  }
+
+  function mostrarReporteResultado(res) {
+    var overlay = document.createElement('div');
+    overlay.id = 'evalResultReportOverlay';
+    overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(15,23,42,0.85); z-index: 11000; display: flex; align-items: center; justify-content: center; padding: 20px; font-family: sans-serif;';
+
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background: #ffffff; border-radius: 12px; width: 100%; max-width: 750px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); overflow: hidden; display: flex; flex-direction: column; color: #1e293b;';
+
+    var header = document.createElement('div');
+    header.style.cssText = 'padding: 18px 24px; background: #0f172a; color: #ffffff; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155;';
+    
+    var headerTitle = document.createElement('div');
+    headerTitle.innerHTML = '<h3 style="margin: 0; font-size: 18px; font-weight: bold; color: #38bdf8;">📊 Reporte de Resultados</h3>' +
+                            '<span style="font-size: 11px; color: #94a3b8;">Evaluación ID: ' + res.evalId + '</span>';
+    
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.style.cssText = 'background: transparent; border: none; color: #94a3b8; font-size: 28px; cursor: pointer; line-height: 1;';
+    closeBtn.onclick = function() { overlay.remove(); };
+
+    header.appendChild(headerTitle);
+    header.appendChild(closeBtn);
+
+    var content = document.createElement('div');
+    content.style.cssText = 'padding: 24px; overflow-y: auto; max-height: 70vh;';
+
+    var grid = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px;">' +
+               '  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: left;">' +
+               '    <div style="font-size: 9px; color: #64748b; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">ALUMNO</div>' +
+               '    <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + res.alumno + '">' + res.alumno + '</div>' +
+               '  </div>' +
+               '  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: left;">' +
+               '    <div style="font-size: 9px; color: #64748b; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">TIEMPO TOTAL</div>' +
+               '    <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 4px;">' + formatTiempo(res.tiempoTotalSegundos) + '</div>' +
+               '  </div>' +
+               '  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: left;">' +
+               '    <div style="font-size: 9px; color: #64748b; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">ACIERTOS</div>' +
+               '    <div style="font-size: 13px; font-weight: 700; color: #10b981; margin-top: 4px;">' + res.aciertos + ' <span style="color: #64748b; font-weight: 400;">/ ' + res.total + '</span></div>' +
+               '  </div>' +
+               '  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; text-align: left;">' +
+               '    <div style="font-size: 9px; color: #64748b; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">CALIFICACIÓN</div>' +
+               '    <div style="font-size: 13px; font-weight: 700; color: ' + (res.porcentaje === 100 ? '#15803d' : '#b91c1c') + '; margin-top: 4px;">' + res.porcentaje + '%</div>' +
+               '  </div>' +
+               '</div>';
+
+    var evalTitleInfo = '<div style="margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px;">' +
+                        '  <h4 style="margin: 0 0 4px 0; color: #0f172a; font-size: 16px; font-weight: 700;">' + res.evalTitulo + '</h4>' +
+                        '  <span style="font-size: 11px; color: #64748b;">Entregado el: ' + new Date(res.fecha).toLocaleString() + '</span>' +
+                        '</div>';
+
+    var tableHtml = '<table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">' +
+                    '  <thead>' +
+                    '    <tr style="border-bottom: 2px solid #e2e8f0; color: #475569;">' +
+                    '      <th style="padding: 10px 8px; font-weight: 600;">No.</th>' +
+                    '      <th style="padding: 10px 8px; font-weight: 600;">Ejercicio</th>' +
+                    '      <th style="padding: 10px 8px; font-weight: 600;">Tipo</th>' +
+                    '      <th style="padding: 10px 8px; font-weight: 600; text-align: center;">Puntos</th>' +
+                    '      <th style="padding: 10px 8px; font-weight: 600; text-align: right;">Estado</th>' +
+                    '    </tr>' +
+                    '  </thead>' +
+                    '  <tbody>';
+
+    (res.ejerciciosDetalle || []).forEach(function(det, idx) {
+      var rowColor = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+      var statusBadge = det.correcto ? 
+                        '<span style="background: #d1fae5; color: #065f46; padding: 3px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600;">✓ Correcto</span>' :
+                        '<span style="background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600;">✗ Incorrecto</span>';
+      
+      var answerDetail = '';
+      if (det.respuestaAlumno) {
+        var isCode = det.tipo === 'escribir_codigo' || det.tipo === 'depurar_codigo';
+        var isCircuit = det.tipo === 'circuito_armar' || det.tipo === 'circuito_depurar' || det.tipo === 'circuito_codigo';
+        var displayVal = det.respuestaAlumno;
+
+        if (isCircuit) {
+          var isXmlBlocks = (displayVal.indexOf('<xml') === 0);
+          var isJsonCircuit = (displayVal.indexOf('{"') === 0);
+          
+          if (isXmlBlocks) {
+            var btnId = 'btnVerBloquesAlumno_' + idx;
+            answerDetail = '<div style="margin-top: 6px; display: flex; gap: 8px;">' +
+                           '  <button id="' + btnId + '" style="padding: 6px 12px; background: #854d0e; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">' +
+                           '    🧩 Ver Bloques del Alumno' +
+                           '  </button>';
+            
+            var ej = targetEval.ejercicios[idx];
+            if (ej && ej.circuitoSolucion) {
+              var circBtnId = 'btnVerCircuitoAlumno_' + idx;
+              answerDetail += '  <button id="' + circBtnId + '" style="padding: 6px 12px; background: #00979C; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">' +
+                              '    🔌 Ver Circuito' +
+                              '  </button>';
+              
+              setTimeout(function() {
+                var btn = document.getElementById(circBtnId);
+                if (btn) {
+                  btn.onclick = function() {
+                    abrirVisualizadorCircuitoAlumno(res.alumno, JSON.stringify(ej.circuitoSolucion), det.enunciado);
+                  };
+                }
+              }, 50);
+            }
+            answerDetail += '</div>';
+
+            setTimeout(function() {
+              var btn = document.getElementById(btnId);
+              if (btn) {
+                btn.onclick = function() {
+                  abrirVisualizadorBloquesAlumno(res.alumno, displayVal, det.enunciado);
+                };
+              }
+            }, 50);
+          } else if (isJsonCircuit) {
+            var state = null;
+            try { state = JSON.parse(displayVal); } catch(e) {}
+            
+            var btnId = 'btnVerCircuitoAlumno_' + idx;
+            answerDetail = '<div style="margin-top: 6px; display: flex; flex-direction: column; gap: 8px;">' +
+                           '  <div>' +
+                           '    <button id="' + btnId + '" style="padding: 6px 12px; background: #00979C; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">' +
+                           '      🔌 Ver Circuito del Alumno' +
+                           '    </button>' +
+                           '  </div>';
+            
+            if (state && state.fileGroups) {
+              var studentCode = extractArduinoCode(state.fileGroups);
+              if (studentCode) {
+                answerDetail += '  <details style="font-size: 11px;"><summary style="cursor: pointer; color: #3b82f6; font-weight: bold; outline: none; user-select: none;">👁️ Ver código enviado</summary>' +
+                                '    <pre style="margin-top: 6px; background: #0f172a; padding: 10px; border-radius: 6px; color: #86efac; font-family: monospace; white-space: pre-wrap; overflow-x: auto; max-height: 150px; text-align: left;">' + escapeHtml(studentCode) + '</pre>' +
+                                '  </details>';
+              }
+            }
+            answerDetail += '</div>';
+
+            setTimeout(function() {
+              var btn = document.getElementById(btnId);
+              if (btn) {
+                btn.onclick = function() {
+                  abrirVisualizadorCircuitoAlumno(res.alumno, displayVal, det.enunciado);
+                };
+              }
+            }, 50);
+          } else {
+            var btnId = 'btnVerCircuitoAlumno_' + idx;
+            answerDetail = '<div style="margin-top: 6px; display: flex; flex-direction: column; gap: 8px;">' +
+                           '  <details style="font-size: 11px;"><summary style="cursor: pointer; color: #3b82f6; font-weight: bold; outline: none; user-select: none;">👁️ Ver código enviado</summary>' +
+                           '    <pre style="margin-top: 6px; background: #0f172a; padding: 10px; border-radius: 6px; color: #86efac; font-family: monospace; white-space: pre-wrap; overflow-x: auto; max-height: 150px; text-align: left;">' + escapeHtml(displayVal) + '</pre>' +
+                           '  </details>';
+            
+            var ej = targetEval.ejercicios[idx];
+            if (ej && ej.circuitoSolucion) {
+              answerDetail += '  <div>' +
+                              '    <button id="' + btnId + '" style="padding: 6px 12px; background: #00979C; border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">' +
+                              '      🔌 Ver Circuito (Solución/Referencia)' +
+                              '    </button>' +
+                              '  </div>';
+              
+              setTimeout(function() {
+                var btn = document.getElementById(btnId);
+                if (btn) {
+                  btn.onclick = function() {
+                    abrirVisualizadorCircuitoAlumno(res.alumno, JSON.stringify(ej.circuitoSolucion), det.enunciado);
+                  };
+                }
+              }, 50);
+            }
+            answerDetail += '</div>';
+          }
+        } else if (isCode) {
+          answerDetail = '<details style="margin-top: 6px; font-size: 11px;"><summary style="cursor: pointer; color: #3b82f6; font-weight: bold; outline: none; user-select: none;">👁️ Ver código enviado</summary>' +
+                         '<pre style="margin-top: 6px; background: #0f172a; padding: 10px; border-radius: 6px; color: #86efac; font-family: monospace; white-space: pre-wrap; overflow-x: auto; max-height: 150px; text-align: left;">' + displayVal.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre></details>';
+        } else {
+          answerDetail = '<div style="margin-top: 4px; font-size: 11px; color: #64748b;"><strong>Respuesta:</strong> <span style="color: #475569;">' + displayVal + '</span></div>';
+        }
+      }
+
+      tableHtml += '    <tr style="background: ' + rowColor + '; border-bottom: 1px solid #f1f5f9;">' +
+                   '      <td style="padding: 12px 8px; color: #64748b; vertical-align: top;">' + (idx + 1) + '</td>' +
+                   '      <td style="padding: 12px 8px; font-weight: 500; color: #0f172a; max-width: 320px; vertical-align: top;">' +
+                   '        <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="' + det.enunciado + '">' + det.enunciado + '</div>' +
+                   '        ' + answerDetail +
+                   '      </td>' +
+                   '      <td style="padding: 12px 8px; color: #64748b; vertical-align: top;">' + (TIPOS_EJERCICIO[det.tipo] ? TIPOS_EJERCICIO[det.tipo].nombre : det.tipo) + '</td>' +
+                   '      <td style="padding: 12px 8px; text-align: center; color: #475569; vertical-align: top;">' + det.puntos + '</td>' +
+                   '      <td style="padding: 12px 8px; text-align: right; vertical-align: top;">' + statusBadge + '</td>' +
+                   '    </tr>';
+    });
+
+    tableHtml += '  </tbody>' +
+                 '</table>';
+
+    content.innerHTML = grid + evalTitleInfo + tableHtml;
+
+    var footer = document.createElement('div');
+    footer.style.cssText = 'padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;';
+    
+    var btnClose = document.createElement('button');
+    btnClose.textContent = 'Entendido';
+    btnClose.style.cssText = 'padding: 10px 24px; background: #0f172a; border: none; border-radius: 6px; color: #ffffff; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.2s;';
+    btnClose.onclick = function() { overlay.remove(); };
+    
+    footer.appendChild(btnClose);
+
+    modal.appendChild(header);
+    modal.appendChild(content);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+  }
+
+  function formatTiempo(segundos) {
+    if (segundos <= 0) return '0 seg';
+    var mins = Math.floor(segundos / 60);
+    var secs = segundos % 60;
+    if (mins > 0) {
+      return mins + ' min ' + (secs > 0 ? secs + ' seg' : '');
+    }
+    return secs + ' seg';
   }
 
   // Add CSS styles for evaluaciones tabs
@@ -7471,7 +10460,7 @@
     // Inicializar Blockly
     setTimeout(function() {
       console.log('[Editor] Inicializando Blockly para par...');
-      blocklyWorkspace = ScratchBlockly.init('editorBloquesParContainer');
+      blocklyWorkspace = ScratchBlockly.init('editorBloquesParContainer', { entorno: evaluacionState ? evaluacionState.entorno : 'robotica', tarjeta: evaluacionState ? evaluacionState.tarjeta : 'stbBoardV2' });
 
       // Cargar estado si existe
       if (par.blocklyState) {
@@ -7563,7 +10552,7 @@
     // Inicializar Blockly
     setTimeout(function() {
       console.log('[Editor] Inicializando Blockly con menú contextual...');
-      blocklyWorkspace = ScratchBlockly.init('editorBloquesSolucionContainer');
+      blocklyWorkspace = ScratchBlockly.init('editorBloquesSolucionContainer', { entorno: evaluacionState ? evaluacionState.entorno : 'robotica', tarjeta: evaluacionState ? evaluacionState.tarjeta : 'stbBoardV2' });
 
       // Cargar estado si existe
       if (ejercicio.blocklyState) {
@@ -7999,11 +10988,81 @@
       if (categoriasSection) categoriasSection.style.display = 'block';
     }
 
-    // Actualizar checkboxes de categorías
+    // Actualizar checkboxes de categorías dinámicamente según el entorno
     var catContainer = $('bloquesCategoriasConfig');
     if (catContainer) {
+      var isDevices = (evaluacionState && evaluacionState.entorno === 'dispositivos');
+      var catHtml = '';
+
+      if (isDevices) {
+        var boardId = evaluacionState.tarjeta || 'stbBoardV2';
+        var manifests = window.deviceManifests;
+        var deviceCategories = [];
+        if (manifests && manifests[boardId] && manifests[boardId].categories) {
+          manifests[boardId].categories.forEach(function(cat) {
+            deviceCategories.push({
+              id: cat.id,
+              name: cat.name || 'Dispositivo',
+              color: cat.color1 || '#00979C'
+            });
+          });
+        } else {
+          deviceCategories.push({ id: 'arduino', name: 'Arduino', color: '#00979C' });
+        }
+
+        // Añadir categorías de Arduino
+        deviceCategories.forEach(function(cat) {
+          catHtml += '<label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">' +
+                  '  <input type="checkbox" data-categoria="' + cat.id + '">' +
+                  '  <span style="color: ' + cat.color + ';">⚡ ' + cat.name + '</span>' +
+                  '</label>';
+        });
+
+        // Añadir categorías estándar básicas para Arduino
+        var standardCats = [
+          { id: 'control', name: 'Control', color: '#FFAB19', icon: '🔄' },
+          { id: 'operators', name: 'Operadores', color: '#59C059', icon: '🔢' },
+          { id: 'variables', name: 'Variables', color: '#FF8C1A', icon: '📦' }
+        ];
+        standardCats.forEach(function(cat) {
+          catHtml += '<label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">' +
+                  '  <input type="checkbox" data-categoria="' + cat.id + '">' +
+                  '  <span style="color: ' + cat.color + ';">' + cat.icon + ' ' + cat.name + '</span>' +
+                  '</label>';
+        });
+      } else {
+        // Categorías de Programación
+        var programmingCats = [
+          { id: 'motion', name: 'Movimiento', color: '#4C97FF', icon: '➡️' },
+          { id: 'looks', name: 'Apariencia', color: '#9966FF', icon: '👁️' },
+          { id: 'sound', name: 'Sonido', color: '#CF63CF', icon: '🔊' },
+          { id: 'events', name: 'Eventos', color: '#FFBF00', icon: '🏴' },
+          { id: 'control', name: 'Control', color: '#FFAB19', icon: '🔄' },
+          { id: 'sensing', name: 'Sensores', color: '#5CB1D6', icon: '📡' },
+          { id: 'operators', name: 'Operadores', color: '#59C059', icon: '🔢' },
+          { id: 'variables', name: 'Variables', color: '#FF8C1A', icon: '📦' },
+          { id: 'lists', name: 'Listas', color: '#FF661A', icon: '📋' },
+          { id: 'pen', name: 'Lápiz', color: '#0fBD8C', icon: '✏️' },
+          { id: 'music', name: 'Música', color: '#D65CD6', icon: '🎵' },
+          { id: 'logic', name: 'Lógica+', color: '#48BF53', icon: '🟢' },
+          { id: 'state', name: 'Estado', color: '#9966FF', icon: '⚙️' },
+          { id: 'debug', name: 'Debug', color: '#607D8B', icon: '🐛' },
+          { id: 'gravity', name: 'Gravedad', color: '#5B7CFA', icon: '🪐' },
+          { id: 'physics', name: 'Física', color: '#00A8A8', icon: '⚛️' },
+          { id: 'custom', name: 'Personalizados', color: '#5B7CFA', icon: '⚡' }
+        ];
+        programmingCats.forEach(function(cat) {
+          catHtml += '<label style="display: flex; align-items: center; gap: 6px; padding: 4px; cursor: pointer;">' +
+                  '  <input type="checkbox" data-categoria="' + cat.id + '">' +
+                  '  <span style="color: ' + cat.color + ';">' + cat.icon + ' ' + cat.name + '</span>' +
+                  '</label>';
+        });
+      }
+
+      catContainer.innerHTML = catHtml;
+
+      // Sincronizar estado
       if (!ejercicio.categoriasPermitidas) {
-        // Inicializar con todas las categorías por defecto si no están definidas
         ejercicio.categoriasPermitidas = [];
         catContainer.querySelectorAll('input[data-categoria]').forEach(function(cb) {
           cb.checked = true;
@@ -8015,6 +11074,18 @@
           cb.checked = ejercicio.categoriasPermitidas.indexOf(cat) !== -1;
         });
       }
+
+      // Vincular eventos onchange dinámicos
+      catContainer.querySelectorAll('input[data-categoria]').forEach(function(cb) {
+        cb.onchange = function() {
+          var ej = getSelectedEjercicio();
+          if (!ej) return;
+          ej.categoriasPermitidas = [];
+          catContainer.querySelectorAll('input[data-categoria]:checked').forEach(function(checked) {
+            ej.categoriasPermitidas.push(checked.getAttribute('data-categoria'));
+          });
+        };
+      });
     }
 
     // Actualizar texto del tip dinámicamente según el tipo de ejercicio
@@ -8116,7 +11187,74 @@
         } else {
           btnVerificar.style.display = '';
         }
+
+        // Deshabilitar botón si ya se agotaron los intentos en la carga inicial
+        if (modoAlumno && evaluacionState) {
+          try {
+            var progressStr = localStorage.getItem('stblock_student_progress_' + evaluacionState.id);
+            if (progressStr) {
+              var progress = JSON.parse(progressStr);
+              var curIdx = progress.currentIdx;
+              var maxAttempts = (ejercicio.intentosMax !== undefined) ? parseInt(ejercicio.intentosMax) : -1;
+              if (maxAttempts >= 0) {
+                var currentAttempts = (progress.intentosRealizados && progress.intentosRealizados[curIdx]) || 0;
+                var allowedAttempts = maxAttempts + 1;
+                if (currentAttempts >= allowedAttempts) {
+                  btnVerificar.disabled = true;
+                  btnVerificar.style.opacity = '0.5';
+                  btnVerificar.textContent = 'Intentos agotados 🔒';
+                }
+              }
+            }
+          } catch(e) {}
+        }
+
         btnVerificar.onclick = function() {
+          if (modoAlumno && evaluacionState) {
+            try {
+              var progressStr = localStorage.getItem('stblock_student_progress_' + evaluacionState.id);
+              if (progressStr) {
+                var progress = JSON.parse(progressStr);
+                progress.intentosRealizados = progress.intentosRealizados || {};
+                var curIdx = progress.currentIdx;
+                var maxAttempts = (ejercicio.intentosMax !== undefined) ? parseInt(ejercicio.intentosMax) : -1;
+                
+                if (maxAttempts >= 0) {
+                  var currentAttempts = (progress.intentosRealizados[curIdx] || 0);
+                  var allowedAttempts = maxAttempts + 1;
+                  
+                  if (currentAttempts >= allowedAttempts) {
+                    showAlert('Has agotado tus intentos permitidos para este ejercicio.');
+                    return;
+                  }
+                  
+                  currentAttempts++;
+                  progress.intentosRealizados[curIdx] = currentAttempts;
+                  localStorage.setItem('stblock_student_progress_' + evaluacionState.id, JSON.stringify(progress));
+                  
+                  var res = window.verificarRespuestaBloques(ejercicio);
+                  var isCorrect = (res && res.porcentaje === 100);
+                  
+                  if (isCorrect) {
+                    toast('✓ ¡Respuesta correcta!');
+                  } else {
+                    var remaining = allowedAttempts - currentAttempts;
+                    if (remaining > 0) {
+                      toast('❌ Respuesta incorrecta. Te quedan ' + remaining + ' intento(s).');
+                    } else {
+                      showAlert('❌ Respuesta incorrecta. Has agotado tus ' + allowedAttempts + ' intento(s) para este ejercicio. Pulsa "Siguiente" para continuar.');
+                      btnVerificar.disabled = true;
+                      btnVerificar.style.opacity = '0.5';
+                      btnVerificar.textContent = 'Intentos agotados 🔒';
+                    }
+                  }
+                  return;
+                }
+              }
+            } catch(e) {
+              console.error('Error en verificar intentos:', e);
+            }
+          }
           window.verificarRespuestaBloques(ejercicio);
         };
       }
@@ -8234,6 +11372,10 @@
 
   // Inicializar Blockly para la vista previa
   function initPreviewBlockly(ejercicio, categoriasPermitidas, modoAlumno) {
+    if (!categoriasPermitidas) categoriasPermitidas = [];
+    var isCircuitoCodigo = (ejercicio && ejercicio.tipo === 'circuito_codigo');
+    var isCircuitoCodigoArmarProg = isCircuitoCodigo && (ejercicio.progMode === 'bloques') && (ejercicio.ocultar === 'programacion');
+
     var mainContainer = document.getElementById('mainBlocklyContainer');
     var toolboxContainer = document.getElementById('toolboxBlocklyContainer');
     var toolboxArea = document.getElementById('toolboxPreviewArea');
@@ -8241,6 +11383,26 @@
     if (!mainContainer || !toolboxContainer) {
       console.warn('[Preview] Containers not found');
       return;
+    }
+
+    // Inyectar estilos globales de Blockly si no existen
+    if (!document.getElementById('blockly-toolbox-custom-styles')) {
+      var style = document.createElement('style');
+      style.id = 'blockly-toolbox-custom-styles';
+      style.textContent = `
+        .blocklyToolboxCategoryLabel {
+          color: #e2e8f0 !important;
+          font-family: 'Outfit', 'Inter', sans-serif !important;
+          font-weight: 500 !important;
+          font-size: 13px !important;
+        }
+        .blocklyTreeRow:hover .blocklyToolboxCategoryLabel,
+        .blocklyToolboxCategory:hover .blocklyToolboxCategoryLabel,
+        .blocklyTreeRowSelected .blocklyToolboxCategoryLabel {
+          color: #ffffff !important;
+        }
+      `;
+      document.head.appendChild(style);
     }
 
     if (ejercicio && (ejercicio.tipo === 'bloques_ordenar' || ejercicio.tipo === 'bloques_corregir')) {
@@ -8293,34 +11455,64 @@
     } else {
       toolboxXml = '<xml id="toolbox-preview" style="display: none">';
       if (window.ScratchBlockly) {
-        var categoriesConfig = [
-          { id: 'motion', name: 'Movimiento', color: window.ScratchBlockly.colors.motion.primary, method: 'getMotionBlocks' },
-          { id: 'looks', name: 'Apariencia', color: window.ScratchBlockly.colors.looks.primary, method: 'getLooksBlocks' },
-          { id: 'sound', name: 'Sonido', color: window.ScratchBlockly.colors.sound.primary, method: 'getSoundBlocks' },
-          { id: 'events', name: 'Eventos', color: window.ScratchBlockly.colors.events.primary, method: 'getEventsBlocks' },
-          { id: 'control', name: 'Control', color: window.ScratchBlockly.colors.control.primary, method: 'getControlBlocks' },
-          { id: 'sensing', name: 'Sensores', color: window.ScratchBlockly.colors.sensing.primary, method: 'getSensingBlocks' },
-          { id: 'operators', name: 'Operadores', color: window.ScratchBlockly.colors.operators.primary, method: 'getOperatorsBlocks' },
-          { id: 'variables', name: 'Variables', color: window.ScratchBlockly.colors.variables.primary, method: 'getVariablesBlocks' },
-          { id: 'lists', name: 'Listas', color: window.ScratchBlockly.colors.lists.primary, method: 'getListsBlocks' },
-          { id: 'pen', name: 'Lápiz', color: window.ScratchBlockly.colors.pen.primary, method: 'getPenBlocks' },
-          { id: 'music', name: 'Música', color: window.ScratchBlockly.colors.music.primary, method: 'getMusicBlocks' },
-          { id: 'logic', name: 'Lógica+', color: window.ScratchBlockly.colors.logic.primary, method: 'getLogicBlocks' },
-          { id: 'state', name: 'Estado', color: window.ScratchBlockly.colors.state.primary, method: 'getStateBlocks' },
-          { id: 'debug', name: 'Debug', color: window.ScratchBlockly.colors.debug.primary, method: 'getDebugBlocks' },
-          { id: 'gravity', name: 'Gravedad', color: window.ScratchBlockly.colors.gravity.primary, method: 'getGravityBlocks' },
-          { id: 'physics', name: 'Física', color: window.ScratchBlockly.colors.physics.primary, method: 'getPhysicsBlocks' }
-        ];
-
-        categoriesConfig.forEach(function(cat) {
-          if (categoriasPermitidas.indexOf(cat.id) !== -1) {
-            var blocksXml = '';
-            if (typeof window.ScratchBlockly[cat.method] === 'function') {
-              blocksXml = window.ScratchBlockly[cat.method]();
-            }
-            toolboxXml += '<category name="' + cat.name + '" colour="' + cat.color + '">' + blocksXml + '</category>';
+        var categoriesConfig = [];
+        
+        var activeEval = window.targetEval || evaluacionState;
+        if (activeEval && activeEval.entorno === 'dispositivos') {
+          var boardId = activeEval.tarjeta || 'stbBoardV2';
+          var dynamicXml = '';
+          if (typeof window.registerDynamicDeviceBlocks === 'function') {
+            dynamicXml = window.registerDynamicDeviceBlocks(boardId);
+          } else {
+            dynamicXml = '<category name="Arduino" colour="#00979C">' + window.ScratchBlockly.getArduinoBlocks() + '</category>';
           }
-        });
+          toolboxXml += dynamicXml;
+
+          categoriesConfig = [
+            { id: 'control', name: 'Control', color: window.ScratchBlockly.colors.control.primary, method: 'getControlBlocks' },
+            { id: 'operators', name: 'Operadores', color: window.ScratchBlockly.colors.operators.primary, method: 'getOperatorsBlocks' },
+            { id: 'variables', name: 'Variables', color: window.ScratchBlockly.colors.variables.primary, method: 'getVariablesBlocks' }
+          ];
+          
+          categoriesConfig.forEach(function(cat) {
+            if (categoriasPermitidas.length === 0 || categoriasPermitidas.indexOf(cat.id) !== -1) {
+              var blocksXml = '';
+              if (typeof window.ScratchBlockly[cat.method] === 'function') {
+                blocksXml = window.ScratchBlockly[cat.method]();
+              }
+              toolboxXml += '<category name="' + cat.name + '" colour="' + cat.color + '">' + blocksXml + '</category>';
+            }
+          });
+        } else {
+          categoriesConfig = [
+            { id: 'motion', name: 'Movimiento', color: window.ScratchBlockly.colors.motion.primary, method: 'getMotionBlocks' },
+            { id: 'looks', name: 'Apariencia', color: window.ScratchBlockly.colors.looks.primary, method: 'getLooksBlocks' },
+            { id: 'sound', name: 'Sonido', color: window.ScratchBlockly.colors.sound.primary, method: 'getSoundBlocks' },
+            { id: 'events', name: 'Eventos', color: window.ScratchBlockly.colors.events.primary, method: 'getEventsBlocks' },
+            { id: 'control', name: 'Control', color: window.ScratchBlockly.colors.control.primary, method: 'getControlBlocks' },
+            { id: 'sensing', name: 'Sensores', color: window.ScratchBlockly.colors.sensing.primary, method: 'getSensingBlocks' },
+            { id: 'operators', name: 'Operadores', color: window.ScratchBlockly.colors.operators.primary, method: 'getOperatorsBlocks' },
+            { id: 'variables', name: 'Variables', color: window.ScratchBlockly.colors.variables.primary, method: 'getVariablesBlocks' },
+            { id: 'lists', name: 'Listas', color: window.ScratchBlockly.colors.lists.primary, method: 'getListsBlocks' },
+            { id: 'pen', name: 'Lápiz', color: window.ScratchBlockly.colors.pen.primary, method: 'getPenBlocks' },
+            { id: 'music', name: 'Música', color: window.ScratchBlockly.colors.music.primary, method: 'getMusicBlocks' },
+            { id: 'logic', name: 'Lógica+', color: window.ScratchBlockly.colors.logic.primary, method: 'getLogicBlocks' },
+            { id: 'state', name: 'Estado', color: window.ScratchBlockly.colors.state.primary, method: 'getStateBlocks' },
+            { id: 'debug', name: 'Debug', color: window.ScratchBlockly.colors.debug.primary, method: 'getDebugBlocks' },
+            { id: 'gravity', name: 'Gravedad', color: window.ScratchBlockly.colors.gravity.primary, method: 'getGravityBlocks' },
+            { id: 'physics', name: 'Física', color: window.ScratchBlockly.colors.physics.primary, method: 'getPhysicsBlocks' }
+          ];
+          
+          categoriesConfig.forEach(function(cat) {
+            if (categoriasPermitidas.indexOf(cat.id) !== -1) {
+              var blocksXml = '';
+              if (typeof window.ScratchBlockly[cat.method] === 'function') {
+                blocksXml = window.ScratchBlockly[cat.method]();
+              }
+              toolboxXml += '<category name="' + cat.name + '" colour="' + cat.color + '">' + blocksXml + '</category>';
+            }
+          });
+        }
       }
       toolboxXml += '</xml>';
     }
@@ -8365,7 +11557,7 @@
 
       // Cargar el estado guardado
       if (ejercicio.blocklyState) {
-        if (ejercicio.tipo === 'bloques_armar') {
+        if (ejercicio.tipo === 'bloques_armar' || isCircuitoCodigoArmarProg) {
           // El lienzo inicia completamente vacío para armar
           console.log('[STBLOCK-SNAP] Modo Armar: Iniciando lienzo vacío.');
         } else {
@@ -8963,6 +12155,277 @@
 
 
 
+  window.verificarRespuestaCircuito = function(ejercicio, silencioso) {
+    var playerIframe = document.getElementById('velxioPlayerIframe');
+    if (!playerIframe) {
+      return { correctos: 0, total: 1, porcentaje: 0, mensaje: 'Simulador no disponible' };
+    }
+    
+    try {
+      var win = playerIframe.contentWindow;
+      var boardStore = win.__VELXIO_BOARD_STORE;
+      if (!boardStore || typeof boardStore.getState !== 'function') {
+        return { correctos: 0, total: 1, porcentaje: 0, mensaje: 'El simulador se está inicializando' };
+      }
+      
+      var boardState = boardStore.getState();
+      var studentState = {
+        boards: boardState.boards || [],
+        components: boardState.components || [],
+        wires: boardState.wires || []
+      };
+
+      if (!ejercicio.circuitoSolucion || !ejercicio.circuitoSolucion.components) {
+        var res = { correctos: 1, total: 1, porcentaje: 100, mensaje: 'Sin circuito solución configurado. Aprobado por defecto.' };
+        if (!silencioso) {
+          mostrarResultadoVerificacion(res.correctos, res.total, res.porcentaje, [], res.mensaje);
+        }
+        return res;
+      }
+
+      // 1. Verificar inventario de componentes
+      var solCompCounts = {};
+      ejercicio.circuitoSolucion.components.forEach(function(c) {
+        solCompCounts[c.type] = (solCompCounts[c.type] || 0) + 1;
+      });
+
+      var studCompCounts = {};
+      studentState.components.forEach(function(c) {
+        studCompCounts[c.type] = (studCompCounts[c.type] || 0) + 1;
+      });
+
+      var missingComponents = [];
+      for (var type in solCompCounts) {
+        var solCount = solCompCounts[type];
+        var studCount = studCompCounts[type] || 0;
+        if (studCount < solCount) {
+          var friendlyName = type.replace('wokwi-', '').replace('arduino-', '').toUpperCase();
+          missingComponents.push(friendlyName);
+        }
+      }
+
+      var totalWires = ejercicio.circuitoSolucion.wires.length;
+      var totalSteps = totalWires + 1; // 1 paso para componentes, N pasos para cables
+
+      if (missingComponents.length > 0) {
+        var msg = 'Faltan componentes requeridos: ' + missingComponents.join(', ');
+        var res = { correctos: 0, total: totalSteps, porcentaje: 0, mensaje: msg };
+        if (!silencioso) {
+          mostrarResultadoVerificacion(res.correctos, res.total, res.porcentaje, [], res.mensaje);
+        }
+        return res;
+      }
+
+      // 2. Construir grafo de conexiones del estudiante
+      var adj = {};
+      function addEdge(u, v) {
+        if (!adj[u]) adj[u] = [];
+        if (!adj[v]) adj[v] = [];
+        adj[u].push(v);
+        adj[v].push(u);
+      }
+
+      // Conexiones físicas (cables del alumno)
+      studentState.wires.forEach(function(w) {
+        if (w.start && w.end && w.start.componentId && w.end.componentId) {
+          var u = w.start.componentId + "::" + w.start.pinName;
+          var v = w.end.componentId + "::" + w.end.pinName;
+          addEdge(u, v);
+        }
+      });
+
+      // Conexiones internas de protoboards
+      studentState.components.forEach(function(c) {
+        if (c.type && c.type.indexOf('breadboard') !== -1) {
+          var isHalf = (c.type.indexOf('half') !== -1);
+          var maxRows = isHalf ? 30 : 63;
+          for (var r = 1; r <= maxRows; r++) {
+            var colTop = ['a', 'b', 'c', 'd', 'e'];
+            for (var i = 0; i < colTop.length - 1; i++) {
+              addEdge(c.id + "::" + colTop[i] + r, c.id + "::" + colTop[i+1] + r);
+            }
+            var colBottom = ['f', 'g', 'h', 'i', 'j'];
+            for (var i = 0; i < colBottom.length - 1; i++) {
+              addEdge(c.id + "::" + colBottom[i] + r, c.id + "::" + colBottom[i+1] + r);
+            }
+          }
+          // Conexiones de buses de alimentación (separados en rieles superior "1." e inferior "2.")
+          var wiredPins = [];
+          for (var pinNode in adj) {
+            var parts = pinNode.split('::');
+            if (parts[0] === c.id) {
+              wiredPins.push(parts[1]);
+            }
+          }
+          var plusWiredTop = wiredPins.filter(function(p) { return (p.indexOf('plus') !== -1 || p.indexOf('vcc') !== -1 || p.indexOf('PWR') !== -1) && p.indexOf('2.') === -1; });
+          for (var i = 0; i < plusWiredTop.length - 1; i++) {
+            addEdge(c.id + "::" + plusWiredTop[i], c.id + "::" + plusWiredTop[i+1]);
+          }
+          var plusWiredBottom = wiredPins.filter(function(p) { return (p.indexOf('plus') !== -1 || p.indexOf('vcc') !== -1 || p.indexOf('PWR') !== -1) && p.indexOf('1.') === -1; });
+          for (var i = 0; i < plusWiredBottom.length - 1; i++) {
+            addEdge(c.id + "::" + plusWiredBottom[i], c.id + "::" + plusWiredBottom[i+1]);
+          }
+          var minusWiredTop = wiredPins.filter(function(p) { return (p.indexOf('minus') !== -1 || p.indexOf('gnd') !== -1 || p.indexOf('GND') !== -1) && p.indexOf('2.') === -1; });
+          for (var i = 0; i < minusWiredTop.length - 1; i++) {
+            addEdge(c.id + "::" + minusWiredTop[i], c.id + "::" + minusWiredTop[i+1]);
+          }
+          var minusWiredBottom = wiredPins.filter(function(p) { return (p.indexOf('minus') !== -1 || p.indexOf('gnd') !== -1 || p.indexOf('GND') !== -1) && p.indexOf('1.') === -1; });
+          for (var i = 0; i < minusWiredBottom.length - 1; i++) {
+            addEdge(c.id + "::" + minusWiredBottom[i], c.id + "::" + minusWiredBottom[i+1]);
+          }
+        }
+      });
+
+      // BFS para etiquetar redes conductoras
+      var visited = {};
+      var pinToNetId = {};
+      var netCounter = 0;
+
+      function bfs(startNode, netId) {
+        var queue = [startNode];
+        visited[startNode] = true;
+        pinToNetId[startNode] = netId;
+
+        while (queue.length > 0) {
+          var curr = queue.shift();
+          var neighbors = adj[curr] || [];
+          neighbors.forEach(function(neighbor) {
+            if (!visited[neighbor]) {
+              visited[neighbor] = true;
+              pinToNetId[neighbor] = netId;
+              queue.push(neighbor);
+            }
+          });
+        }
+      }
+
+      for (var node in adj) {
+        if (!visited[node]) {
+          bfs(node, netCounter++);
+        }
+      }
+
+      // 3. Generar emparejamientos permutacionales de componentes por tipo
+      var solCompsByType = {};
+      ejercicio.circuitoSolucion.components.forEach(function(c) {
+        if (!solCompsByType[c.type]) solCompsByType[c.type] = [];
+        solCompsByType[c.type].push(c.id);
+      });
+
+      var studCompsByType = {};
+      studentState.components.forEach(function(c) {
+        if (!studCompsByType[c.type]) studCompsByType[c.type] = [];
+        studCompsByType[c.type].push(c.id);
+      });
+
+      function permute(arr) {
+        if (arr.length <= 1) return [arr];
+        var result = [];
+        for (var i = 0; i < arr.length; i++) {
+          var current = arr[i];
+          var remaining = arr.slice(0, i).concat(arr.slice(i + 1));
+          var remainingPerms = permute(remaining);
+          for (var j = 0; j < remainingPerms.length; j++) {
+            result.push([current].concat(remainingPerms[j]));
+          }
+        }
+        return result;
+      }
+
+      var solBoardId = null;
+      if (ejercicio.circuitoSolucion.boards && ejercicio.circuitoSolucion.boards[0]) {
+        solBoardId = ejercicio.circuitoSolucion.boards[0].id;
+      } else if (ejercicio.circuitoSolucion.activeBoardId) {
+        solBoardId = ejercicio.circuitoSolucion.activeBoardId;
+      }
+      
+      var studBoardId = null;
+      if (studentState.boards && studentState.boards[0]) {
+        studBoardId = studentState.boards[0].id;
+      } else if (studentState.activeBoardId) {
+        studBoardId = studentState.activeBoardId;
+      }
+
+      var types = Object.keys(solCompsByType);
+      var mappings = [{}];
+      if (solBoardId && studBoardId) {
+        var baseMap = {};
+        baseMap[solBoardId] = studBoardId;
+        mappings = [baseMap];
+      }
+
+      types.forEach(function(type) {
+        var solIds = solCompsByType[type];
+        var studIds = studCompsByType[type] || [];
+        var perms = permute(studIds);
+
+        var nextMappings = [];
+        mappings.forEach(function(existingMap) {
+          perms.forEach(function(perm) {
+            var newMap = Object.assign({}, existingMap);
+            solIds.forEach(function(solId, index) {
+              if (index < perm.length) {
+                newMap[solId] = perm[index];
+              }
+            });
+            nextMappings.push(newMap);
+          });
+        });
+        mappings = nextMappings;
+      });
+
+      // 4. Evaluar la satisfacción de conexiones para cada mapeo
+      var bestScore = 0;
+      var bestMapping = null;
+
+      mappings.forEach(function(M) {
+        var score = 0;
+        ejercicio.circuitoSolucion.wires.forEach(function(w) {
+          if (w.start && w.end) {
+            var solStartComp = w.start.componentId;
+            var solStartPin = w.start.pinName;
+            var solEndComp = w.end.componentId;
+            var solEndPin = w.end.pinName;
+
+            var studStartComp = M[solStartComp];
+            var studEndComp = M[solEndComp];
+
+            if (studStartComp && studEndComp) {
+              var u = studStartComp + "::" + solStartPin;
+              var v = studEndComp + "::" + solEndPin;
+
+              if (pinToNetId[u] !== undefined && pinToNetId[v] !== undefined && pinToNetId[u] === pinToNetId[v]) {
+                score++;
+              }
+            }
+          }
+        });
+        if (score > bestScore) {
+          bestScore = score;
+          bestMapping = M;
+        }
+      });
+
+      // 5. Devolver resultado final de verificación
+      var correctos = bestScore + 1; // +1 por tener todos los componentes requeridos
+      var porcentaje = Math.round((correctos / totalSteps) * 100);
+      var esCorrecto = (porcentaje === 100);
+      
+      var msg = esCorrecto ? '¡Excelente! Circuito armado correctamente.' :
+                'Componentes correctos, pero fallan conexiones. Conexiones correctas: ' + bestScore + ' de ' + totalWires + '.';
+
+      var res = { correctos: correctos, total: totalSteps, porcentaje: porcentaje, mensaje: msg };
+      if (!silencioso) {
+        mostrarResultadoVerificacion(res.correctos, res.total, res.porcentaje, [], res.mensaje);
+      }
+      return res;
+
+    } catch (e) {
+      console.error('Error al verificar circuito:', e);
+      return { correctos: 0, total: 1, porcentaje: 0, mensaje: 'Error al verificar circuito: ' + e.message };
+    }
+  };
+
   // Verificar respuesta de bloques - NUEVA VERSIÓN
   window.verificarRespuestaBloques = function(ejercicio, silencioso) {
     var workspace = window._previewWorkspace;
@@ -9329,7 +12792,7 @@
   };
 
   // Mostrar resultado de verificación
-  function mostrarResultadoVerificacion(correctos, total, porcentaje, detalles) {
+  function mostrarResultadoVerificacion(correctos, total, porcentaje, detalles, customMessage) {
     // Buscar o crear contenedor de resultado
     var existingResult = document.getElementById('verificacionResultado');
     if (existingResult) existingResult.remove();
@@ -9345,8 +12808,8 @@
 
     resultDiv.style.cssText = 'padding: 16px 20px; background: ' + bgColor + '; color: white; display: flex; justify-content: space-between; align-items: center;';
 
-    var mensaje = porcentaje === 100 ? '¡Perfecto! Todos los bloques correctos' :
-                  (porcentaje >= 50 ? 'Buen intento, pero faltan algunos bloques' : 'Revisa tu respuesta');
+    var mensaje = customMessage || (porcentaje === 100 ? '¡Perfecto! Todos los bloques correctos' :
+                  (porcentaje >= 50 ? 'Buen intento, pero faltan algunos bloques' : 'Revisa tu respuesta'));
 
     resultDiv.innerHTML = '<div><span style="font-size: 24px; margin-right: 12px;">' + icon + '</span><strong>' + mensaje + '</strong></div>' +
       '<div style="text-align: right;"><div style="font-size: 24px; font-weight: bold;">' + correctos + '/' + total + '</div><div style="font-size: 12px; opacity: 0.9;">' + porcentaje + '% correcto</div></div>';

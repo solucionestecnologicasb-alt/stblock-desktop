@@ -4,7 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Editor de escenarios STBlock</title>
-  <link rel="stylesheet" href="editor.css">
+  <link rel="stylesheet" href="editor.css?v=0.1.13">
+  <script>
+    if (window.location.search.indexOf('mode=student') !== -1) {
+      document.documentElement.classList.add('student-mode');
+      var style = document.createElement('style');
+      style.innerHTML = '#adminLock, .topbar, #mapWorkspace, #robotWorkspace, #pieceWorkspace, #evaluacionesWorkspace { display: none !important; }';
+      document.head.appendChild(style);
+    }
+  </script>
   <script>
     // Electron 15 can expose an unstable WebGL2 context that loses UBOs.
     // Return null for WebGL2 so Babylon falls back to the WebGL1 engine.
@@ -1054,6 +1062,48 @@
             <option value="avanzado">Avanzado</option>
           </select>
         </label>
+        <label>Entorno de Evaluación
+          <select id="evalEntorno">
+            <option value="robotica" selected>Programación</option>
+            <option value="dispositivos">Electrónica</option>
+          </select>
+        </label>
+        <label id="lblEvalTarjeta" style="display: none;">Tarjeta Objetivo
+          <select id="evalTarjeta">
+            <optgroup label="STBlock / STBoard">
+              <option value="stbBoardV2" selected>STBoard V2</option>
+              <option value="stBoardExtension">STBoard Extension</option>
+            </optgroup>
+            <optgroup label="Arduino">
+              <option value="arduinoUno">Arduino Uno</option>
+              <option value="arduinoNano">Arduino Nano</option>
+              <option value="arduinoLeonardo">Arduino Leonardo</option>
+              <option value="arduinoMega2560">Arduino Mega 2560</option>
+              <option value="arduinoUnoR4Minima">Arduino Uno R4 Minima</option>
+              <option value="arduinoUnoR4Wifi">Arduino Uno R4 WiFi</option>
+              <option value="makeyMakey">Makey Makey</option>
+            </optgroup>
+            <optgroup label="ESP32 / ESP8266">
+              <option value="arduinoEsp32">ESP32</option>
+              <option value="arduinoEsp32S3">ESP32-S3</option>
+              <option value="arduinoEsp8266NodeMCU">NodeMCU (ESP8266)</option>
+            </optgroup>
+            <optgroup label="Raspberry Pi Pico">
+              <option value="arduinoRaspberryPiPico">Raspberry Pi Pico</option>
+              <option value="arduinoRaspberryPiPicoW">Raspberry Pi Pico W</option>
+              <option value="arduinoRaspberryPiPico2">Raspberry Pi Pico 2</option>
+              <option value="arduinoRaspberryPiPico2W">Raspberry Pi Pico 2 W</option>
+            </optgroup>
+            <optgroup label="Micro:bit">
+              <option value="microbit">Micro:bit</option>
+              <option value="microbitV2">Micro:bit V2</option>
+            </optgroup>
+            <optgroup label="K210 (RISC-V)">
+              <option value="arduinoK210MaixDock">MaixDock</option>
+              <option value="arduinoK210Maixduino">Maixduino</option>
+            </optgroup>
+          </select>
+        </label>
         <label>Tiempo límite (min)
           <input id="evalTiempo" type="number" value="15" min="1" max="120">
         </label>
@@ -1062,7 +1112,7 @@
         </label>
         <label>Modo de ejercicios
           <select id="evalModo">
-            <option value="codigo">Código (Python/texto)</option>
+            <option value="codigo" id="evalModoCodigoOption">Código (Python/texto)</option>
             <option value="bloques">Bloques visuales</option>
             <option value="mixto">Mixto (ambos)</option>
           </select>
@@ -1073,6 +1123,23 @@
             <option value="avanzar" selected>Al avanzar (Siguiente/Finalizar)</option>
             <option value="silencio">Sin notificaciones (pasar en silencio)</option>
           </select>
+        </label>
+        <label>Reglas de Salida / Abandono
+          <select id="evalReglaSalida">
+            <option value="continuar" selected>Permitir salida (continuar al regresar)</option>
+            <option value="reiniciar">Permitir salida (reiniciar reto, mantener tiempo)</option>
+            <option value="bloqueo">Bloqueo estricto (no permitir salir)</option>
+          </select>
+        </label>
+        <label>Ejercicios al azar (0 = todos)
+          <input id="evalEjerciciosAzar" type="number" value="0" min="0">
+        </label>
+        <label>Alerta tiempo crítico (min)
+          <input id="evalTiempoAlerta" type="number" value="1" min="0">
+        </label>
+        <label style="display: flex; align-items: center; gap: 8px; margin-top: 8px; cursor: pointer;">
+          <input id="evalPermitirRetroceder" type="checkbox" checked>
+          <span>Permitir retroceder</span>
         </label>
       </section>
 
@@ -1104,6 +1171,13 @@
           <button data-add-ejercicio="bloques_ordenar" data-grupo="bloques" style="background: #FFAB1922; border-color: #FFAB19;">Ordenar</button>
           <button data-add-ejercicio="bloques_armar" data-grupo="bloques" style="background: #9966FF22; border-color: #9966FF;">Armar</button>
           <button data-add-ejercicio="bloques_corregir" data-grupo="bloques" style="background: #ef444422; border-color: #ef4444;">Corregir</button>
+
+          <!-- Grupo: Circuitos (solo modo electrónica) -->
+          <div class="tool-group-label" data-grupo="electronica">🔌 Circuitos (Velxio)</div>
+          <button data-add-ejercicio="circuito_armar" data-grupo="electronica" style="background: #00979C22; border-color: #00979C;">Armar Circuito</button>
+          <button data-add-ejercicio="circuito_depurar" data-grupo="electronica" style="background: #ef444422; border-color: #ef4444;">Depurar Circuito</button>
+          <button data-add-ejercicio="circuito_cuestionario" data-grupo="electronica" style="background: #3b82f622; border-color: #3b82f6;">Circuito + Quiz</button>
+          <button data-add-ejercicio="circuito_codigo" data-grupo="electronica" style="background: #FF8C1A22; border-color: #FF8C1A;">Circuito + Código</button>
         </div>
       </section>
 
@@ -1119,6 +1193,12 @@
         <h2>Evaluaciones Guardadas</h2>
         <button id="refreshEvaluaciones">Actualizar</button>
         <div id="savedEvaluaciones" class="saved-maps"></div>
+      </section>
+
+      <section>
+        <h2>Cargar Resultados (.stbeval)</h2>
+        <button id="btnSubirResultados" class="primary" style="width: 100%; padding: 10px; margin-bottom: 8px;">📥 Cargar Reporte</button>
+        <input type="file" id="fileResultados" accept=".stbeval" style="display: none;">
       </section>
 
       <section>
@@ -1165,6 +1245,9 @@
           <div class="type-badge" id="ejercicioTypeDisplay" style="margin-bottom: 12px; padding: 4px 10px; border-radius: 4px; font-size: 11px; text-transform: uppercase;"></div>
           <label>Enunciado<textarea id="ejercicioEnunciado" rows="3" style="resize: vertical;"></textarea></label>
           <label>Puntos<input id="ejercicioPuntos" type="number" value="10" min="1" max="100"></label>
+          <label>Intentos permitidos (-1 = ilimitados, 0 = solo 1 intento)
+            <input id="ejercicioIntentosMax" type="number" value="-1" min="-1">
+          </label>
           <label>Pista (opcional)<textarea id="ejercicioPista" rows="2" style="resize: vertical;"></textarea></label>
           <label>Explicación de respuesta<textarea id="ejercicioExplicacion" rows="2" style="resize: vertical;"></textarea></label>
 
@@ -1221,6 +1304,13 @@
           <div id="opcionesEscribirEditor" hidden>
             <label>Código solución (referencia)<textarea id="codigoSolucion" rows="8" style="font-family: monospace; resize: vertical;"></textarea></label>
             <label>Palabras clave requeridas (separadas por coma)<input id="palabrasClave" placeholder="for, range, print"></label>
+            
+            <div id="arduinoSimulationConfig" style="display: none; margin-top: 12px; padding: 12px; background: #00979c1a; border: 1px solid #00979c33; border-radius: 6px;">
+              <h4 style="margin: 0 0 6px 0; color: #00979c; font-size: 12px;">🧪 Simulación Arduino de pines (opcional)</h4>
+              <p style="margin: 0 0 8px 0; font-size: 11px; color: #94a3b8; line-height: 1.4;">Comprueba que los pines estén en el estado correcto a determinado tiempo de simulación.</p>
+              <label>Tiempo de simulación a evaluar (ms)<input id="arduinoSimTime" type="number" value="2000" min="100"></label>
+              <label>Estados esperados de pines (JSON)<textarea id="arduinoSimExpected" rows="3" style="font-family: monospace; resize: vertical;" placeholder='{ "13": 1 }'></textarea></label>
+            </div>
           </div>
 
           <!-- Relacionar -->
@@ -1251,6 +1341,124 @@
             </label>
             <label>Bloques permitidos (opcional)<input id="bloquesPermitidos" placeholder="mover, girar, repetir"></label>
             <label>Bloques máximos<input id="maxBloques" type="number" value="0" min="0" placeholder="0 = sin límite"></label>
+          </div>
+
+          <!-- Armar circuito (Velxio) -->
+          <div id="opcionesCircuitoEditor" hidden>
+            <label style="margin-bottom: 12px; display: block;">
+              <span style="display: block; margin-bottom: 6px;">Circuito Solución</span>
+              <button id="btnEditarCircuitoSolucion" class="primary" style="width: 100%; padding: 10px;">🔌 Diseñar Circuito Solución</button>
+              <div id="estadoCircuitoSolucion" style="margin-top: 8px; font-size: 11px; padding: 6px 10px; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; text-align: center;">
+                Sin circuito guardado
+              </div>
+            </label>
+
+            <label style="display: block; margin-top: 12px;">
+              <span style="display: block; margin-bottom: 6px;">Diagrama de Conexión (Imagen de referencia)</span>
+              <input type="file" id="circuitoDiagramaFile" accept="image/*" style="width: 100%; border: 1px solid #334155; background: #0f172a; padding: 6px; border-radius: 6px; color: #e2e8f0; font-size: 11px;">
+              <div id="circuitoDiagramaPreview" style="margin-top: 8px; width: 100%; height: 120px; border-radius: 6px; border: 1px dashed #334155; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #0b0f19; position: relative;">
+                <span style="color: #64748b; font-size: 11px;">Sin imagen cargada</span>
+              </div>
+              <button id="btnEliminarCircuitoDiagrama" class="danger" style="margin-top: 6px; width: 100%; display: none; padding: 6px; font-size: 11px;">Eliminar imagen</button>
+            </label>
+          </div>
+
+          <!-- Depurar circuito (Velxio) -->
+          <div id="opcionesCircuitoDepurarEditor" hidden>
+            <label style="margin-bottom: 12px; display: block;">
+              <span style="display: block; margin-bottom: 6px;">Circuito Inicial (Con errores)</span>
+              <button id="btnEditarCircuitoInicial" class="danger" style="width: 100%; padding: 10px;">🔌 Diseñar Circuito Inicial</button>
+              <div id="estadoCircuitoInicial" style="margin-top: 8px; font-size: 11px; padding: 6px 10px; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; text-align: center;">
+                Sin circuito inicial
+              </div>
+            </label>
+            <label style="margin-bottom: 12px; display: block;">
+              <span style="display: block; margin-bottom: 6px;">Circuito Solución (Correcto)</span>
+              <button id="btnEditarCircuitoSolucionDepurar" class="primary" style="width: 100%; padding: 10px;">🔌 Diseñar Circuito Solución</button>
+              <div id="estadoCircuitoSolucionDepurar" style="margin-top: 8px; font-size: 11px; padding: 6px 10px; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; text-align: center;">
+                Sin circuito solución
+              </div>
+            </label>
+            <label style="display: block; margin-top: 12px;">
+              <span style="display: block; margin-bottom: 6px;">Diagrama de Conexión (Imagen de referencia)</span>
+              <input type="file" id="circuitoDepurarDiagramaFile" accept="image/*" style="width: 100%; border: 1px solid #334155; background: #0f172a; padding: 6px; border-radius: 6px; color: #e2e8f0; font-size: 11px;">
+              <div id="circuitoDepurarDiagramaPreview" style="margin-top: 8px; width: 100%; height: 120px; border-radius: 6px; border: 1px dashed #334155; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #0b0f19; position: relative;">
+                <span style="color: #64748b; font-size: 11px;">Sin imagen cargada</span>
+              </div>
+              <button id="btnEliminarCircuitoDepurarDiagrama" class="danger" style="margin-top: 6px; width: 100%; display: none; padding: 6px; font-size: 11px;">Eliminar imagen</button>
+            </label>
+          </div>
+
+          <!-- Circuito + Quiz (Velxio) -->
+          <div id="opcionesCircuitoCuestionarioEditor" hidden>
+            <label style="margin-bottom: 12px; display: block;">
+              <span style="display: block; margin-bottom: 6px;">Circuito de Inspección (Inicial)</span>
+              <button id="btnEditarCircuitoCuestionario" class="primary" style="width: 100%; padding: 10px;">🔌 Diseñar Circuito</button>
+              <div id="estadoCircuitoCuestionario" style="margin-top: 8px; font-size: 11px; padding: 6px 10px; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; text-align: center;">
+                Sin circuito guardado
+              </div>
+            </label>
+            <div id="opcionesCircuitoQuizList" style="margin-top: 12px;"></div>
+            <button id="addOpcionCircuitoQuiz" class="primary" style="width: 100%; margin-top: 8px;">+ Agregar opción de Quiz</button>
+          </div>
+
+          <!-- Circuito + Código (Velxio) -->
+          <!-- Circuito + Código (Velxio) -->
+          <div id="opcionesCircuitoCodigoEditor" hidden>
+            <label style="display: block; margin-bottom: 12px;">
+              <span style="display: block; margin-bottom: 6px;">Modo de Programación</span>
+              <select id="circuitoCodigoProgMode" style="width: 100%; border: 1px solid #334155; background: #0f172a; padding: 6px; border-radius: 6px; color: #e2e8f0; font-size: 11px;">
+                <option value="codigo">💻 Código Arduino C++ (Texto)</option>
+                <option value="bloques">🧩 Bloques Blockly</option>
+              </select>
+            </label>
+            <label style="display: block; margin-bottom: 12px;">
+              <span style="display: block; margin-bottom: 6px;">Qué Ocultar al Alumno (Consigna)</span>
+              <select id="circuitoCodigoOcultar" style="width: 100%; border: 1px solid #334155; background: #0f172a; padding: 6px; border-radius: 6px; color: #e2e8f0; font-size: 11px;">
+                <option value="programacion">❌ Ocultar Programación (Alumno escribe código/bloques)</option>
+                <option value="circuito">❌ Ocultar Circuito (Alumno conecta hardware en Velxio)</option>
+              </select>
+            </label>
+
+            <label style="margin-bottom: 12px; display: block;">
+              <span style="display: block; margin-bottom: 6px;">Diseño del Circuito Solución</span>
+              <button id="btnEditarCircuitoCodigoSolucion" class="primary" style="width: 100%; padding: 10px;">🔌 Diseñar Circuito en Velxio</button>
+              <div id="estadoCircuitoCodigoSolucion" style="margin-top: 8px; font-size: 11px; padding: 6px 10px; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; text-align: center;">
+                Sin circuito guardado
+              </div>
+            </label>
+
+            <!-- Sección de diseño de programación (Bloques) -->
+            <label id="circuitoCodigoBloquesSolucionContainer" style="margin-bottom: 12px; display: none;">
+              <span style="display: block; margin-bottom: 6px;">Diseño de Bloques Solución</span>
+              <button id="btnEditarCircuitoCodigoBloquesSolucion" class="primary" style="width: 100%; padding: 10px; background: #854d0e; border-color: #713f12; color: #fff;">🧩 Diseñar Bloques Solución</button>
+              <div id="estadoCircuitoCodigoBloquesSolucion" style="margin-top: 8px; font-size: 11px; padding: 6px 10px; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; text-align: center;">
+                Sin bloques guardados
+              </div>
+            </label>
+
+            <!-- Sección de diseño de programación (Código C++) -->
+            <label id="circuitoCodigoTextSolucionContainer" style="margin-bottom: 12px; display: none;">
+              <span style="display: block; margin-bottom: 6px;">Código Arduino C++ Solución / Plantilla</span>
+              <textarea id="circuitoCodigoTextSolucion" style="width: 100%; height: 120px; border: 1px solid #334155; background: #0f172a; padding: 8px; border-radius: 6px; color: #e2e8f0; font-family: monospace; font-size: 11.5px; resize: vertical;" placeholder="// Escribe el código Arduino de control aquí..."></textarea>
+            </label>
+
+            <label style="display: block; margin-top: 12px;">
+              <span style="display: block; margin-bottom: 6px;">Tiempo de simulación a evaluar (ms)</span>
+              <input id="circuitoCodigoSimTime" type="number" value="2000" min="100" style="width: 100%; border: 1px solid #334155; background: #0f172a; padding: 6px; border-radius: 6px; color: #e2e8f0; font-size: 11px;">
+            </label>
+            <label style="display: block; margin-top: 12px;">
+              <span style="display: block; margin-bottom: 6px;">Estados esperados de pines (JSON)</span>
+              <textarea id="circuitoCodigoSimExpected" rows="3" style="font-family: monospace; resize: vertical; width: 100%; border: 1px solid #334155; background: #0f172a; padding: 6px; border-radius: 6px; color: #e2e8f0; font-size: 11px;" placeholder='{ "13": 1 }'></textarea>
+            </label>
+            <label style="display: block; margin-top: 12px;">
+              <span style="display: block; margin-bottom: 6px;">Diagrama de Conexión (Imagen de referencia)</span>
+              <input type="file" id="circuitoCodigoDiagramaFile" accept="image/*" style="width: 100%; border: 1px solid #334155; background: #0f172a; padding: 6px; border-radius: 6px; color: #e2e8f0; font-size: 11px;">
+              <div id="circuitoCodigoDiagramaPreview" style="margin-top: 8px; width: 100%; height: 120px; border-radius: 6px; border: 1px dashed #334155; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #0b0f19; position: relative;">
+                <span style="color: #64748b; font-size: 11px;">Sin imagen cargada</span>
+              </div>
+              <button id="btnEliminarCircuitoCodigoDiagrama" class="danger" style="margin-top: 6px; width: 100%; display: none; padding: 6px; font-size: 11px;">Eliminar imagen</button>
+            </label>
           </div>
         </div>
       </section>
@@ -1382,9 +1590,10 @@
   <script src="../js/customRobotStorage.js"></script>
   <!-- Blockly para sistema de bloques de evaluaciones -->
   <script src="https://unpkg.com/blockly/blockly.min.js"></script>
-  <script src="blockly-scratch-blocks.js?v=4"></script>
+  <script src="device-manifests-bundle.js?v=0.1.13"></script>
+  <script src="blockly-scratch-blocks.js?v=0.1.13"></script>
   <!-- Sistema anterior (se mantiene por compatibilidad) -->
-  <script src="tutor-blocks.js?v=stblock-eval-v18"></script>
-  <script src="editor.js?v=stblock-pieces-v61"></script>
+  <script src="tutor-blocks.js?v=0.1.13"></script>
+  <script src="editor.js?v=0.1.13"></script>
 </body>
 </html>

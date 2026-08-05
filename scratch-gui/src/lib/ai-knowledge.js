@@ -215,10 +215,11 @@ export default {
         settings: 'Menú Settings: Language (cambiar idioma), Color Mode (Default o High Contrast con check, y opción Caturday), AI (elegir proveedor, poner API Key, seleccionar modelo), Default save path (solo escritorio: carpeta de guardado automático).',
         mode: 'Menú Modo: Normal mode (vuelve a lo normal) y Caturday mode (transforma los bloques en gatos). Aparece solo cuando está disponible.',
         about: 'Información de la versión y créditos de la aplicación.',
-        ai: 'Configuración de IA. Elegís proveedor (Groq, OpenAI, OpenRouter, Gemini, OpenCode Zen), ponés la API Key, y seleccionás el modelo. Los modelos se cargan solos y la configuración se guarda automáticamente.'
+        ai: 'Configuración de IA. Elegís proveedor (Pollinations gratis sin clave, Groq, OpenAI, OpenRouter, Gemini, OpenCode Zen), ponés la API Key (excepto Pollinations que no requiere), y seleccionás el modelo. Los modelos se cargan solos y la configuración se guarda automáticamente.'
     },
     aiSettings: {
         providers: {
+            pollinations: 'Pollinations: servicio público gratuito, NO requiere API Key. Endpoint OpenAI-compatible. Modelo anónimo: openai-fast (GPT-OSS 20B). Límites: ~1 request cada 15s por IP.',
             groq: 'Groq: rápido, todos los modelos son gratis. API Key empieza con "gsk_".',
             openai: 'OpenAI (ChatGPT). API Key empieza con "sk-". Modelos: GPT-4o (pago), GPT-4o Mini (gratis).',
             gemini: 'Gemini (Google). API Key empieza con "AIza". Modelos gratis: Gemini 2.0 Flash, 2.0 Flash Lite, 1.5 Flash.',

@@ -39,12 +39,43 @@ const ModeToggle = ({mode, onModeChange, disabled}) => (
                 </svg>
                 <span className={styles.modeLabel}>Electronica</span>
             </button>
+            <button
+                className={classNames(styles.modeButton, {
+                    [styles.active]: mode === 'diseno',
+                    [styles.disabled]: disabled
+                })}
+                onClick={() => !disabled && onModeChange('diseno')}
+                disabled={disabled}
+            >
+                <svg className={styles.modeIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    {/* Icono de diseño 3D / cubo */}
+                    <path d="M12 2L20 6.5v9L12 20l-8-4.5v-9L12 2z" />
+                    <path d="M12 12l8-4.5M12 12L4 7.5M12 12v8" />
+                </svg>
+                <span className={styles.modeLabel}>Diseño 3D</span>
+            </button>
+            <button
+                className={classNames(styles.modeButton, {
+                    [styles.active]: mode === 'evaluacion',
+                    [styles.disabled]: disabled
+                })}
+                onClick={() => !disabled && onModeChange('evaluacion')}
+                disabled={disabled}
+            >
+                <svg className={styles.modeIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    {/* Icono de evaluacion / gorro de graduacion */}
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                    <path d="M2 17l10 5 10-5" />
+                    <path d="M2 12l10 5 10-5" />
+                </svg>
+                <span className={styles.modeLabel}>Evaluacion</span>
+            </button>
         </div>
     </div>
 );
 
 ModeToggle.propTypes = {
-    mode: PropTypes.oneOf(['game', 'device']).isRequired,
+    mode: PropTypes.oneOf(['game', 'device', 'diseno', 'evaluacion']).isRequired,
     onModeChange: PropTypes.func.isRequired,
     disabled: PropTypes.bool
 };
