@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WorkplaneShape } from "@/types/sketchforge";
 import {
   canonicalizeShape,
+  canonicalizeShapes,
   cleanNearZero,
   cleanRotationDegrees,
   fallbackSolidColor,
@@ -96,6 +97,17 @@ describe("workplane shape helpers", () => {
     expect(canonical.mirrorY).toBe(true);
     expect(canonical.groupedShapes?.[0].rotation).toBe(0);
     expect(canonical.groupedShapes?.[0].mirrorZ).toBeUndefined();
+  });
+
+  it("preserves references for already canonical shapes", () => {
+    const child = shape({ id: "canonical-child" });
+    const canonical = canonicalizeShape(shape({ id: "canonical-parent", groupedShapes: [child] }));
+    const canonicalChild = canonical.groupedShapes?.[0];
+
+    expect(canonicalizeShape(canonical)).toBe(canonical);
+    expect(canonicalizeShape(canonical).groupedShapes?.[0]).toBe(canonicalChild);
+    const scene = [canonical];
+    expect(canonicalizeShapes(scene)).toBe(scene);
   });
 
   it("keeps shallow equality strict for shape payload references", () => {

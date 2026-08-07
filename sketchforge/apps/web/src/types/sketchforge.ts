@@ -90,6 +90,8 @@ export type SketchSegment = {
   startId: string;
   endId: string;
   kind?: "line" | "bezier" | "smooth";
+  // Reference-only geometry: visible and editable but ignored by solid builders.
+  construction?: boolean;
   // Id of the parametric sketch entity that generated this segment.
   sourceEntityId?: string;
 };
@@ -124,8 +126,16 @@ export type SketchEntity =
   | { id: string; kind: "circle"; cx: number; cz: number; radius: number }
   | { id: string; kind: "semicircle"; cx: number; cz: number; radius: number; startAngle: number }
   | { id: string; kind: "arc"; cx: number; cz: number; radius: number; startAngle: number; endAngle: number }
-  | { id: string; kind: "rectangle"; cx: number; cz: number; width: number; depth: number };
+  | { id: string; kind: "rectangle"; cx: number; cz: number; width: number; depth: number }
+  | { id: string; kind: "ellipse"; cx: number; cz: number; radiusX: number; radiusZ: number; rotation: number }
+  | { id: string; kind: "polygon"; cx: number; cz: number; radius: number; sides: number; rotation: number }
+  | { id: string; kind: "slot"; cx: number; cz: number; length: number; width: number; rotation: number }
+  | { id: string; kind: "text"; cx: number; cz: number; text: string; font: SketchTextFont; size: number; scaleX: number; scaleZ: number; rotation: number }
+  | { id: string; kind: "vector"; cx: number; cz: number; name: string; loops: SketchVectorLoop[]; scaleX: number; scaleZ: number; rotation: number; sourceFormat: "svg" | "trace" };
 
+export type SketchTextFont = "Multilanguage" | "Sans" | "Serif" | "Script" | "Monospace" | "Rounded" | "Stencil";
+export type SketchVectorPoint = { x: number; z: number };
+export type SketchVectorLoop = SketchVectorPoint[];
 export type SketchOperation = "extrude" | "revolve";
 
 // Union behavior of a CAP section's generated piece against its host shape
@@ -144,12 +154,13 @@ export type SketchRevolveSettings = {
   thickness: number;
 };
 
-// Work planes of a CAP section. The "face" plane is reserved for phase 2 and
-// cannot be created through the v1 UI.
+// Construction planes used by geometry profile operations. Face planes retain
+// both a stable topology id (when available) and a geometric fallback so older
+// projects remain usable after the source body is edited.
 export type WorkplanePlane =
   | { kind: "base" }
   | { kind: "offset"; elevation: number }
-  | { kind: "face"; shapeId: string; center: [number, number, number]; normal: [number, number, number]; up: [number, number, number] };
+  | { kind: "face"; shapeId: string; topologyId?: string; center: [number, number, number]; normal: [number, number, number]; up: [number, number, number] };
 
 export type CapTimelineEntryKind =
   | "section-create"
@@ -263,6 +274,22 @@ export type CadPrimitiveFrame = {
   frame: CadBrepFrame;
 };
 
+export type CadConstructionEdge = {
+  id: string;
+  topologyId?: number;
+  partition?: boolean;
+  start: { x: number; y: number; z: number };
+  end: { x: number; y: number; z: number };
+  startVertexId?: string;
+  endVertexId?: string;
+};
+
+export type CadConstructionVertex = {
+  id: string;
+  topologyId: number;
+  position: { x: number; y: number; z: number };
+};
+
 export type WorkplaneShape = {
   id: string;
   name: string;
@@ -334,6 +361,11 @@ export type WorkplaneShape = {
   cadBrep?: string;
   cadBrepFrame?: CadBrepFrame;
   cadPrimitiveFrame?: CadPrimitiveFrame;
+  cadPartitioned?: boolean;
+  // Editable geometry stored in the shape's local coordinate frame. Guide
+  // entries remain auxiliary; `partition` entries regenerate real B-Rep edges.
+  constructionEdges?: CadConstructionEdge[];
+  constructionVertices?: CadConstructionVertex[];
   groupedShapes?: WorkplaneShape[];
   groupedBaseWidth?: number;
   groupedBaseDepth?: number;

@@ -11,6 +11,27 @@
     border-bottom: 1px solid $ui-black-transparent;
 }
 
+.sprite-info.compact {
+    padding: 0.5rem;
+}
+
+.compact .row {
+    gap: 0.25rem;
+}
+
+.compact .group {
+    min-width: 0;
+}
+
+.compact .sprite-input {
+    width: 6rem;
+    min-width: 0;
+}
+
+.compact .larger-input input {
+    width: 3.25rem;
+}
+
 .row {
     display: flex;
     justify-content: space-between;

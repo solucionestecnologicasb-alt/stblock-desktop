@@ -47,6 +47,7 @@ function orderedPaths(profile: SketchProfile): OrderedPath[] {
   const adjacency = new Map<string, Array<{ pointId: string; segment: SketchSegment }>>();
   profile.points.forEach((point) => adjacency.set(point.id, []));
   const validSegments = profile.segments.filter((segment) => {
+    if (segment.construction) return false;
     if (!pointById.has(segment.startId) || !pointById.has(segment.endId)) return false;
     adjacency.get(segment.startId)?.push({ pointId: segment.endId, segment });
     adjacency.get(segment.endId)?.push({ pointId: segment.startId, segment });

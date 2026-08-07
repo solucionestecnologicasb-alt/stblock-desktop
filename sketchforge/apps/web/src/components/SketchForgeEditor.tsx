@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, CloudUpload, Download, FolderOpen, X } from "lucide-react";
+import { Check, CloudUpload, Download, FileImage, FolderOpen, Hexagon, Minus, Pencil, Triangle, Type, X } from "lucide-react";
 import type manifoldModule from "manifold-3d";
 import type { ManifoldToplevel } from "manifold-3d";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ADDITION, Brush, Evaluator, HOLLOW_INTERSECTION, HOLLOW_SUBTRACTION, INTERSECTION, SUBTRACTION, type CSGOperation } from "three-bvh-csg";
 import * as THREE from "three";
@@ -19,6 +20,7 @@ import type { AppThemePreference, ResolvedAppTheme } from "@/lib/appTheme";
 import { manifoldModuleSource } from "@/generated/manifoldModuleSource";
 import { manifoldWasmBase64 } from "@/generated/manifoldWasmBase64";
 import { sphereTessellation } from "@/lib/sphereTessellation";
+import { vectorEntityFromFile } from "@/lib/sketchVectorImport";
 import { createGearGeometry } from "@/lib/gearGeometry";
 import {
   SketchEntityArcIcon,
@@ -53,11 +55,10 @@ import {
 } from "./icons";
 import { WorkplaneViewport } from "./WorkplaneViewport";
 import { ShapeLibrary } from "./ShapeLibrary";
-import { SketchWorkspace, type SketchMeasurement, type SketchSelection, type SketchTool } from "./SketchWorkspace";
-import { CapWorkspace } from "./CapWorkspace";
-import { EdgeModifierPanel } from "./workplane/EdgeModifierPanel";
+import type { SketchMeasurement, SketchSelection, SketchTool } from "./SketchWorkspace";
 import {
   canonicalizeShape,
+  canonicalizeShapes,
   cleanNearZero,
   cleanRotationDegrees,
   fallbackSolidColor,
@@ -93,7 +94,8 @@ import { projectExportFileName } from "@/lib/exportNames";
 import { attachProjectAsset, dedupeProjectAssets, projectAssetFromBytes, sourceFormatForFileName } from "@/lib/projectAssets";
 import { findSketchOutlineIntersection } from "@/lib/sketchProfileValidation";
 import { buildSketchRevolveMesh, DEFAULT_SKETCH_REVOLVE_SETTINGS, normalizeSketchRevolveSettings, type SketchRevolveMesh } from "@/lib/sketchRevolve";
-import { entityFromDrag, materializeSketchEntities } from "@/lib/capGeometry";
+import { entityFromDrag, materializeSketchEntities, tessellateSketchEntity } from "@/lib/capGeometry";
+import type { Direct2DDrawTool } from "@/lib/direct2dDrawing";
 import { appendCapTimelineEntry, capSectionHasUsableProfile, capSectionToolHeight, capSectionToolPlane, createCapSection as newCapSection, emptyCapDocument, normalizeCapDocument, planeElevation, reconcileCapDocument } from "@/lib/capDocument";
 import { exportSkfProject, SKF_MEDIA_TYPE } from "@/lib/skfProject";
 import { sceneShape } from "@/lib/shapeCatalog";
@@ -113,6 +115,10 @@ import {
 } from "@/lib/sketchforgeMcpProtocol";
 import type { CadModifierComponentMesh, CadModifierDisplayEdge, CadModifierEdge, CadModifierKind, CadModifierMeshPart, CadModifierPrimitivePart, CadModifierQuality, CadModifierWorkerRequest, CadModifierWorkerResponse, CadTopologyEdge, CadTopologyFace, CadTopologyPick, CadTopologyPickKind, CadTopologyVertex } from "@/lib/cadModifierTypes";
 import type { AlignAxis, AlignHandleStatus, AlignTarget, CapDocument, CapSection, CapSectionUnionMode, GridSize, ProjectAsset, ShapeAsset, SketchEntity, SketchImage, SketchOperation, SketchPoint, SketchProfile, SketchRevolveSettings, SketchSegment, SketchShapeBuildOptions, WorkplanePlane, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
+
+const SketchWorkspace = dynamic(() => import("./SketchWorkspace").then((module) => module.SketchWorkspace), { ssr: false });
+const TopologyInspector = dynamic(() => import("./TopologyInspector").then((module) => module.TopologyInspector), { ssr: false });
+const EdgeModifierPanel = dynamic(() => import("./workplane/EdgeModifierPanel").then((module) => module.EdgeModifierPanel), { ssr: false });
 
 export { importedShapeFromStl, importedShapeFromSvg };
 
@@ -250,7 +256,9 @@ function cloneSketchProfile(profile: SketchProfile): SketchProfile {
     })),
     segments: profile.segments.map((segment) => ({ ...segment })),
     images: (profile.images ?? []).map((image) => ({ ...image })),
-    entities: (profile.entities ?? []).map((entity) => ({ ...entity })),
+    entities: (profile.entities ?? []).map((entity) => entity.kind === "vector"
+      ? { ...entity, loops: entity.loops.map((loop) => loop.map((point) => ({ ...point }))) }
+      : { ...entity }),
   };
 }
 
@@ -1357,6 +1365,27 @@ function shapeFromCadMesh(
       height,
     },
     cadPrimitiveFrame: undefined,
+    constructionEdges: source.constructionEdges?.map((edge) => {
+      const start = topologyShapeLocalPointToWorld(source, edge.start);
+      const end = topologyShapeLocalPointToWorld(source, edge.end);
+      const nextCenterY = minY + rawHeight / 2;
+      return {
+        ...edge,
+        start: { x: start.x - centerX, y: start.y - nextCenterY, z: start.z - centerZ },
+        end: { x: end.x - centerX, y: end.y - nextCenterY, z: end.z - centerZ },
+      };
+    }),
+    constructionVertices: source.constructionVertices?.map((vertex) => {
+      const world = topologyShapeLocalPointToWorld(source, vertex.position);
+      return {
+        ...vertex,
+        position: {
+          x: world.x - centerX,
+          y: world.y - (minY + rawHeight / 2),
+          z: world.z - centerZ,
+        },
+      };
+    }),
   });
 }
 
@@ -2246,6 +2275,7 @@ function shapeTopologySignature(shape: WorkplaneShape): string {
     helixQuality: shape.helixQuality,
     groupCount: shape.groupedShapes?.length ?? 0,
     brep: shape.cadBrep ? shape.cadBrep.length : 0,
+    partitions: shape.constructionEdges?.filter((edge) => edge.partition).length ?? 0,
     // Mesh edits change `importedMesh.positions` without touching width/depth/
     // height, so the fingerprint must be part of the signature or the stale
     // topology would never be re-collected after a mesh-mode edit.
@@ -2800,6 +2830,175 @@ function topologySelectionReps(topology: TopologyShapeLike, selection: CadTopolo
     }
   }
   return reps;
+}
+
+function topologySelectionControlPoints(topology: TopologyShapeLike, selection: CadTopologyPick[]) {
+  const unique = new Map<string, { x: number; y: number; z: number }>();
+  const add = (point: { x: number; y: number; z: number }) => {
+    const key = `${point.x.toFixed(5)}:${point.y.toFixed(5)}:${point.z.toFixed(5)}`;
+    if (!unique.has(key)) unique.set(key, { x: point.x, y: point.y, z: point.z });
+  };
+  selection.forEach((pick) => {
+    if (pick.kind === "vertex") {
+      const vertex = topology.vertices.find((entry) => entry.id === pick.id);
+      if (vertex) add(vertex);
+    } else if (pick.kind === "edge") {
+      topology.edges.find((entry) => entry.id === pick.id)?.endpoints.forEach(add);
+    } else {
+      const face = topology.faces.find((entry) => entry.id === pick.id);
+      if (!face) return;
+      for (let index = 0; index + 2 < face.points.length; index += 3) add({ x: face.points[index], y: face.points[index + 1], z: face.points[index + 2] });
+    }
+  });
+  return [...unique.values()];
+}
+
+function topologyPointsCenter(points: Array<{ x: number; y: number; z: number }>) {
+  const divisor = Math.max(1, points.length);
+  return points.reduce((center, point) => ({ x: center.x + point.x / divisor, y: center.y + point.y / divisor, z: center.z + point.z / divisor }), { x: 0, y: 0, z: 0 });
+}
+
+function topologyWorldPointToShapeLocal(shape: WorkplaneShape, point: { x: number; y: number; z: number }) {
+  const center = new THREE.Vector3(shape.x, (shape.elevation ?? 0) + shape.height / 2, shape.z);
+  const inverseRotation = new THREE.Quaternion()
+    .setFromEuler(new THREE.Euler(
+      THREE.MathUtils.degToRad(shape.rotationX ?? 0),
+      THREE.MathUtils.degToRad(shape.rotation ?? 0),
+      THREE.MathUtils.degToRad(shape.rotationZ ?? 0),
+      "XYZ",
+    ))
+    .invert();
+  const local = new THREE.Vector3(point.x, point.y, point.z).sub(center).applyQuaternion(inverseRotation);
+  if (shape.mirrorX) local.x *= -1;
+  if (shape.mirrorY) local.y *= -1;
+  if (shape.mirrorZ) local.z *= -1;
+  return { x: local.x, y: local.y, z: local.z };
+}
+
+function topologyShapeLocalPointToWorld(shape: WorkplaneShape, point: { x: number; y: number; z: number }) {
+  const local = new THREE.Vector3(
+    point.x * (shape.mirrorX ? -1 : 1),
+    point.y * (shape.mirrorY ? -1 : 1),
+    point.z * (shape.mirrorZ ? -1 : 1),
+  );
+  const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+    THREE.MathUtils.degToRad(shape.rotationX ?? 0),
+    THREE.MathUtils.degToRad(shape.rotation ?? 0),
+    THREE.MathUtils.degToRad(shape.rotationZ ?? 0),
+    "XYZ",
+  ));
+  local.applyQuaternion(rotation);
+  local.add(new THREE.Vector3(shape.x, (shape.elevation ?? 0) + shape.height / 2, shape.z));
+  return { x: local.x, y: local.y, z: local.z };
+}
+
+function constructionTopologyVertices(shape: WorkplaneShape): CadTopologyVertex[] {
+  return (shape.constructionVertices ?? []).map((vertex) => {
+    const world = topologyShapeLocalPointToWorld(shape, vertex.position);
+    return { id: vertex.topologyId, x: world.x, y: world.y, z: world.z };
+  });
+}
+
+function constructionEdgeTopologyId(edge: NonNullable<WorkplaneShape["constructionEdges"]>[number], index: number) {
+  return edge.topologyId ?? (-1_000_001 - index);
+}
+
+function constructionTopologyEdges(shape: WorkplaneShape): CadTopologyEdge[] {
+  return (shape.constructionEdges ?? []).map((edge, index) => ({ edge, index })).filter(({ edge }) => !edge.partition).map(({ edge, index }) => {
+    const start = topologyShapeLocalPointToWorld(shape, edge.start);
+    const end = topologyShapeLocalPointToWorld(shape, edge.end);
+    return {
+      id: constructionEdgeTopologyId(edge, index),
+      center: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2, z: (start.z + end.z) / 2 },
+      points: [start.x, start.y, start.z, end.x, end.y, end.z],
+      endpoints: [start, end],
+    };
+  });
+}
+
+function constructionEdgeByTopologyId(shape: WorkplaneShape, topologyId: number) {
+  const index = (shape.constructionEdges ?? []).findIndex((edge, edgeIndex) => constructionEdgeTopologyId(edge, edgeIndex) === topologyId);
+  return index >= 0 ? { edge: shape.constructionEdges![index], index } : null;
+}
+
+function moveConstructionEdgeToWorldEndpoints(
+  shape: WorkplaneShape,
+  topologyId: number,
+  endpoints: Array<{ to: { x: number; y: number; z: number } }>,
+) {
+  const match = constructionEdgeByTopologyId(shape, topologyId);
+  if (!match || endpoints.length < 2) return null;
+  const start = topologyWorldPointToShapeLocal(shape, endpoints[0].to);
+  const end = topologyWorldPointToShapeLocal(shape, endpoints[1].to);
+  const constructionEdges = (shape.constructionEdges ?? []).map((edge, index) => index === match.index ? { ...edge, start, end } : edge);
+  const constructionVertices = (shape.constructionVertices ?? []).map((vertex) => {
+    if (vertex.id === match.edge.startVertexId) return { ...vertex, position: start };
+    if (vertex.id === match.edge.endVertexId) return { ...vertex, position: end };
+    return vertex;
+  });
+  return { constructionEdges, constructionVertices, edge: match.edge };
+}
+
+function constructionVertexNearWorld(shape: WorkplaneShape, point: { x: number; y: number; z: number }, tolerance = 0.15) {
+  return (shape.constructionVertices ?? []).find((vertex) => {
+    const world = topologyShapeLocalPointToWorld(shape, vertex.position);
+    return Math.hypot(world.x - point.x, world.y - point.y, world.z - point.z) <= tolerance;
+  }) ?? null;
+}
+
+function topologyWithConstructionVertices(shape: WorkplaneShape, topology: TopologyShapeLike): TopologyShapeLike {
+  return {
+    ...topology,
+    vertices: [...topology.vertices, ...constructionTopologyVertices(shape)],
+    edges: [...topology.edges, ...constructionTopologyEdges(shape)],
+  };
+}
+
+function transformSelectedConstructionVertices(
+  shape: WorkplaneShape,
+  selection: CadTopologyPick[],
+  transform: (point: { x: number; y: number; z: number }) => { x: number; y: number; z: number },
+) {
+  const selectedVertexIds = new Set(selection.filter((pick) => pick.kind === "vertex").map((pick) => pick.id));
+  const selectedEdgeIds = new Set(selection.filter((pick) => pick.kind === "edge").map((pick) => pick.id));
+  const movedLocalById = new Map<string, { x: number; y: number; z: number }>();
+  let constructionVertices = (shape.constructionVertices ?? []).map((vertex) => {
+    if (!selectedVertexIds.has(vertex.topologyId)) return vertex;
+    const world = topologyShapeLocalPointToWorld(shape, vertex.position);
+    const nextWorld = transform(world);
+    if (Math.hypot(nextWorld.x - world.x, nextWorld.y - world.y, nextWorld.z - world.z) <= ALIGN_EPSILON) return vertex;
+    const position = topologyWorldPointToShapeLocal(shape, nextWorld);
+    movedLocalById.set(vertex.id, position);
+    return { ...vertex, position };
+  });
+  let movedEdges = 0;
+  const constructionEdges = shape.constructionEdges?.map((edge, index) => {
+    if (!selectedEdgeIds.has(constructionEdgeTopologyId(edge, index))) {
+      return {
+        ...edge,
+        start: edge.startVertexId && movedLocalById.has(edge.startVertexId) ? movedLocalById.get(edge.startVertexId)! : edge.start,
+        end: edge.endVertexId && movedLocalById.has(edge.endVertexId) ? movedLocalById.get(edge.endVertexId)! : edge.end,
+      };
+    }
+    const startWorld = topologyShapeLocalPointToWorld(shape, edge.start);
+    const endWorld = topologyShapeLocalPointToWorld(shape, edge.end);
+    const nextStart = transform(startWorld);
+    const nextEnd = transform(endWorld);
+    const start = topologyWorldPointToShapeLocal(shape, nextStart);
+    const end = topologyWorldPointToShapeLocal(shape, nextEnd);
+    if (edge.startVertexId) movedLocalById.set(edge.startVertexId, start);
+    if (edge.endVertexId) movedLocalById.set(edge.endVertexId, end);
+    movedEdges += 1;
+    return { ...edge, start, end };
+  });
+  if (movedLocalById.size > 0) {
+    constructionVertices = constructionVertices.map((vertex) => movedLocalById.has(vertex.id) ? { ...vertex, position: movedLocalById.get(vertex.id)! } : vertex);
+  }
+  if (movedLocalById.size === 0 && movedEdges === 0) return { shape, moved: 0 };
+  return {
+    shape: { ...shape, constructionVertices, constructionEdges },
+    moved: movedLocalById.size + movedEdges,
+  };
 }
 
 /**
@@ -5509,11 +5708,11 @@ export function SketchForgeEditor({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [capDocument, setCapDocument] = useState<CapDocument | null>(() => initialCap ? normalizeCapDocument(initialCap) : emptyCapDocument());
   const [capSketchActive, setCapSketchActive] = useState(false);
-  // Controls whether the "Planos de trabajo" side panel is visible in Boceto
-  // mode. It opens when the user clicks "Boceto a 3D" or while drawing a CAP
-  // section; it stays hidden otherwise.
-  const [capPanelOpen, setCapPanelOpen] = useState(false);
   const [clipboard, setClipboard] = useState<WorkplaneShape[]>([]);
+  const [geometryDrawTool, setGeometryDrawTool] = useState<Direct2DDrawTool | null>(null);
+  const [geometryProfileSectionId, setGeometryProfileSectionId] = useState<string | null>(null);
+  const [geometryPlaneMode, setGeometryPlaneMode] = useState<"auto" | "base" | "offset">("auto");
+  const [geometryPlaneOffset, setGeometryPlaneOffset] = useState("20");
   const [systemClipboardSupported, setSystemClipboardSupported] = useState(false);
   const [history, setHistory] = useState<EditorHistoryEntry[]>(() => (initialHistoryStateRef.current as EditorHistoryState).entries);
   const [historyIndex, setHistoryIndex] = useState(() => (initialHistoryStateRef.current as EditorHistoryState).index);
@@ -5538,6 +5737,7 @@ export function SketchForgeEditor({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const projectFileInputRef = useRef<HTMLInputElement | null>(null);
   const sketchImageInputRef = useRef<HTMLInputElement | null>(null);
+  const sketchVectorInputRef = useRef<HTMLInputElement | null>(null);
   const booleanAutomationRunRef = useRef<string | null>(null);
   const projectHydratingRef = useRef(false);
   const projectInteractionActiveRef = useRef(false);
@@ -5600,6 +5800,7 @@ export function SketchForgeEditor({
   const cadModifierSourcePartsRef = useRef<WorkplaneShape[]>([]);
   const cadModifierWatchdogRef = useRef<{ requestId: number; phase: CadModifierRequestPhase; timer: number } | null>(null);
   const [topologyMode, setTopologyMode] = useState<"shape" | "face" | "vertex" | "edge">("shape");
+  const [topologyVertexPlacementActive, setTopologyVertexPlacementActive] = useState(false);
   const [shapeTopology, setShapeTopology] = useState<{
     shapeId: string;
     signature: string;
@@ -5615,7 +5816,9 @@ export function SketchForgeEditor({
   const [topologyMirrorPreviewAxis, setTopologyMirrorPreviewAxis] = useState<AlignAxis | null>(null);
   const [pushPullDistance, setPushPullDistance] = useState("");
   const [topologyEditPreview, setTopologyEditPreview] = useState<{ positions: Float32Array; normals: Float32Array; indices: Uint32Array } | null>(null);
+  const [topologyInspectorPreviewActive, setTopologyInspectorPreviewActive] = useState(false);
   const topologyEditSessionRef = useRef(0);
+  const constructionVertexDragIdRef = useRef<string | null>(null);
   const topologyEditInFlightRef = useRef(false);
   const topologyEditPendingRef = useRef<{
     request: CadModifierWorkerPayload;
@@ -5639,6 +5842,10 @@ export function SketchForgeEditor({
   // change, so the selection is re-resolved by matching each entity's new
   // position/center against its anchor once the fresh topology arrives.
   const topologyReselectRef = useRef<Array<{ kind: CadTopologyPickKind; anchor: { x: number; y: number; z: number } }> | null>(null);
+
+  useEffect(() => {
+    if (topologyMode !== "vertex") setTopologyVertexPlacementActive(false);
+  }, [topologyMode]);
   // Tracks whether the current topology came from OCCT or the approximate mesh
   // fallback, so the "topología en modo malla" notice fires only on the
   // occt -> mesh transition (not on every re-collection in mesh mode).
@@ -6113,22 +6320,23 @@ export function SketchForgeEditor({
         return;
       }
       if (projectInteractionActiveRef.current) {
-        pendingProjectShapesRef.current = nextShapes.map(canonicalizeShape);
+        pendingProjectShapesRef.current = canonicalizeShapes(nextShapes);
         if (projectSyncTimerRef.current !== null) {
           window.clearTimeout(projectSyncTimerRef.current);
           projectSyncTimerRef.current = null;
         }
         return;
       }
-      const canonicalNext = nextShapes.map(canonicalizeShape);
-      const serialized = projectShapesFingerprint(canonicalNext);
-      if (!force && lastProjectShapesSyncRef.current === serialized) {
-        return;
-      }
+      const canonicalNext = canonicalizeShapes(nextShapes);
       if (projectSyncTimerRef.current !== null) {
         window.clearTimeout(projectSyncTimerRef.current);
       }
       projectSyncTimerRef.current = window.setTimeout(() => {
+        const serialized = projectShapesFingerprint(canonicalNext);
+        if (!force && lastProjectShapesSyncRef.current === serialized) {
+          projectSyncTimerRef.current = null;
+          return;
+        }
         lastProjectShapesSyncRef.current = serialized;
         lastProjectShapesEchoRef.current = serialized;
         // Avisar a la app anfitriona (STBlock) para que refresque su caché del .skf.
@@ -6147,7 +6355,7 @@ export function SketchForgeEditor({
           ...(capDocumentRef.current !== undefined ? { cap: capDocumentRef.current ?? null } : {}),
         });
         projectSyncTimerRef.current = null;
-      }, 120);
+      }, 180);
     },
     [onProjectShapesChange, projectId],
   );
@@ -6278,7 +6486,7 @@ export function SketchForgeEditor({
 
   const commitShapes = useCallback(
     (next: WorkplaneShape[], nextSelection: string | string[] | null = selectedIds, message?: string) => {
-      const canonicalNext = next.map(canonicalizeShape);
+      const canonicalNext = canonicalizeShapes(next);
       const requestedSelection = Array.isArray(nextSelection) ? nextSelection : nextSelection ? [nextSelection] : [];
       const validSelection = requestedSelection.filter((id, index) => requestedSelection.indexOf(id) === index && canonicalNext.some((shape) => shape.id === id));
       // Keep the CAP document consistent: drop resultShapeId references whose
@@ -6456,6 +6664,7 @@ export function SketchForgeEditor({
     if (tool !== "measure") setSketchMeasureStart(null);
     const messages: Record<SketchTool, string> = {
       line: "Línea: haz clic en los puntos para dibujar segmentos rectos",
+      construction: "Construcción: haz clic para dibujar geometría guía que no forma parte del perfil",
       bezier: "Bézier: haz clic y arrastra los puntos para tirar de los controles de la curva",
       smooth: "Curva suave: haz clic en los puntos para construir un trayecto fluido",
       select: "Seleccionar: edita la geometría del boceto o coloca y escala imágenes de referencia",
@@ -6466,6 +6675,9 @@ export function SketchForgeEditor({
       semicircle: "Semicírculo: haz clic y arrastra para trazar un semicírculo cerrado",
       arc: "Arco: haz clic y arrastra para trazar un arco de 90°",
       rectangle: "Rectángulo: haz clic y arrastra para trazar un rectángulo centrado",
+      ellipse: "Elipse: arrastra desde el centro para definir sus dos radios",
+      polygon: "Polígono: arrastra desde el centro; ajusta lados y rotación en Propiedades",
+      slot: "Ranura: arrastra para definir longitud y orientación; ajusta el ancho en Propiedades",
     };
     setNotice(messages[tool]);
   }, []);
@@ -6614,6 +6826,67 @@ export function SketchForgeEditor({
     [commitSketchProfile, sketchProfile],
   );
 
+  const setSketchSegmentDimensions = useCallback((id: string, length: number, angle: number) => {
+    const segment = sketchProfile.segments.find((entry) => entry.id === id && !entry.sourceEntityId);
+    if (!segment) return;
+    const start = sketchProfile.points.find((point) => point.id === segment.startId);
+    if (!start) return;
+    const radians = angle * Math.PI / 180;
+    const nextLength = Math.max(0.05, Math.abs(length));
+    const endPoint = { x: start.x + Math.cos(radians) * nextLength, z: start.z + Math.sin(radians) * nextLength };
+    commitSketchProfile({
+      ...sketchProfile,
+      points: sketchProfile.points.map((point) => point.id === segment.endId ? {
+        ...point,
+        ...endPoint,
+        handleIn: point.handleIn ? { x: point.handleIn.x + endPoint.x - point.x, z: point.handleIn.z + endPoint.z - point.z } : undefined,
+        handleOut: point.handleOut ? { x: point.handleOut.x + endPoint.x - point.x, z: point.handleOut.z + endPoint.z - point.z } : undefined,
+      } : point),
+    }, `Segmento ajustado a ${nextLength.toFixed(workspaceSettings.accuracy)} mm / ${angle.toFixed(1)}°`);
+    setSketchSelection({ kind: "segment", id });
+  }, [commitSketchProfile, sketchProfile, workspaceSettings.accuracy]);
+
+  const bevelSketchPoint = useCallback((id: string, kind: "chamfer" | "fillet") => {
+    const corner = sketchProfile.points.find((point) => point.id === id && !point.sourceEntityId);
+    const incident = sketchProfile.segments.filter((segment) => !segment.sourceEntityId && (segment.startId === id || segment.endId === id));
+    if (!corner || incident.length !== 2 || incident.some((segment) => (segment.kind ?? "line") !== "line")) {
+      setNotice("Elige un vértice unido exactamente a dos líneas rectas");
+      return;
+    }
+    const neighborFor = (segment: SketchSegment) => sketchProfile.points.find((point) => point.id === (segment.startId === id ? segment.endId : segment.startId));
+    const neighborA = neighborFor(incident[0]);
+    const neighborB = neighborFor(incident[1]);
+    if (!neighborA || !neighborB) return;
+    const vectorA = { x: neighborA.x - corner.x, z: neighborA.z - corner.z };
+    const vectorB = { x: neighborB.x - corner.x, z: neighborB.z - corner.z };
+    const lengthA = Math.hypot(vectorA.x, vectorA.z);
+    const lengthB = Math.hypot(vectorB.x, vectorB.z);
+    if (lengthA < 0.2 || lengthB < 0.2) {
+      setNotice("Las líneas son demasiado cortas para modificar la esquina");
+      return;
+    }
+    const cut = Math.min(2, lengthA * 0.45, lengthB * 0.45);
+    const unitA = { x: vectorA.x / lengthA, z: vectorA.z / lengthA };
+    const unitB = { x: vectorB.x / lengthB, z: vectorB.z / lengthB };
+    const pointA: SketchPoint = { id: createLocalId("sketch-bevel"), x: corner.x + unitA.x * cut, z: corner.z + unitA.z * cut, mode: kind === "fillet" ? "smooth" : "corner" };
+    const pointB: SketchPoint = { id: createLocalId("sketch-bevel"), x: corner.x + unitB.x * cut, z: corner.z + unitB.z * cut, mode: kind === "fillet" ? "smooth" : "corner" };
+    if (kind === "fillet") {
+      const handle = cut * 0.55;
+      pointA.handleOut = { x: pointA.x - unitA.x * handle, z: pointA.z - unitA.z * handle };
+      pointB.handleIn = { x: pointB.x - unitB.x * handle, z: pointB.z - unitB.z * handle };
+    }
+    const rewire = (segment: SketchSegment, pointId: string): SketchSegment => segment.startId === id ? { ...segment, startId: pointId } : { ...segment, endId: pointId };
+    const incidentIds = new Set(incident.map((segment) => segment.id));
+    const connector: SketchSegment = { id: createLocalId("sketch-bevel-segment"), startId: pointA.id, endId: pointB.id, kind: kind === "fillet" ? "bezier" : "line" };
+    commitSketchProfile({
+      ...sketchProfile,
+      points: [...sketchProfile.points.filter((point) => point.id !== id), pointA, pointB],
+      segments: [...sketchProfile.segments.filter((segment) => !incidentIds.has(segment.id)), rewire(incident[0], pointA.id), rewire(incident[1], pointB.id), connector],
+    }, kind === "fillet" ? "Esquina redondeada" : "Chaflán creado");
+    setSketchSelection({ kind: "segment", id: connector.id });
+    setSketchTool("select");
+  }, [commitSketchProfile, sketchProfile]);
+
   const addSketchEntity = useCallback((entity: SketchEntity) => {
     const entities = [...(sketchProfile.entities ?? []), entity];
     const next = materializeSketchEntities({ ...sketchProfile, entities });
@@ -6636,6 +6909,59 @@ export function SketchForgeEditor({
     const next = materializeSketchEntities({ ...sketchProfile, entities });
     commitSketchProfile(next, "Entidad paramétrica eliminada");
     setSketchSelection(null);
+  }, [commitSketchProfile, sketchProfile]);
+
+  const deriveSketchEntity = useCallback((id: string, action: "offset" | "mirror-x" | "mirror-y" | "pattern-linear" | "pattern-circular") => {
+    const source = (sketchProfile.entities ?? []).find((entity) => entity.id === id);
+    if (!source) return;
+    const clone = <T extends SketchEntity>(entity: T): T => ({ ...entity, id: createLocalId(`sketch-${entity.kind}`) });
+    const rotate = (entity: SketchEntity, degrees: number): SketchEntity => {
+      const radians = degrees * Math.PI / 180;
+      const cx = entity.cx * Math.cos(radians) - entity.cz * Math.sin(radians);
+      const cz = entity.cx * Math.sin(radians) + entity.cz * Math.cos(radians);
+      if (entity.kind === "arc") return { ...clone(entity), cx, cz, startAngle: entity.startAngle + degrees, endAngle: entity.endAngle + degrees };
+      if (entity.kind === "semicircle") return { ...clone(entity), cx, cz, startAngle: entity.startAngle + degrees };
+      if (["ellipse", "polygon", "slot", "text", "vector"].includes(entity.kind)) {
+        return { ...clone(entity), cx, cz, rotation: (entity as Extract<SketchEntity, { rotation: number }>).rotation + degrees } as SketchEntity;
+      }
+      return { ...clone(entity), cx, cz };
+    };
+    const mirror = (entity: SketchEntity, axis: "x" | "y"): SketchEntity => {
+      const cx = axis === "x" ? -entity.cx : entity.cx;
+      const cz = axis === "y" ? -entity.cz : entity.cz;
+      if (entity.kind === "arc") return axis === "x"
+        ? { ...clone(entity), cx, cz, startAngle: 180 - entity.endAngle, endAngle: 180 - entity.startAngle }
+        : { ...clone(entity), cx, cz, startAngle: -entity.endAngle, endAngle: -entity.startAngle };
+      if (entity.kind === "semicircle") return { ...clone(entity), cx, cz, startAngle: axis === "x" ? -entity.startAngle : 180 - entity.startAngle };
+      if (entity.kind === "text" || entity.kind === "vector") return { ...clone(entity), cx, cz, [axis === "x" ? "scaleX" : "scaleZ"]: -(axis === "x" ? entity.scaleX : entity.scaleZ) } as SketchEntity;
+      if (entity.kind === "ellipse" || entity.kind === "polygon" || entity.kind === "slot") return { ...clone(entity), cx, cz, rotation: axis === "x" ? 180 - entity.rotation : -entity.rotation };
+      return { ...clone(entity), cx, cz };
+    };
+    const offset = (entity: SketchEntity): SketchEntity => {
+      const derived = clone(entity);
+      if (derived.kind === "circle" || derived.kind === "semicircle" || derived.kind === "arc" || derived.kind === "polygon") return { ...derived, radius: derived.radius + 2 };
+      if (derived.kind === "rectangle") return { ...derived, width: derived.width + 4, depth: derived.depth + 4 };
+      if (derived.kind === "ellipse") return { ...derived, radiusX: derived.radiusX + 2, radiusZ: derived.radiusZ + 2 };
+      if (derived.kind === "slot") return { ...derived, length: derived.length + 4, width: derived.width + 4 };
+      if (derived.kind === "text" || derived.kind === "vector") return { ...derived, scaleX: derived.scaleX * 1.1, scaleZ: derived.scaleZ * 1.1 };
+      return derived;
+    };
+
+    let copies: SketchEntity[];
+    if (action === "offset") copies = [offset(source)];
+    else if (action === "mirror-x") copies = [mirror(source, "x")];
+    else if (action === "mirror-y") copies = [mirror(source, "y")];
+    else if (action === "pattern-circular") copies = [90, 180, 270].map((angle) => rotate(source, angle));
+    else {
+      const points = tessellateSketchEntity(source).points;
+      const width = points.length ? Math.max(...points.map((point) => point.x)) - Math.min(...points.map((point) => point.x)) : 10;
+      const spacing = Math.max(5, width + 5);
+      copies = [1, 2].map((index) => ({ ...clone(source), cx: source.cx + spacing * index }));
+    }
+    const entities = [...(sketchProfile.entities ?? []), ...copies];
+    commitSketchProfile(materializeSketchEntities({ ...sketchProfile, entities }), action === "offset" ? "Offset paramétrico creado" : action.startsWith("mirror") ? "Espejo paramétrico creado" : "Patrón paramétrico creado");
+    setSketchSelection({ kind: "entity", id: copies.at(-1)?.id ?? source.id });
+    setSketchTool("select");
   }, [commitSketchProfile, sketchProfile]);
 
   const updateSketchImage = useCallback((id: string, patch: Partial<SketchImage>, message = "Imagen de boceto actualizada") => {
@@ -6688,6 +7014,83 @@ export function SketchForgeEditor({
       setNotice(error instanceof Error ? error.message : "No se pudo agregar la imagen de boceto");
     }
   }, [commitSketchProfile, sketchActive, sketchProfile, sketchTool]);
+
+  const addSketchTextEntity = useCallback(() => {
+    if (!sketchActive && !capSketchActive) {
+      setNotice("Inicia un boceto antes de agregar texto 3D");
+      return;
+    }
+    const entity: SketchEntity = {
+      id: createLocalId("sketch-text"),
+      kind: "text",
+      cx: 0,
+      cz: 0,
+      text: "Texto",
+      font: "Sans",
+      size: 12,
+      scaleX: 1,
+      scaleZ: 1,
+      rotation: 0,
+    };
+    addSketchEntity(entity);
+    setSketchTool("select");
+    setSketchSelection({ kind: "entity", id: entity.id });
+    setNotice("Texto 3D agregado: escribe el contenido en Propiedades y finaliza el boceto para extruirlo");
+  }, [addSketchEntity, capSketchActive, sketchActive]);
+
+  const addSketchVectorFile = useCallback(async (file: File) => {
+    if (!sketchActive && !capSketchActive) {
+      setNotice("Inicia un boceto antes de importar una imagen o SVG 3D");
+      return;
+    }
+    try {
+      const entity = await vectorEntityFromFile(file);
+      addSketchEntity(entity);
+      setSketchTool("select");
+      setSketchSelection({ kind: "entity", id: entity.id });
+      setNotice(entity.sourceFormat === "svg"
+        ? `${file.name} convertido en contornos editables y extruibles`
+        : `${file.name} vectorizado localmente; ajusta sus propiedades antes de extruir`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo convertir la imagen en geometría");
+    }
+  }, [addSketchEntity, capSketchActive, sketchActive]);
+
+  const projectSelectedShapesToSketch = useCallback(() => {
+    const sources = selectedShapes.filter((shape) => shape.id !== editingSketchShapeId && !shape.hidden);
+    if (!sources.length) {
+      setNotice("Selecciona una o más piezas antes de proyectar su silueta al boceto");
+      return;
+    }
+    const projected = sources.map((shape): SketchEntity => {
+      const isRound = ["cylinder", "cone", "sphere", "torus", "tube"].includes(shape.kind);
+      if (isRound && Math.abs(shape.width - shape.depth) < 0.001) {
+        return { id: createLocalId("sketch-projection"), kind: "circle", cx: shape.x, cz: shape.z, radius: Math.max(0.05, shape.width / 2) };
+      }
+      if (isRound) {
+        return { id: createLocalId("sketch-projection"), kind: "ellipse", cx: shape.x, cz: shape.z, radiusX: Math.max(0.05, shape.width / 2), radiusZ: Math.max(0.05, shape.depth / 2), rotation: shape.rotation ?? 0 };
+      }
+      const halfWidth = Math.max(0.05, shape.width / 2);
+      const halfDepth = Math.max(0.05, shape.depth / 2);
+      return {
+        id: createLocalId("sketch-projection"),
+        kind: "vector",
+        cx: shape.x,
+        cz: shape.z,
+        name: `Proyección de ${shape.name}`,
+        loops: [[{ x: -halfWidth, z: -halfDepth }, { x: halfWidth, z: -halfDepth }, { x: halfWidth, z: halfDepth }, { x: -halfWidth, z: halfDepth }]],
+        scaleX: 1,
+        scaleZ: 1,
+        rotation: shape.rotation ?? 0,
+        sourceFormat: "trace",
+      };
+    });
+    const entities = [...(sketchProfile.entities ?? []), ...projected];
+    commitSketchProfile(materializeSketchEntities({ ...sketchProfile, entities }), `${projected.length} silueta${projected.length === 1 ? "" : "s"} proyectada${projected.length === 1 ? "" : "s"}`);
+    setSketchSelection({ kind: "entity", id: projected.at(-1)?.id ?? "" });
+    setSketchTool("select");
+    setNotice("Geometría proyectada como contorno asociable y extruible");
+  }, [commitSketchProfile, editingSketchShapeId, selectedShapes, sketchProfile]);
 
   const deleteSelectedSketchEntity = useCallback(() => {
     if (!sketchSelection) {
@@ -7364,10 +7767,19 @@ export function SketchForgeEditor({
       return;
     }
     const sourceParts = shape.groupedShapes?.length ? restoreGroupedChildren(shape) : [shape];
-    // Always use the world-space tessellation path so the collected topology is
-    // in world coordinates (the mesh path applies rotation + placement).
     const parts: CadModifierMeshPart[] = sourceParts.map((part) => {
-      return { ...meshDataToCadTransfer(meshForShape(part)), hole: Boolean(part.hole) };
+      const partitionEdges = (part.constructionEdges ?? []).filter((edge) => edge.partition).map((edge) => ({
+        id: edge.id,
+        start: topologyShapeLocalPointToWorld(part, edge.start),
+        end: topologyShapeLocalPointToWorld(part, edge.end),
+      }));
+      const common = { hole: Boolean(part.hole), preservePartitions: Boolean(part.cadPartitioned || partitionEdges.length), partitionEdges };
+      if (part.cadBrep && part.cadBrepFrame) {
+        return { ...common, brep: part.cadBrep, brepTransform: cadBrepTransformForShape(part) };
+      }
+      const primitive = cadModifierPrimitiveForShape(part);
+      if (primitive) return { ...common, primitive };
+      return { ...common, ...meshDataToCadTransfer(meshForShape(part)) };
     });
     if (parts.length === 0) {
       setShapeTopology(null);
@@ -7499,6 +7911,7 @@ export function SketchForgeEditor({
     return {
       kind: "face",
       shapeId: selectedTopologyShape.id,
+      topologyId: String(face.id),
       center: [face.center.x, face.center.y, face.center.z],
       normal,
       up: facePlaneUpFromNormal(normal),
@@ -7574,7 +7987,24 @@ export function SketchForgeEditor({
 
   const topologyEditPartsForShape = useCallback((shape: WorkplaneShape): CadModifierMeshPart[] => {
     const sourceParts = shape.groupedShapes?.length ? restoreGroupedChildren(shape) : [shape];
-    return sourceParts.map((part) => ({ ...meshDataToCadTransfer(meshForShape(part)), hole: Boolean(part.hole) }));
+    return sourceParts.map((part) => {
+      const partitionEdges = (part.constructionEdges ?? []).filter((edge) => edge.partition).map((edge) => ({
+        id: edge.id,
+        start: topologyShapeLocalPointToWorld(part, edge.start),
+        end: topologyShapeLocalPointToWorld(part, edge.end),
+      }));
+      const common = {
+        hole: Boolean(part.hole),
+        preservePartitions: Boolean(part.cadPartitioned || partitionEdges.length),
+        partitionEdges,
+      };
+      if (part.cadBrep && part.cadBrepFrame) {
+        return { ...common, brep: part.cadBrep, brepTransform: cadBrepTransformForShape(part) };
+      }
+      const primitive = cadModifierPrimitiveForShape(part);
+      if (primitive) return { ...common, primitive };
+      return { ...common, ...meshDataToCadTransfer(meshForShape(part)) };
+    });
   }, []);
 
   const applyTopologyEditResult = useCallback(async (
@@ -7584,8 +8014,17 @@ export function SketchForgeEditor({
   ) => {
     const preview = shapeFromCadMesh(shape, response.positions, response.normals, response.indices, response.brep);
     if (!preview) throw new Error("El sólido resultante no se pudo construir");
+    const guideEdges = (shape.constructionEdges ?? []).filter((edge) => !edge.partition);
+    const partitionEdges = response.partitionEdges?.map((partition) => ({
+      id: partition.id,
+      partition: true as const,
+      start: topologyWorldPointToShapeLocal(preview, partition.start),
+      end: topologyWorldPointToShapeLocal(preview, partition.end),
+    }));
     const combined = canonicalizeShape({
       ...preview,
+      constructionEdges: partitionEdges ? [...guideEdges, ...partitionEdges] : preview.constructionEdges,
+      cadPartitioned: partitionEdges ? partitionEdges.length > 0 : preview.cadPartitioned,
       cadDisplayEdges: cadDisplayEdgesForShape(preview, response.displayEdges),
       cadDisplayEdgesVersion: 2 as const,
     });
@@ -7637,6 +8076,7 @@ export function SketchForgeEditor({
     } catch (error) {
       console.error(`[TopoEdit] dispatch error: type=${request.type} session=${session} commit=${commit}:`, error instanceof Error ? error.message : error);
       if (commit) {
+        topologyReselectRef.current = null;
         setNotice(error instanceof Error ? error.message : "No se pudo editar la topología");
       }
     } finally {
@@ -7680,6 +8120,13 @@ export function SketchForgeEditor({
   ) => {
     const topology = shapeTopology;
     if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
+    const customResult = commit
+      ? transformSelectedConstructionVertices(shape, topologySelectionRef.current, (point) => ({ x: point.x + delta.x, y: point.y + delta.y, z: point.z + delta.z }))
+      : { shape, moved: 0 };
+    if (customResult.moved > 0) updateShape(shape.id, {
+      constructionVertices: customResult.shape.constructionVertices,
+      constructionEdges: customResult.shape.constructionEdges,
+    });
     const parts = topologyEditPartsForShape(shape);
     if (parts.length === 0) return;
     const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
@@ -7705,22 +8152,234 @@ export function SketchForgeEditor({
         faces.push({ center: { x: face.center.x, y: face.center.y, z: face.center.z }, offset: { x: delta.x, y: delta.y, z: delta.z } });
       }
     }
-    if (updates.length === 0 && faces.length === 0) return;
+    if (updates.length === 0 && faces.length === 0) {
+      if (customResult.moved > 0) {
+        setNotice(label);
+        console.log("[TopoInspector] construction transform", { label, moved: customResult.moved, delta });
+      }
+      return;
+    }
     if (commit) {
       const anchors = topologyReselectAnchors(topology, selection, delta);
       topologyReselectRef.current = anchors.length > 0 ? anchors : null;
     }
     if (updates.length > 0) {
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer, commit, label, shape);
+      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer, commit, label, customResult.shape);
     }
     if (faces.length > 0) {
-      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces }, transfer, commit, label, shape);
+      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces }, transfer, commit, label, customResult.shape);
     }
-  }, [sendTopologyEdit, shapeTopology, topologyEditPartsForShape]);
+  }, [sendTopologyEdit, shapeTopology, topologyEditPartsForShape, updateShape]);
+
+  const applyTopologyInspectorTransform = useCallback((
+    transform: (point: { x: number; y: number; z: number }, center: { x: number; y: number; z: number }) => { x: number; y: number; z: number },
+    label: string,
+    commit = true,
+  ) => {
+    const shape = selectedShapes[0];
+    const topology = shapeTopology;
+    const selection = topologySelectionRef.current;
+    if (!shape || !topology || topology.shapeId !== shape.id || selection.length === 0) return;
+    const effectiveTopology = topologyWithConstructionVertices(shape, topology);
+    const points = topologySelectionControlPoints(effectiveTopology, selection);
+    if (points.length === 0) return;
+    const center = topologyPointsCenter(points);
+    const constructionIds = new Set((shape.constructionVertices ?? []).map((vertex) => vertex.topologyId));
+    const constructionEdgeIds = new Set((shape.constructionEdges ?? []).map(constructionEdgeTopologyId));
+    const nativeSelection = selection.filter((pick) =>
+      (pick.kind !== "vertex" || !constructionIds.has(pick.id))
+      && (pick.kind !== "edge" || !constructionEdgeIds.has(pick.id)));
+    const nativePoints = topologySelectionControlPoints(topology, nativeSelection);
+    const updates = nativePoints.map((from) => ({ from, to: transform(from, center) }));
+    const customResult = commit
+      ? transformSelectedConstructionVertices(shape, selection, (point) => transform(point, center))
+      : { shape, moved: 0 };
+    if (customResult.moved > 0) updateShape(shape.id, {
+      constructionVertices: customResult.shape.constructionVertices,
+      constructionEdges: customResult.shape.constructionEdges,
+    });
+    if (updates.length === 0) {
+      if (customResult.moved > 0) {
+        setNotice(label);
+        console.log("[TopoInspector] construction transform", { label, moved: customResult.moved, center });
+      }
+      return;
+    }
+    const parts = topologyEditPartsForShape(shape);
+    if (parts.length === 0) return;
+    if (commit) {
+      const reps = topologySelectionReps(topology, nativeSelection);
+      topologyReselectRef.current = reps?.map((point, index) => ({ kind: nativeSelection[index].kind, anchor: transform(point, center) })) ?? null;
+    }
+    console.log(`[TopoInspector] ${commit ? "commit" : "preview"} transform`, { mode: topologyMode, label, selected: selection.length, controlPoints: points.length, center, updates });
+    sendTopologyEdit(
+      { type: "moveTopologyVertices", parts, updates },
+      parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []),
+      commit,
+      label,
+      customResult.shape,
+    );
+  }, [selectedShapes, sendTopologyEdit, shapeTopology, topologyEditPartsForShape, topologyMode, updateShape]);
+
+  const moveTopologyFromInspector = useCallback((delta: { x: number; y: number; z: number }) => {
+    const shape = selectedShapes[0];
+    if (!shape || Math.hypot(delta.x, delta.y, delta.z) < 1e-9) return;
+    console.log("[TopoInspector] move", { mode: topologyMode, selected: topologySelectionRef.current.length, delta });
+    topologyDeltaRequest(shape, delta, true, `${topologyMode === "vertex" ? "Vértices" : topologyMode === "edge" ? "Líneas" : "Caras"} desplazados`);
+  }, [selectedShapes, topologyDeltaRequest, topologyMode]);
+
+  const alignTopologyFromInspector = useCallback((axis: AlignAxis) => {
+    applyTopologyInspectorTransform((point, center) => ({ ...point, [axis]: center[axis] }), `Selección alineada en ${axis.toUpperCase()}`);
+  }, [applyTopologyInspectorTransform]);
+
+  const scaleTopologyFromInspector = useCallback((factor: number, commit = true) => {
+    applyTopologyInspectorTransform((point, center) => ({
+      x: center.x + (point.x - center.x) * factor,
+      y: center.y + (point.y - center.y) * factor,
+      z: center.z + (point.z - center.z) * factor,
+    }), `Selección escalada ${factor.toFixed(2)}×`, commit);
+  }, [applyTopologyInspectorTransform]);
+
+  const collapseTopologyVertices = useCallback(() => {
+    applyTopologyInspectorTransform((_point, center) => ({ ...center }), "Vértices movidos al centro");
+  }, [applyTopologyInspectorTransform]);
+
+  const createTopologyApex = useCallback((height: number, commit = true) => {
+    applyTopologyInspectorTransform((_point, center) => ({ x: center.x, y: center.y + height, z: center.z }), `Punta creada (${height.toFixed(1)} mm)`, commit);
+  }, [applyTopologyInspectorTransform]);
+
+  const moveFacesAlongNormal = useCallback((distance: number, commit = true) => {
+    const selection = topologySelectionRef.current.filter((pick) => pick.kind === "face");
+    const shape = selectedShapes[0];
+    const topology = shapeTopology;
+    if (!shape || !topology || selection.length === 0) return;
+    const parts = topologyEditPartsForShape(shape);
+    if (!parts.length) return;
+    const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
+    if (selection.length === 1) {
+      const face = topology.faces.find((entry) => entry.id === selection[0].id);
+      if (!face) return;
+      if (commit) {
+        topologyReselectRef.current = [{ kind: "face", anchor: {
+          x: face.center.x + face.normal.x * distance,
+          y: face.center.y + face.normal.y * distance,
+          z: face.center.z + face.normal.z * distance,
+        } }];
+      }
+      console.log(`[TopoInspector] ${commit ? "commit" : "preview"} face-extrude`, { distance, face: face.id });
+      sendTopologyEdit(
+        { type: "extrudeFace", parts, faceCenter: { ...face.center }, distance },
+        transfer,
+        commit,
+        `Cara extruida ${distance.toFixed(1)} mm`,
+        shape,
+      );
+      return;
+    }
+    const faces = selection.flatMap((pick) => {
+      const face = topology.faces.find((entry) => entry.id === pick.id);
+      return face ? [{ center: { ...face.center }, offset: { x: face.normal.x * distance, y: face.normal.y * distance, z: face.normal.z * distance } }] : [];
+    });
+    if (!faces.length) return;
+    if (commit) {
+      topologyReselectRef.current = selection.map((pick) => {
+        const face = topology.faces.find((entry) => entry.id === pick.id)!;
+        return { kind: "face" as const, anchor: { x: face.center.x + face.normal.x * distance, y: face.center.y + face.normal.y * distance, z: face.center.z + face.normal.z * distance } };
+      });
+    }
+    console.log(`[TopoInspector] ${commit ? "commit" : "preview"} face-normal`, { selected: faces.length, distance, faces });
+    sendTopologyEdit(
+      { type: "moveTopologyFaces", parts, faces },
+      transfer,
+      commit,
+      `Caras desplazadas ${distance.toFixed(1)} mm por normal`,
+      shape,
+    );
+  }, [selectedShapes, sendTopologyEdit, shapeTopology, topologyEditPartsForShape]);
+
+  const cancelTopologyInspectorPreview = useCallback(() => {
+    topologyEditSessionRef.current += 1;
+    topologyEditPendingRef.current = null;
+    setTopologyEditPreview(null);
+    setTopologyInspectorPreviewActive(false);
+    console.log("[TopoInspector] preview cancelado");
+  }, []);
+
+  const previewTopologyScale = useCallback((factor: number) => {
+    setTopologyInspectorPreviewActive(true);
+    scaleTopologyFromInspector(factor, false);
+  }, [scaleTopologyFromInspector]);
+
+  const commitTopologyScale = useCallback((factor: number) => {
+    scaleTopologyFromInspector(factor, true);
+    setTopologyInspectorPreviewActive(false);
+  }, [scaleTopologyFromInspector]);
+
+  const rotateTopologyFromInspector = useCallback((axis: AlignAxis, degrees: number, commit: boolean) => {
+    const radians = degrees * Math.PI / 180;
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    applyTopologyInspectorTransform((point, center) => {
+      const dx = point.x - center.x;
+      const dy = point.y - center.y;
+      const dz = point.z - center.z;
+      if (axis === "x") return { x: point.x, y: center.y + dy * cosine - dz * sine, z: center.z + dy * sine + dz * cosine };
+      if (axis === "y") return { x: center.x + dx * cosine + dz * sine, y: point.y, z: center.z - dx * sine + dz * cosine };
+      return { x: center.x + dx * cosine - dy * sine, y: center.y + dx * sine + dy * cosine, z: point.z };
+    }, `Selección rotada ${degrees.toFixed(1)}° en ${axis.toUpperCase()}`, commit);
+  }, [applyTopologyInspectorTransform]);
+
+  const previewTopologyRotation = useCallback((axis: AlignAxis, degrees: number) => {
+    setTopologyInspectorPreviewActive(true);
+    rotateTopologyFromInspector(axis, degrees, false);
+  }, [rotateTopologyFromInspector]);
+
+  const commitTopologyRotation = useCallback((axis: AlignAxis, degrees: number) => {
+    rotateTopologyFromInspector(axis, degrees, true);
+    setTopologyInspectorPreviewActive(false);
+  }, [rotateTopologyFromInspector]);
+
+  const previewTopologyApex = useCallback((height: number) => {
+    setTopologyInspectorPreviewActive(true);
+    createTopologyApex(height, false);
+  }, [createTopologyApex]);
+
+  const commitTopologyApex = useCallback((height: number) => {
+    createTopologyApex(height, true);
+    setTopologyInspectorPreviewActive(false);
+  }, [createTopologyApex]);
+
+  const previewFaceNormal = useCallback((distance: number) => {
+    setTopologyInspectorPreviewActive(true);
+    moveFacesAlongNormal(distance, false);
+  }, [moveFacesAlongNormal]);
+
+  const commitFaceNormal = useCallback((distance: number) => {
+    moveFacesAlongNormal(distance, true);
+    setTopologyInspectorPreviewActive(false);
+  }, [moveFacesAlongNormal]);
 
   const handleTopologyVertexMoveLive = useCallback((from: { x: number; y: number; z: number }, position: { x: number; y: number; z: number }) => {
     const shape = selectedShapes[0];
     if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
+    const constructionVertex = (constructionVertexDragIdRef.current
+      ? shape.constructionVertices?.find((vertex) => vertex.id === constructionVertexDragIdRef.current)
+      : null) ?? constructionVertexNearWorld(shape, from);
+    if (constructionVertex) {
+      constructionVertexDragIdRef.current = constructionVertex.id;
+      const selectedCustomCount = topologySelectionRef.current.filter((pick) => pick.kind === "vertex" && shape.constructionVertices?.some((vertex) => vertex.topologyId === pick.id)).length;
+      if (selectedCustomCount > 1) return;
+      const local = topologyWorldPointToShapeLocal(shape, position);
+      updateShape(shape.id, {
+        constructionVertices: (shape.constructionVertices ?? []).map((vertex) => vertex.id === constructionVertex.id ? { ...vertex, position: local } : vertex),
+        constructionEdges: shape.constructionEdges?.map((edge) => ({
+          ...edge,
+          start: edge.startVertexId === constructionVertex.id ? local : edge.start,
+          end: edge.endVertexId === constructionVertex.id ? local : edge.end,
+        })),
+      });
+      return;
+    }
     const topology = shapeTopology;
     if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
     const parts = topologyEditPartsForShape(shape);
@@ -7737,11 +8396,39 @@ export function SketchForgeEditor({
       const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
       sendTopologyEdit({ type: "moveTopologyVertices", parts, updates: [{ from, to: position }] }, transfer);
     }
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology]);
+  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology, updateShape]);
 
   const handleTopologyVertexMoveApply = useCallback((from: { x: number; y: number; z: number }, position: { x: number; y: number; z: number }) => {
     const shape = selectedShapes[0];
     if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
+    const constructionVertex = (constructionVertexDragIdRef.current
+      ? shape.constructionVertices?.find((vertex) => vertex.id === constructionVertexDragIdRef.current)
+      : null) ?? constructionVertexNearWorld(shape, from);
+    if (constructionVertex) {
+      constructionVertexDragIdRef.current = null;
+      const selectedCustomCount = topologySelectionRef.current.filter((pick) => pick.kind === "vertex" && shape.constructionVertices?.some((vertex) => vertex.topologyId === pick.id)).length;
+      if (selectedCustomCount > 1) {
+        const delta = { x: position.x - from.x, y: position.y - from.y, z: position.z - from.z };
+        const result = transformSelectedConstructionVertices(shape, topologySelectionRef.current, (point) => ({ x: point.x + delta.x, y: point.y + delta.y, z: point.z + delta.z }));
+        updateShape(shape.id, { constructionVertices: result.shape.constructionVertices, constructionEdges: result.shape.constructionEdges });
+        console.log("[TopoEdit] constructionVertex: grupo movido", { moved: result.moved, delta });
+        setNotice(`${result.moved} vértices personalizados movidos`);
+        return;
+      }
+      const local = topologyWorldPointToShapeLocal(shape, position);
+      updateShape(shape.id, {
+        constructionVertices: (shape.constructionVertices ?? []).map((vertex) => vertex.id === constructionVertex.id ? { ...vertex, position: local } : vertex),
+        constructionEdges: shape.constructionEdges?.map((edge) => ({
+          ...edge,
+          start: edge.startVertexId === constructionVertex.id ? local : edge.start,
+          end: edge.endVertexId === constructionVertex.id ? local : edge.end,
+        })),
+      });
+      setTopologySelection([{ kind: "vertex", id: constructionVertex.topologyId }]);
+      console.log("[TopoEdit] constructionVertex: movido", { vertexId: constructionVertex.id, topologyId: constructionVertex.topologyId, world: position, local });
+      setNotice("Vértice personalizado movido");
+      return;
+    }
     const topology = shapeTopology;
     if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
     const parts = topologyEditPartsForShape(shape);
@@ -7759,7 +8446,7 @@ export function SketchForgeEditor({
       topologyReselectRef.current = [{ kind: "vertex", anchor: position }];
       sendTopologyEdit({ type: "moveTopologyVertices", parts, updates: [{ from, to: position }] }, transfer, true, "Vértice movido", shape);
     }
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology]);
+  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology, updateShape]);
 
   const handleTopologyFaceMoveLive = useCallback((faceCenter: { x: number; y: number; z: number }, offset: { x: number; y: number; z: number }) => {
     const shape = selectedShapes[0];
@@ -7807,20 +8494,144 @@ export function SketchForgeEditor({
   const handleTopologyAddVertex = useCallback((position: { x: number; y: number; z: number }) => {
     const shape = selectedShapes[0];
     if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
+    const usedIds = new Set([
+      ...(shapeTopology?.vertices.map((vertex) => vertex.id) ?? []),
+      ...(shape.constructionVertices?.map((vertex) => vertex.topologyId) ?? []),
+    ]);
+    let topologyId = -1;
+    while (usedIds.has(topologyId)) topologyId -= 1;
+    const vertex = {
+      id: createLocalId("construction-vertex"),
+      topologyId,
+      position: topologyWorldPointToShapeLocal(shape, position),
+    };
+    updateShape(shape.id, { constructionVertices: [...(shape.constructionVertices ?? []), vertex] });
+    setTopologySelection([{ kind: "vertex", id: topologyId }]);
+    console.log("[TopoEdit] constructionVertex: creado", {
+      shapeId: shape.id,
+      vertexId: vertex.id,
+      topologyId,
+      world: position,
+      local: vertex.position,
+    });
+    setNotice("Vértice creado; arrástralo con el mouse o continúa insertando");
+  }, [selectedShapes, selectedTopologyShape, shapeTopology?.vertices, updateShape]);
+
+  const insertSelectedEdgeAtRatio = useCallback((ratio: number) => {
+    const selection = topologySelectionRef.current;
+    if (selection.length !== 1 || selection[0].kind !== "edge") return;
+    const shape = selectedShapes[0];
+    const edge = [
+      ...(shapeTopology?.edges ?? []),
+      ...(shape ? constructionTopologyEdges(shape) : []),
+    ].find((entry) => entry.id === selection[0].id);
+    if (!edge) return;
+    const amount = Math.min(0.95, Math.max(0.05, ratio));
+    const polyline = edge.points.length >= 6
+      ? Array.from({ length: edge.points.length / 3 }, (_, index) => ({ x: edge.points[index * 3], y: edge.points[index * 3 + 1], z: edge.points[index * 3 + 2] }))
+      : edge.endpoints;
+    const lengths = polyline.slice(1).map((point, index) => Math.hypot(point.x - polyline[index].x, point.y - polyline[index].y, point.z - polyline[index].z));
+    const total = lengths.reduce((sum, length) => sum + length, 0);
+    if (total < 1e-6) return;
+    let remaining = total * amount;
+    let position = { ...polyline[0] };
+    for (let index = 0; index < lengths.length; index += 1) {
+      const segmentLength = lengths[index];
+      if (remaining > segmentLength && index < lengths.length - 1) {
+        remaining -= segmentLength;
+        continue;
+      }
+      const segmentAmount = Math.min(1, remaining / Math.max(1e-9, segmentLength));
+      const start = polyline[index];
+      const end = polyline[index + 1];
+      position = {
+        x: start.x + (end.x - start.x) * segmentAmount,
+        y: start.y + (end.y - start.y) * segmentAmount,
+        z: start.z + (end.z - start.z) * segmentAmount,
+      };
+      break;
+    }
+    console.log("[TopoInspector] insert-edge-ratio", { edgeId: edge.id, ratio: amount, position });
+    handleTopologyAddVertex(position);
+  }, [handleTopologyAddVertex, selectedShapes, shapeTopology?.edges]);
+
+  const insertSelectedEdgeCenter = useCallback(() => {
+    insertSelectedEdgeAtRatio(0.5);
+  }, [insertSelectedEdgeAtRatio]);
+
+  const connectSelectedTopologyVertices = useCallback(() => {
+    const shape = selectedShapes[0];
+    const topology = shapeTopology;
+    const selection = topologySelectionRef.current.filter((pick) => pick.kind === "vertex");
+    if (!shape || !topology || topology.shapeId !== shape.id || selection.length !== 2) {
+      setNotice("Selecciona exactamente dos vértices de la misma pieza");
+      return;
+    }
+    const availableVertices = [...topology.vertices, ...constructionTopologyVertices(shape)];
+    const vertices = selection.map((pick) => availableVertices.find((vertex) => vertex.id === pick.id)).filter((vertex): vertex is CadTopologyVertex => Boolean(vertex));
+    if (vertices.length !== 2) {
+      setNotice("Los vértices seleccionados ya no existen; vuelve a seleccionarlos");
+      return;
+    }
+    const distance = Math.hypot(vertices[1].x - vertices[0].x, vertices[1].y - vertices[0].y, vertices[1].z - vertices[0].z);
+    if (distance < 1e-4) {
+      setNotice("Los dos vértices ocupan la misma posición");
+      return;
+    }
+    const partitionId = createLocalId("partition-edge");
+    const selectedConstructionIds = new Set(selection.map((pick) => pick.id));
+    const sourceForCommit: WorkplaneShape = {
+      ...shape,
+      cadPartitioned: true,
+      constructionVertices: (shape.constructionVertices ?? []).filter((vertex) => !selectedConstructionIds.has(vertex.topologyId)),
+    };
     const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
+    topologyReselectRef.current = [{ kind: "edge", anchor: {
+      x: (vertices[0].x + vertices[1].x) / 2,
+      y: (vertices[0].y + vertices[1].y) / 2,
+      z: (vertices[0].z + vertices[1].z) / 2,
+    } }];
+    setTopologyVertexPlacementActive(false);
+    setTopologyMode("edge");
+    setTopologySelection([]);
+    console.log("[TopoInspector] partition-edge-create", {
+      shapeId: shape.id,
+      partitionId,
+      worldStart: vertices[0],
+      worldEnd: vertices[1],
+      length: distance,
+    });
+    setNotice(`Dividiendo físicamente la cara con una línea de ${distance.toFixed(2)} mm…`);
     sendTopologyEdit(
-      { type: "addVertexOnEdge", parts, position },
+      { type: "splitFaceBySegment", parts, partitionId, start: vertices[0], end: vertices[1] },
       parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []),
       true,
-      "Vértice insertado",
-      shape,
+      "Cara dividida por nueva arista",
+      sourceForCommit,
     );
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyEditPartsForShape]);
+  }, [selectedShapes, sendTopologyEdit, shapeTopology, topologyEditPartsForShape]);
 
-  const handleTopologyEdgeMoveLive = useCallback((_edgeId: number, endpoints: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }>) => {
+  const removeLastConstructionEdge = useCallback(() => {
+    const shape = selectedShapes[0];
+    const guideEdges = shape?.constructionEdges?.filter((edge) => !edge.partition) ?? [];
+    if (!shape || guideEdges.length === 0) return;
+    const removed = guideEdges.at(-1);
+    updateShape(shape.id, { constructionEdges: shape.constructionEdges?.filter((edge) => edge.partition || edge.id !== removed?.id) });
+    console.log("[TopoInspector] construction-edge-remove", { shapeId: shape.id, edgeId: removed?.id });
+    setNotice("Última línea guía eliminada");
+  }, [selectedShapes, updateShape]);
+
+  const handleTopologyEdgeMoveLive = useCallback((edgeId: number, endpoints: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }>) => {
     const shape = selectedShapes[0];
     if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
+    const constructionMove = moveConstructionEdgeToWorldEndpoints(shape, edgeId, endpoints);
+    if (constructionMove) {
+      updateShape(shape.id, {
+        constructionEdges: constructionMove.constructionEdges,
+        constructionVertices: constructionMove.constructionVertices,
+      });
+      return;
+    }
     const topology = shapeTopology;
     if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
     const parts = topologyEditPartsForShape(shape);
@@ -7846,11 +8657,22 @@ export function SketchForgeEditor({
       const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
       sendTopologyEdit({ type: "moveTopologyVertices", parts, updates: endpoints }, transfer);
     }
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology]);
+  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology, updateShape]);
 
-  const handleTopologyEdgeMoveApply = useCallback((_edgeId: number, endpoints: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }>) => {
+  const handleTopologyEdgeMoveApply = useCallback((edgeId: number, endpoints: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }>) => {
     const shape = selectedShapes[0];
     if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
+    const constructionMove = moveConstructionEdgeToWorldEndpoints(shape, edgeId, endpoints);
+    if (constructionMove) {
+      updateShape(shape.id, {
+        constructionEdges: constructionMove.constructionEdges,
+        constructionVertices: constructionMove.constructionVertices,
+      });
+      setTopologySelection([{ kind: "edge", id: edgeId }]);
+      console.log("[TopoEdit] constructionEdge: movida", { edgeId: constructionMove.edge.id, topologyId: edgeId, endpoints: endpoints.map((endpoint) => endpoint.to) });
+      setNotice("Línea personalizada movida");
+      return;
+    }
     const topology = shapeTopology;
     if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
     const parts = topologyEditPartsForShape(shape);
@@ -7883,7 +8705,7 @@ export function SketchForgeEditor({
       topologyReselectRef.current = [{ kind: "edge", anchor: { x: center.x + delta.x, y: center.y + delta.y, z: center.z + delta.z } }];
       sendTopologyEdit({ type: "moveTopologyVertices", parts, updates: endpoints }, transfer, true, "Línea movida", shape);
     }
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology]);
+  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology, updateShape]);
 
   const sendNudgeLive = useCallback((session: NonNullable<typeof topologyNudgeRef.current>, shape: WorkplaneShape) => {
     const parts = topologyEditPartsForShape(shape);
@@ -8034,6 +8856,9 @@ export function SketchForgeEditor({
     moveRep: (point: { x: number; y: number; z: number }) => { x: number; y: number; z: number },
     label: string,
   ) => {
+    const constructionIds = new Set((shape.constructionVertices ?? []).map((vertex) => vertex.topologyId));
+    const constructionEdgeIds = new Set((shape.constructionEdges ?? []).map(constructionEdgeTopologyId));
+    const customResult = transformSelectedConstructionVertices(shape, selection, moveRep);
     const updates: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }> = [];
     const faces: Array<{ center: { x: number; y: number; z: number }; offset: { x: number; y: number; z: number } }> = [];
     const anchors: Array<{ kind: CadTopologyPickKind; anchor: { x: number; y: number; z: number } }> = [];
@@ -8043,11 +8868,13 @@ export function SketchForgeEditor({
         if (!vertex) continue;
         const from = { x: vertex.x, y: vertex.y, z: vertex.z };
         const to = moveRep({ ...from });
+        if (constructionIds.has(pick.id)) continue;
         updates.push({ from, to });
         anchors.push({ kind: "vertex", anchor: to });
       } else if (pick.kind === "edge") {
         const edge = topology.edges.find((entry) => entry.id === pick.id);
         if (!edge) continue;
+        if (constructionEdgeIds.has(pick.id)) continue;
         const center = { x: edge.center.x, y: edge.center.y, z: edge.center.z };
         anchors.push({ kind: "edge", anchor: moveRep({ ...center }) });
         for (const endpoint of edge.endpoints) {
@@ -8063,24 +8890,35 @@ export function SketchForgeEditor({
         anchors.push({ kind: "face", anchor: to });
       }
     }
-    if (updates.length === 0 && faces.length === 0) return false;
+    if (customResult.moved > 0) updateShape(shape.id, {
+      constructionVertices: customResult.shape.constructionVertices,
+      constructionEdges: customResult.shape.constructionEdges,
+    });
+    if (updates.length === 0 && faces.length === 0) {
+      if (customResult.moved > 0) {
+        setNotice(label);
+        console.log("[TopoOrganizer] construction transform", { label, moved: customResult.moved });
+        return true;
+      }
+      return false;
+    }
     const totalMove = [...updates, ...faces.map((f) => ({
       from: f.center,
       to: { x: f.center.x + f.offset.x, y: f.center.y + f.offset.y, z: f.center.z + f.offset.z },
     }))].reduce((sum, u) => sum + Math.hypot(u.to.x - u.from.x, u.to.y - u.from.y, u.to.z - u.from.z), 0);
-    if (totalMove <= ALIGN_EPSILON) return false;
+    if (totalMove <= ALIGN_EPSILON && customResult.moved === 0) return false;
     const parts = topologyEditPartsForShape(shape);
     if (parts.length === 0) return false;
     const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
     topologyReselectRef.current = anchors.length > 0 ? anchors : null;
     if (updates.length > 0) {
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer, true, label, shape);
+      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer, true, label, customResult.shape);
     }
     if (faces.length > 0) {
-      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces }, transfer, true, label, shape);
+      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces }, transfer, true, label, customResult.shape);
     }
     return true;
-  }, [sendTopologyEdit, topologyEditPartsForShape]);
+  }, [sendTopologyEdit, topologyEditPartsForShape, updateShape]);
 
   const alignTopologySelection = useCallback((axis: AlignAxis, target: AlignTarget) => {
     const shape = selectedTopologyShape;
@@ -8091,7 +8929,8 @@ export function SketchForgeEditor({
     }
     const selection = topologySelectionRef.current;
     if (selection.length === 0) return;
-    const reps = topologySelectionReps(topology, selection);
+    const effectiveTopology = topologyWithConstructionVertices(shape, topology);
+    const reps = topologySelectionReps(effectiveTopology, selection);
     if (!reps || reps.length < 2) {
       setNotice("Selecciona al menos dos entes de topología para alinear");
       return;
@@ -8099,7 +8938,7 @@ export function SketchForgeEditor({
     const targetValue = alignTargetValue(reps.map((point) => coordinateForAxis(point, axis)), target);
     const moved = applyTopologyTransform(
       shape,
-      topology,
+      effectiveTopology,
       selection,
       (point) => {
         const next = { ...point };
@@ -8123,12 +8962,13 @@ export function SketchForgeEditor({
     }
     const selection = topologySelectionRef.current;
     if (selection.length === 0) return;
-    const reps = topologySelectionReps(topology, selection);
+    const effectiveTopology = topologyWithConstructionVertices(shape, topology);
+    const reps = topologySelectionReps(effectiveTopology, selection);
     if (!reps || reps.length === 0) return;
     const pivot = reps.reduce((sum, point) => sum + coordinateForAxis(point, axis), 0) / reps.length;
     const moved = applyTopologyTransform(
       shape,
-      topology,
+      effectiveTopology,
       selection,
       (point) => {
         const next = { ...point };
@@ -8180,7 +9020,8 @@ export function SketchForgeEditor({
     }
     const selection = topologySelectionRef.current;
     if (selection.length === 0) return;
-    const extremes = topologyExtremePoints(topology, selection);
+    const effectiveTopology = topologyWithConstructionVertices(shape, topology);
+    const extremes = topologyExtremePoints(effectiveTopology, selection);
     if (!extremes) return;
     const minY = Math.min(...extremes.map((point) => point.y));
     const deltaY = placementElevation - minY;
@@ -8190,7 +9031,7 @@ export function SketchForgeEditor({
     }
     applyTopologyTransform(
       shape,
-      topology,
+      effectiveTopology,
       selection,
       (point) => ({ ...point, y: point.y + deltaY }),
       placementElevation === 0 ? "Entes bajados al plano de trabajo" : `Entes bajados al plano de trabajo de ${placementElevation.toFixed(2)} mm`,
@@ -8206,7 +9047,8 @@ export function SketchForgeEditor({
     }
     const selection = topologySelectionRef.current;
     if (selection.length === 0) return;
-    const extremes = topologyExtremePoints(topology, selection);
+    const effectiveTopology = topologyWithConstructionVertices(shape, topology);
+    const extremes = topologyExtremePoints(effectiveTopology, selection);
     if (!extremes) return;
     const maxY = Math.max(...extremes.map((point) => point.y));
     const deltaY = placementElevation - maxY;
@@ -8216,7 +9058,7 @@ export function SketchForgeEditor({
     }
     applyTopologyTransform(
       shape,
-      topology,
+      effectiveTopology,
       selection,
       (point) => ({ ...point, y: point.y + deltaY }),
       placementElevation === 0 ? "Entes subidos al plano de trabajo" : `Entes subidos al plano de trabajo de ${placementElevation.toFixed(2)} mm`,
@@ -8238,7 +9080,7 @@ export function SketchForgeEditor({
       return;
     }
     if (!topologyAlignPreview && !topologyMirrorPreviewAxis) {
-      setTopologyEditPreview(null);
+      if (!topologyInspectorPreviewActive) setTopologyEditPreview(null);
       return;
     }
     const selection = topologySelectionRef.current;
@@ -8329,7 +9171,7 @@ export function SketchForgeEditor({
     if (faces.length > 0) {
       sendTopologyEdit({ type: "moveTopologyFaces", parts, faces }, transfer);
     }
-  }, [selectedTopologyShape, sendTopologyEdit, shapeTopology, topologyAlignPreview, topologyEditPartsForShape, topologyMirrorPreviewAxis, topologyMode, topologySelection.length]);
+  }, [selectedTopologyShape, sendTopologyEdit, shapeTopology, topologyAlignPreview, topologyEditPartsForShape, topologyInspectorPreviewActive, topologyMirrorPreviewAxis, topologyMode, topologySelection.length]);
 
   const topologySelectionActive = topologyMode !== "shape" && topologySelection.length > 0;
 
@@ -9970,9 +10812,8 @@ export function SketchForgeEditor({
     const nextCap = { ...current, activeSectionId: sectionId };
     capDocumentRef.current = nextCap;
     setCapDocument(nextCap);
-    setToolbarMode("sketch");
+    setToolbarMode("geometry");
     setCapSketchActive(true);
-    setCapPanelOpen(true);
     setNotice(`Dibujando en el plano de la sección «${section.name}»`);
   }, [beginSketch]);
 
@@ -10002,7 +10843,11 @@ export function SketchForgeEditor({
     );
     commitCap(nextCap, `Sección «${section.name}» creada`);
     beginCapSectionDrawing(section.id);
-  }, [beginCapSectionDrawing, commitCap, sketchRevolveSettings]);
+    if (plane.kind === "face" && operation === "extrude" && unionMode === "cut") {
+      setActiveSketchTool("circle");
+      setNotice("Agujero: marca el centro y arrastra para definir el diámetro; después aplica la sección");
+    }
+  }, [beginCapSectionDrawing, commitCap, setActiveSketchTool, sketchRevolveSettings]);
 
   const applyCapSectionDrawing = useCallback(async () => {
     const sectionId = capSketchSectionIdRef.current;
@@ -10109,6 +10954,80 @@ export function SketchForgeEditor({
     const nextShapes = capResultShapes(shapesRef.current, section, existingShape, resolved);
     commitShapes(nextShapes, resolved.id, isNewPiece ? `Pieza CAP «${section.name}» generada` : `Pieza CAP «${section.name}» regenerada`);
   }, [buildCapSectionShape, commitShapes]);
+
+  const handleGeometryDrawCommit = useCallback((gesture: SketchProfile, detectedPlane: WorkplanePlane, tool: Direct2DDrawTool) => {
+    const plane = detectedPlane;
+    const current = normalizeCapDocument(capDocumentRef.current);
+    const previous = geometryProfileSectionId
+      ? current.sections.find((section) => section.id === geometryProfileSectionId) ?? null
+      : null;
+    const samePlane = previous && JSON.stringify(previous.plane) === JSON.stringify(plane);
+    const section = samePlane ? previous : newCapSection(plane, current.sections.length);
+    const profile = materializeSketchEntities({
+      ...section.sketchProfile,
+      points: [...section.sketchProfile.points, ...gesture.points],
+      segments: [...section.sketchProfile.segments, ...gesture.segments],
+      entities: [...(section.sketchProfile.entities ?? []), ...(gesture.entities ?? [])],
+    });
+    const nextSection: CapSection = {
+      ...section,
+      name: section.name.startsWith("Sección") ? `Perfil 3D ${current.sections.length + 1}` : section.name,
+      sketchProfile: profile,
+      operation: "extrude",
+      extrusionDepth: Math.max(0.1, Math.abs(Number.parseFloat(pushPullDistance) || 10)),
+      unionMode: plane.kind === "face" ? "add" : "floating",
+    };
+    const nextSections = samePlane
+      ? current.sections.map((candidate) => candidate.id === nextSection.id ? nextSection : candidate)
+      : [...current.sections, nextSection];
+    const nextCap = appendCapTimelineEntry(
+      { ...current, sections: nextSections, activeSectionId: nextSection.id },
+      {
+        id: createLocalId("cap-entry"),
+        kind: samePlane ? "section-edit" : "section-create",
+        sectionId: nextSection.id,
+        label: `${tool === "pencil" ? "Trazo libre" : tool === "semicircle" ? "Semicírculo" : tool === "triangle" ? "Triángulo" : tool === "hexagon" ? "Hexágono" : tool === "circle" ? "Círculo" : tool === "arc" ? "Arco" : "Rectángulo"} creado directamente en Geometría`,
+        timestamp: Date.now(),
+      },
+    );
+    commitCap(nextCap, "Perfil creado en el viewport 3D; usa Extruir o Cortar");
+    setGeometryProfileSectionId(nextSection.id);
+    console.log("[Direct2D] profile-stored", {
+      sectionId: nextSection.id,
+      plane: nextSection.plane,
+      entityCount: nextSection.sketchProfile.entities?.length ?? 0,
+      depth: nextSection.extrusionDepth,
+      unionMode: nextSection.unionMode,
+    });
+  }, [commitCap, geometryProfileSectionId, pushPullDistance]);
+
+  const applyGeometryProfile = useCallback(async (mode: "add" | "cut" | "floating") => {
+    if (!geometryProfileSectionId) {
+      setNotice("Dibuja primero un círculo o rectángulo en el plano o cara activa");
+      return;
+    }
+    const current = normalizeCapDocument(capDocumentRef.current);
+    const section = current.sections.find((candidate) => candidate.id === geometryProfileSectionId);
+    if (!section) return;
+    const unionMode: CapSectionUnionMode = section.plane.kind === "face" ? mode : "floating";
+    const updated: CapSection = {
+      ...section,
+      operation: "extrude",
+      extrusionDepth: Math.max(0.1, Math.abs(Number.parseFloat(pushPullDistance) || section.extrusionDepth || 10)),
+      unionMode,
+    };
+    console.log("[Direct2D] operation-apply", {
+      sectionId: updated.id,
+      mode: unionMode,
+      depth: updated.extrusionDepth,
+      plane: updated.plane,
+    });
+    commitCap({ ...current, sections: current.sections.map((candidate) => candidate.id === updated.id ? updated : candidate) }, unionMode === "cut" ? "Preparando corte" : "Preparando extrusión");
+    await generateCapPiece(updated.id);
+    console.log("[Direct2D] operation-complete", { sectionId: updated.id, mode: unionMode });
+    setGeometryDrawTool(null);
+    setGeometryProfileSectionId(null);
+  }, [commitCap, generateCapPiece, geometryProfileSectionId, pushPullDistance]);
 
   const renameCapSection = useCallback((id: string, name: string) => {
     const trimmed = name.trim();
@@ -10476,14 +11395,17 @@ export function SketchForgeEditor({
       onDeleteImage={deleteSketchImage}
       onDeletePoint={deleteSketchPoint}
       onDeleteSegment={deleteSketchSegment}
+      onSetSegmentDimensions={setSketchSegmentDimensions}
       onMovePoint={moveSketchPoint}
       onMoveHandle={moveSketchHandle}
       onInsertPoint={insertSketchPoint}
       onSetPointMode={setSketchPointMode}
+      onBevelPoint={bevelSketchPoint}
       onClearMeasurement={clearSketchMeasurement}
       onAddEntity={addSketchEntity}
       onUpdateEntity={updateSketchEntity}
       onDeleteEntity={deleteSketchEntity}
+      onDeriveEntity={deriveSketchEntity}
       onSelectEntity={(id) => {
         setSketchSelection({ kind: "entity", id });
         setSketchActivePointId(null);
@@ -10492,6 +11414,28 @@ export function SketchForgeEditor({
       badgeLabel={capSketchActive && activeCapSection?.name ? `Boceto de «${activeCapSection.name}»` : undefined}
     />
   );
+
+  const geometryProfileSection = geometryProfileSectionId
+    ? capDocument?.sections.find((section) => section.id === geometryProfileSectionId) ?? null
+    : null;
+  const geometryDrawPlane: WorkplanePlane = geometryProfileSection?.plane
+    ?? (geometryPlaneMode === "offset"
+      ? { kind: "offset", elevation: Number.parseFloat(geometryPlaneOffset) || 0 }
+      : geometryPlaneMode === "base"
+        ? { kind: "base" }
+        : facePlaneDraft ?? { kind: "base" });
+  const viewportTopologyVertices = selectedShapes[0]
+    ? [
+        ...(shapeTopology && shapeTopology.shapeId === selectedShapes[0].id ? shapeTopology.vertices : []),
+        ...constructionTopologyVertices(selectedShapes[0]),
+      ]
+    : [];
+  const viewportTopologyEdges = selectedShapes[0]
+    ? [
+        ...(shapeTopology && shapeTopology.shapeId === selectedShapes[0].id ? shapeTopology.edges : []),
+        ...constructionTopologyEdges(selectedShapes[0]),
+      ]
+    : [];
 
   const viewportElement = (
     <WorkplaneViewport
@@ -10532,8 +11476,8 @@ export function SketchForgeEditor({
       onModifierEdgeToggle={toggleModifierEdge}
       selectionMode={topologyMode}
       topologyFaces={shapeTopology && shapeTopology.shapeId === selectedShapes[0]?.id ? shapeTopology.faces : []}
-      topologyVertices={shapeTopology && shapeTopology.shapeId === selectedShapes[0]?.id ? shapeTopology.vertices : []}
-      topologyEdges={shapeTopology && shapeTopology.shapeId === selectedShapes[0]?.id ? shapeTopology.edges : []}
+      topologyVertices={viewportTopologyVertices}
+      topologyEdges={viewportTopologyEdges}
       topologySelection={topologySelection}
       onTopologyPick={handleTopologyPick}
       onTopologyPickMany={handleTopologyPickMany}
@@ -10541,12 +11485,18 @@ export function SketchForgeEditor({
       onTopologyVertexMoveApply={handleTopologyVertexMoveApply}
       onTopologyFaceMoveLive={handleTopologyFaceMoveLive}
       onTopologyFaceMoveApply={handleTopologyFaceMoveApply}
+      topologyVertexPlacementActive={topologyVertexPlacementActive}
       onTopologyAddVertex={handleTopologyAddVertex}
       onTopologyEdgeMoveLive={handleTopologyEdgeMoveLive}
       onTopologyEdgeMoveApply={handleTopologyEdgeMoveApply}
       topologyEditPreviewMesh={topologyEditPreview}
       pushPullFace={pushPullTarget}
       onPushPullApply={applyPushPullFace}
+      geometryDrawTool={geometryDrawTool}
+      geometryDrawPlane={geometryDrawPlane}
+      geometryDrawAutoSurface={geometryPlaneMode === "auto"}
+      geometrySketchProfile={geometryProfileSection?.sketchProfile ?? null}
+      onGeometryDrawCommit={handleGeometryDrawCommit}
       themePreference={themePreference}
       resolvedTheme={resolvedTheme}
       onThemePreferenceChange={onThemePreferenceChange}
@@ -10580,9 +11530,24 @@ export function SketchForgeEditor({
         sketchCanUndo={sketchHistoryIndex > 0}
         sketchCanRedo={sketchHistoryIndex < sketchHistory.length - 1}
         canEditSketch={selectedShapes.length === 1 && Boolean(selectedShape?.sketchProfile)}
-        onBoceto3D={() => {
-          setCapPanelOpen((open) => !open);
-          setToolbarMode("sketch");
+        onNewSketch={() => beginSketch("extrude")}
+        geometryDrawTool={geometryDrawTool}
+        hasGeometryProfile={Boolean(geometryProfileSection && capSectionHasUsableProfile(geometryProfileSection))}
+        geometryPlaneMode={geometryPlaneMode}
+        geometryPlaneOffset={geometryPlaneOffset}
+        onGeometryPlaneMode={setGeometryPlaneMode}
+        onGeometryPlaneOffset={setGeometryPlaneOffset}
+        onGeometryDrawTool={(tool) => {
+          setGeometryDrawTool((current) => current === tool ? null : tool);
+          const label = tool === "pencil" ? "Lápiz" : tool === "semicircle" ? "Semicírculo" : tool === "triangle" ? "Triángulo" : tool === "hexagon" ? "Hexágono" : tool === "circle" ? "Círculo" : tool === "arc" ? "Arco" : "Rectángulo";
+          setNotice(`${label} 3D: arrastra directamente sobre ${geometryPlaneMode === "auto" ? "la superficie bajo el cursor" : "el plano activo"}`);
+        }}
+        onGeometryExtrude={() => void applyGeometryProfile("add")}
+        onGeometryCut={() => void applyGeometryProfile("cut")}
+        onGeometryProfileCancel={() => {
+          setGeometryDrawTool(null);
+          setGeometryProfileSectionId(null);
+          setNotice("Dibujo 3D cancelado");
         }}
         onEditSketch={beginSketchEdit}
         onSketchTool={setActiveSketchTool}
@@ -10593,6 +11558,11 @@ export function SketchForgeEditor({
           }
           sketchImageInputRef.current?.click();
         }}
+        onSketchText={addSketchTextEntity}
+        onSketchVector={() => {
+          sketchVectorInputRef.current?.click();
+        }}
+        onSketchProject={projectSelectedShapesToSketch}
         onSketchUndo={sketchUndo}
         onSketchRedo={sketchRedo}
         onSketchFinish={finishSketch}
@@ -10651,27 +11621,42 @@ export function SketchForgeEditor({
               onImportStlUrl={handleImportStlUrl}
             />
           </>
-        ) : (
-          <CapWorkspace
-            capDocument={capDocument}
-            shapes={shapes}
-            selectedIds={selectedIds}
-            drawingActive={capSketchActive}
-            activeSection={activeCapSection}
-            showPanel={capPanelOpen || capSketchActive}
-            onSelectSection={selectCapSection}
-            onRenameSection={renameCapSection}
-            onDeleteSection={deleteCapSection}
-            onCreateSection={createCapSection}
-            onEditSection={beginCapSectionDrawing}
-            onGeneratePiece={generateCapPiece}
-            onExitDrawing={cancelCapDrawing}
-            facePlaneDraft={facePlaneDraft}
-          >
-            {sketchActive || capSketchActive ? sketchWorkspaceElement : viewportElement}
-          </CapWorkspace>
-        )}
+        ) : sketchActive || capSketchActive ? sketchWorkspaceElement : viewportElement}
       </div>
+      {toolbarMode === "geometry" && topologyMode !== "shape" && selectedShapes.length === 1 && (topologyMode === "vertex" || topologySelection.length > 0) ? (
+        <TopologyInspector
+          mode={topologyMode}
+          count={topologySelection.length}
+          onClose={() => {
+            setTopologyVertexPlacementActive(false);
+            setTopologySelection([]);
+            setTopologyMode("shape");
+          }}
+          onMove={moveTopologyFromInspector}
+          onAlign={alignTopologyFromInspector}
+          onScalePreview={previewTopologyScale}
+          onScaleCommit={commitTopologyScale}
+          onRotatePreview={previewTopologyRotation}
+          onRotateCommit={commitTopologyRotation}
+          onCollapse={collapseTopologyVertices}
+          vertexPlacementActive={topologyVertexPlacementActive}
+          onVertexPlacementChange={(active) => {
+            setTopologyVertexPlacementActive(active);
+            setNotice(active ? "Insertar vértices: haz clic sobre cualquier punto de una arista; pulsa Escape para terminar" : "Inserción de vértices finalizada");
+            console.log("[TopoInspector] vertex-placement", { active });
+          }}
+          constructionEdgeCount={selectedShapes[0]?.constructionEdges?.filter((edge) => !edge.partition).length ?? 0}
+          onConnectVertices={connectSelectedTopologyVertices}
+          onRemoveLastConstructionEdge={removeLastConstructionEdge}
+          onApexPreview={previewTopologyApex}
+          onApexCommit={commitTopologyApex}
+          onFaceNormalPreview={previewFaceNormal}
+          onFaceNormalCommit={commitFaceNormal}
+          onCancelPreview={cancelTopologyInspectorPreview}
+          onInsertEdgeCenter={insertSelectedEdgeCenter}
+          onInsertEdgeAtRatio={insertSelectedEdgeAtRatio}
+        />
+      ) : null}
       {edgeModifier ? (
         <EdgeModifierPanel
           kind={edgeModifier.kind}
@@ -10748,6 +11733,17 @@ export function SketchForgeEditor({
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           if (file) void addSketchImageFile(file);
+          event.currentTarget.value = "";
+        }}
+      />
+      <input
+        ref={sketchVectorInputRef}
+        className="hidden-file-input"
+        type="file"
+        accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp,image/gif,image/bmp"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) void addSketchVectorFile(file);
           event.currentTarget.value = "";
         }}
       />
@@ -10837,10 +11833,23 @@ function SecondaryToolbar({
   sketchCanUndo,
   sketchCanRedo,
   canEditSketch,
-  onBoceto3D,
+  onNewSketch,
+  geometryDrawTool,
+  hasGeometryProfile,
+  geometryPlaneMode,
+  geometryPlaneOffset,
+  onGeometryPlaneMode,
+  onGeometryPlaneOffset,
+  onGeometryDrawTool,
+  onGeometryExtrude,
+  onGeometryCut,
+  onGeometryProfileCancel,
   onEditSketch,
   onSketchTool,
   onSketchImage,
+  onSketchText,
+  onSketchVector,
+  onSketchProject,
   onSketchUndo,
   onSketchRedo,
   onSketchFinish,
@@ -10901,10 +11910,23 @@ function SecondaryToolbar({
   sketchCanUndo: boolean;
   sketchCanRedo: boolean;
   canEditSketch: boolean;
-  onBoceto3D: () => void;
+  onNewSketch: () => void;
+  geometryDrawTool: Direct2DDrawTool | null;
+  hasGeometryProfile: boolean;
+  geometryPlaneMode: "auto" | "base" | "offset";
+  geometryPlaneOffset: string;
+  onGeometryPlaneMode: (mode: "auto" | "base" | "offset") => void;
+  onGeometryPlaneOffset: (value: string) => void;
+  onGeometryDrawTool: (tool: Direct2DDrawTool) => void;
+  onGeometryExtrude: () => void;
+  onGeometryCut: () => void;
+  onGeometryProfileCancel: () => void;
   onEditSketch: () => void;
   onSketchTool: (tool: SketchTool) => void;
   onSketchImage: () => void;
+  onSketchText: () => void;
+  onSketchVector: () => void;
+  onSketchProject: () => void;
   onSketchUndo: () => void;
   onSketchRedo: () => void;
   onSketchFinish: () => void;
@@ -10945,7 +11967,26 @@ function SecondaryToolbar({
   onPushPullApply: () => void;
   onTopPanel: (panel: TopPanel) => void;
 }) {
+  const [geometry2dOpen, setGeometry2dOpen] = useState(false);
+
+  useEffect(() => {
+    if (!geometry2dOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Element && !event.target.closest(".geometry-create-section")) setGeometry2dOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setGeometry2dOpen(false);
+    };
+    window.addEventListener("pointerdown", closeOutside);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeOutside);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [geometry2dOpen]);
+
   const selectToolbarMode = (mode: ToolbarMode) => {
+    setGeometry2dOpen(false);
     onTopPanel(null);
     onToolbarModeChange(mode);
   };
@@ -11014,6 +12055,36 @@ function SecondaryToolbar({
           <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "rectangle" ? "active" : ""}`} type="button" aria-label="Rectángulo" title="Rectángulo centrado" onClick={() => onSketchTool("rectangle")}>
             <SketchEntityRectangleIcon />
           </button>
+          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "ellipse" ? "active" : ""}`} type="button" aria-label="Elipse" title="Elipse paramétrica" onClick={() => onSketchTool("ellipse")}>
+            <SketchEntityCircleIcon />
+          </button>
+          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "polygon" ? "active" : ""}`} type="button" aria-label="Polígono regular" title="Polígono regular paramétrico" onClick={() => onSketchTool("polygon")}>
+            <Hexagon />
+          </button>
+          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "slot" ? "active" : ""}`} type="button" aria-label="Ranura" title="Ranura mecánica paramétrica" onClick={() => onSketchTool("slot")}>
+            <Minus />
+          </button>
+          <button
+            className="toolbar-icon sketch-tool-icon"
+            type="button"
+            aria-label="Agregar texto 3D"
+            title="Escribir texto y convertirlo en contornos 3D extruibles"
+            onClick={onSketchText}
+          >
+            <Type />
+          </button>
+          <button
+            className="toolbar-icon sketch-tool-icon"
+            type="button"
+            aria-label="Importar imagen o SVG 3D"
+            title="Importar SVG o vectorizar una imagen como contornos 3D extruibles"
+            onClick={onSketchVector}
+          >
+            <FileImage />
+          </button>
+          <button className="toolbar-icon sketch-tool-icon" type="button" aria-label="Proyectar silueta" title="Proyectar la silueta de las piezas seleccionadas" onClick={onSketchProject}>
+            <Pencil />
+          </button>
         </div>
       </div>
       <div className="toolbar-section sketch-edit-section">
@@ -11079,7 +12150,13 @@ function SecondaryToolbar({
   return (
     <div className="secondary-toolbar">
       <div className={`toolbar-mode-content ${toolbarMode}`}>
-        {toolbarMode === "geometry" ? (
+        {toolbarMode === "geometry" && capSketchActive ? (
+          renderSketchDrawingTools(
+            onApplyCapDrawing,
+            capSectionName ? `Aplicar sección «${capSectionName}»` : "Aplicar sección",
+            onCancelCapDrawing,
+          )
+        ) : toolbarMode === "geometry" ? (
           <>
       {onHome ? (
         <div className="tool-group editor-nav-group">
@@ -11166,6 +12243,60 @@ function SecondaryToolbar({
           ) : null}
         </div>
       </div>
+      <div className="toolbar-section geometry-create-section">
+        <div className="toolbar-section-label">Crear</div>
+        <div className="toolbar-section-tools">
+          <button
+            className={`geometry-2d-trigger ${geometry2dOpen || geometryDrawTool || hasGeometryProfile ? "active" : ""}`}
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={geometry2dOpen}
+            onClick={() => setGeometry2dOpen((open) => !open)}
+            title="Planos y dibujo 2D directo sobre el espacio 3D"
+          >
+            <SketchEntityRectangleIcon />
+            <span>2D</span>
+          </button>
+          {geometry2dOpen ? (
+            <div className="geometry-2d-popover" role="dialog" aria-label="Dibujo 2D en geometría" onPointerDown={(event) => event.stopPropagation()}>
+              <div className="geometry-2d-popover-header">
+                <div><strong>Dibujo 2D</strong><span>Directo sobre el viewport 3D</span></div>
+                <button type="button" onClick={() => setGeometry2dOpen(false)} aria-label="Cerrar herramientas 2D"><X size={16} /></button>
+              </div>
+              <div className="geometry-2d-popover-group">
+                <span className="geometry-2d-popover-label">Plano</span>
+                <div className="geometry-2d-popover-row">
+                  <button className={geometryPlaneMode === "auto" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("auto")} title="Detectar automáticamente la superficie bajo el cursor"><span>Superficie</span></button>
+                  <button className={geometryPlaneMode === "base" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("base")}><span>Base</span></button>
+                  <button className={geometryPlaneMode === "offset" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("offset")}><span>Offset</span></button>
+                  {geometryPlaneMode === "offset" ? <input type="number" step="0.1" aria-label="Elevación del plano" value={geometryPlaneOffset} onChange={(event) => onGeometryPlaneOffset(event.currentTarget.value)} /> : null}
+                </div>
+              </div>
+              <div className="geometry-2d-popover-group">
+                <span className="geometry-2d-popover-label">Dibujar</span>
+                <div className="geometry-2d-popover-row geometry-2d-tool-row">
+                  <button className={geometryDrawTool === "pencil" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("pencil"); setGeometry2dOpen(false); }}><Pencil /><span>Lápiz</span></button>
+                  <button className={geometryDrawTool === "circle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("circle"); setGeometry2dOpen(false); }}><SketchEntityCircleIcon /><span>Círculo</span></button>
+                  <button className={geometryDrawTool === "semicircle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("semicircle"); setGeometry2dOpen(false); }}><SketchEntitySemicircleIcon /><span>Semicírculo</span></button>
+                  <button className={geometryDrawTool === "arc" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("arc"); setGeometry2dOpen(false); }}><SketchEntityArcIcon /><span>Arco</span></button>
+                  <button className={geometryDrawTool === "rectangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("rectangle"); setGeometry2dOpen(false); }}><SketchEntityRectangleIcon /><span>Rectángulo</span></button>
+                  <button className={geometryDrawTool === "triangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("triangle"); setGeometry2dOpen(false); }}><Triangle /><span>Triángulo</span></button>
+                  <button className={geometryDrawTool === "hexagon" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("hexagon"); setGeometry2dOpen(false); }}><Hexagon /><span>Hexágono</span></button>
+                </div>
+              </div>
+              <div className="geometry-2d-popover-group">
+                <span className="geometry-2d-popover-label">Operación</span>
+                <div className="geometry-2d-popover-row geometry-2d-operation-row">
+                  <label><span>Profundidad</span><input type="number" step="0.1" min="0.1" value={pushPullDistance} onChange={(event) => onPushPullDistanceChange(event.currentTarget.value)} /></label>
+                  <button className="primary" type="button" onClick={() => { onGeometryExtrude(); setGeometry2dOpen(false); }} disabled={!hasGeometryProfile}><ToolbarPushPullIcon /><span>Extruir</span></button>
+                  <button type="button" onClick={() => { onGeometryCut(); setGeometry2dOpen(false); }} disabled={!hasGeometryProfile}><Minus /><span>Cortar</span></button>
+                  <button type="button" onClick={() => { onGeometryProfileCancel(); setGeometry2dOpen(false); }} disabled={!geometryDrawTool && !hasGeometryProfile}><X /><span>Cancelar</span></button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
       <div className="toolbar-spacer" />
       <div className="tool-group right">
         <div className="toolbar-section compact">
@@ -11207,7 +12338,7 @@ function SecondaryToolbar({
                 capSketchActive ? onApplyCapDrawing : onSketchFinish,
                 capSketchActive
                   ? (capSectionName ? `Aplicar sección «${capSectionName}»` : "Aplicar sección")
-                  : (sketchOperation === "revolve" ? "Finalizar revolución" : "Finalizar boceto"),
+                  : (sketchOperation === "revolve" ? "Crear sólido revolucionado" : "Crear sólido 3D"),
                 capSketchActive ? onCancelCapDrawing : onSketchCancel,
               )
             ) : (
@@ -11217,12 +12348,12 @@ function SecondaryToolbar({
                   <button
                     className="sketch-command-button primary"
                     type="button"
-                    aria-label="Boceto a 3D"
-                    title="Abrir los planos de trabajo y ajustes para crear una pieza desde un boceto"
-                    onClick={onBoceto3D}
+                    aria-label="Nuevo boceto"
+                    title="Crear un boceto 2D independiente"
+                    onClick={onNewSketch}
                   >
                     <SketchReferenceIcon name="sketchTo3d" />
-                    <span>Boceto a 3D</span>
+                    <span>Nuevo boceto</span>
                   </button>
                   <button className={`sketch-command-button ${canEditSketch ? "" : "disabled"}`} type="button" aria-label="Editar boceto a 3D" title="Editar boceto a 3D" onClick={onEditSketch} disabled={!canEditSketch}>
                     <SketchReferenceIcon name="editSketchTo3d" />

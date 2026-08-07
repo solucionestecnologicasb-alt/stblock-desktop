@@ -158,7 +158,9 @@ class SpriteInfo extends React.Component {
 
         // Always show full sprite info with all properties
         return (
-            <Box className={styles.spriteInfo}>
+            <Box className={classNames(styles.spriteInfo, {
+                [styles.compact]: stageSize !== STAGE_DISPLAY_SIZES.large
+            })}>
                 <div className={classNames(styles.row, styles.rowPrimary)}>
                     <div className={styles.group}>
                         <Label

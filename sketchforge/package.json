@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "copy:occt": "node scripts/copy-occt-wasm.mjs",
-    "download:library-stls": "node scripts/download-library-stls.mjs",
+    "sync:library-components": "node scripts/sync-real-component-catalog.mjs",
     "predev": "npm run copy:occt",
     "dev": "next dev apps/web",
     "prebuild": "npm run copy:occt",

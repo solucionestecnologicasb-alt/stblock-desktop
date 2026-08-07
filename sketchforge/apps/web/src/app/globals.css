@@ -1397,6 +1397,349 @@ button {
   backdrop-filter: blur(12px);
 }
 
+.topology-inspector {
+  position: fixed;
+  top: calc(var(--editor-toolbar-height) + 14px);
+  left: 14px;
+  z-index: 46;
+  width: min(310px, calc(100vw - 28px));
+  max-height: calc(100vh - var(--editor-toolbar-height) - 28px);
+  overflow: auto;
+  color: #29465d;
+  background: rgba(250, 252, 254, 0.985);
+  border: 1px solid #c7d6e1;
+  border-radius: 12px;
+  box-shadow: 0 16px 42px rgba(28, 52, 70, 0.22);
+  backdrop-filter: blur(14px);
+}
+
+.topology-inspector-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 13px;
+  background: rgba(248, 251, 253, 0.96);
+  border-bottom: 1px solid #dbe5ec;
+}
+
+.topology-inspector-header strong,
+.topology-inspector-header span {
+  display: block;
+}
+
+.topology-inspector-header strong {
+  font-size: 15px;
+}
+
+.topology-inspector-header span {
+  margin-top: 2px;
+  color: #718797;
+  font-size: 10px;
+}
+
+.topology-inspector-header > button {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  color: #5e7688;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.topology-inspector-header > button:hover {
+  background: #e9f0f5;
+}
+
+.topology-inspector-section {
+  border-bottom: 1px solid #e0e8ee;
+}
+
+.topology-inspector-section:last-child {
+  border-bottom: 0;
+}
+
+.topology-inspector-section-toggle {
+  display: flex;
+  width: 100%;
+  height: 38px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  color: #3d5b71;
+  background: #f1f6f9;
+  border: 0;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.topology-inspector-section-toggle:hover {
+  background: #e8f1f6;
+}
+
+.topology-inspector-section-body {
+  display: grid;
+  gap: 9px;
+  padding: 11px 12px 13px;
+}
+
+.topology-vector-inputs,
+.topology-axis-grid,
+.topology-align-row {
+  display: grid;
+  gap: 6px;
+}
+
+.topology-vector-inputs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.topology-vector-inputs label,
+.topology-step-input,
+.topology-inline-action {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #637c8e;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.topology-vector-inputs input,
+.topology-step-input input,
+.topology-inline-action input {
+  min-width: 0;
+  height: 31px;
+  padding: 0 6px;
+  color: #263f53;
+  background: #fff;
+  border: 1px solid #cad8e2;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.topology-vector-inputs input {
+  width: 100%;
+}
+
+.topology-step-input,
+.topology-inline-action {
+  justify-content: space-between;
+}
+
+.topology-step-input input,
+.topology-inline-action input {
+  width: 74px;
+}
+
+.topology-axis-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.topology-align-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.topology-axis-grid button,
+.topology-align-row button,
+.topology-inline-action button,
+.topology-primary-action,
+.topology-secondary-action {
+  min-height: 31px;
+  padding: 5px 7px;
+  color: #49667b;
+  background: #f4f8fa;
+  border: 1px solid #d0dce5;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.topology-align-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.topology-axis-grid button:hover,
+.topology-align-row button:hover,
+.topology-align-row button.active,
+.topology-inline-action button:hover:not(:disabled),
+.topology-secondary-action:hover:not(:disabled) {
+  color: #087fa9;
+  background: #fff;
+  border-color: rgba(0, 166, 219, 0.58);
+}
+
+.topology-primary-action {
+  color: #fff;
+  background: #079dcc;
+  border-color: #078db8;
+}
+
+.topology-primary-action:hover {
+  background: #078fbb;
+}
+
+.topology-primary-action.active {
+  background: #c46f07;
+  border-color: #a95e05;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+
+.topology-inline-action button:disabled,
+.topology-primary-action:disabled,
+.topology-axis-grid button:disabled,
+.topology-align-row button:disabled,
+.topology-secondary-action:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.topology-vertex-creation strong {
+  color: #3d5b71;
+  font-size: 11px;
+}
+
+.topology-construction-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.22);
+  border-radius: 8px;
+}
+
+.topology-construction-actions .topology-primary-action {
+  background: #d88408;
+  border-color: #bd7108;
+}
+
+.topology-construction-actions .topology-primary-action:hover:not(:disabled) {
+  background: #c57607;
+}
+
+.topology-edge-ratio-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.topology-edge-ratio-grid button {
+  min-height: 31px;
+  color: #71501f;
+  background: #fffaf0;
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.topology-edge-ratio-grid button:hover:not(:disabled) {
+  color: #9a5705;
+  background: #fff;
+  border-color: #d97706;
+}
+
+.topology-edge-ratio-grid button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.topology-inspector-hint {
+  color: #758b9a;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.topology-live-control {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  background: linear-gradient(145deg, rgba(0, 166, 219, 0.07), rgba(34, 197, 94, 0.04));
+  border: 1px solid rgba(0, 146, 194, 0.2);
+  border-radius: 8px;
+}
+
+.topology-live-control-heading,
+.topology-live-value-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.topology-live-control-heading {
+  color: #4b687d;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.topology-live-control-heading output {
+  color: #078fbb;
+  font-variant-numeric: tabular-nums;
+}
+
+.topology-live-range {
+  width: 100%;
+  height: 18px;
+  accent-color: #079dcc;
+  cursor: ew-resize;
+}
+
+.topology-live-range:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.topology-live-value-row input {
+  width: 92px;
+  min-width: 0;
+  height: 31px;
+  padding: 0 7px;
+  color: #263f53;
+  background: #fff;
+  border: 1px solid #cad8e2;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.topology-live-value-row button {
+  min-height: 31px;
+  padding: 5px 9px;
+  color: #49667b;
+  background: #f4f8fa;
+  border: 1px solid #d0dce5;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.topology-live-value-row button:hover:not(:disabled) {
+  color: #087fa9;
+  background: #fff;
+  border-color: rgba(0, 166, 219, 0.58);
+}
+
+.topology-live-value-row button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
 .edge-modifier-header,
 .edge-modifier-quick-actions,
 .edge-modifier-footer,
@@ -2018,6 +2361,179 @@ button {
 .push-pull-control .action-icon-button svg {
   width: 17px;
   height: 17px;
+}
+
+.geometry-create-section {
+  min-width: 72px;
+}
+
+.geometry-2d-trigger {
+  display: inline-flex;
+  height: 38px;
+  min-width: 58px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  color: #49667d;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(172, 190, 204, 0.86);
+  border-radius: 7px;
+  box-shadow: 0 1px 2px rgba(31, 55, 73, 0.08);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.geometry-2d-trigger:hover,
+.geometry-2d-trigger.active {
+  color: #087fa9;
+  background: #fff;
+  border-color: rgba(0, 166, 219, 0.58);
+  box-shadow: 0 0 0 2px rgba(0, 166, 219, 0.12);
+}
+
+.geometry-2d-trigger svg {
+  width: 23px;
+  height: 23px;
+}
+
+.geometry-2d-popover {
+  position: fixed;
+  top: calc(var(--editor-toolbar-height) + 8px);
+  left: clamp(12px, 42vw, calc(100vw - 440px));
+  z-index: 72;
+  width: min(420px, calc(100vw - 24px));
+  padding: 12px;
+  color: #28445a;
+  background: rgba(250, 252, 254, 0.985);
+  border: 1px solid #c5d4df;
+  border-radius: 12px;
+  box-shadow: 0 18px 46px rgba(28, 52, 70, 0.24);
+  backdrop-filter: blur(14px);
+}
+
+.geometry-2d-popover-header,
+.geometry-2d-popover-row,
+.geometry-2d-operation-row label {
+  display: flex;
+  align-items: center;
+}
+
+.geometry-2d-popover-header {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 1px 2px 10px;
+  border-bottom: 1px solid #dce6ed;
+}
+
+.geometry-2d-popover-header strong,
+.geometry-2d-popover-header span {
+  display: block;
+}
+
+.geometry-2d-popover-header strong {
+  font-size: 14px;
+}
+
+.geometry-2d-popover-header span {
+  margin-top: 2px;
+  color: #708696;
+  font-size: 10px;
+}
+
+.geometry-2d-popover-header button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: #60788b;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.geometry-2d-popover-header button:hover {
+  background: #e9f0f5;
+}
+
+.geometry-2d-popover-group {
+  padding-top: 10px;
+}
+
+.geometry-2d-popover-label {
+  display: block;
+  margin: 0 0 5px 2px;
+  color: #718696;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.geometry-2d-popover-row {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.geometry-2d-popover-row > button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 10px;
+  color: #4f697d;
+  background: #f3f7fa;
+  border: 1px solid #d3dfe7;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.geometry-2d-popover-row > button:hover:not(:disabled),
+.geometry-2d-popover-row > button.active {
+  color: #087fa9;
+  background: #fff;
+  border-color: rgba(0, 166, 219, 0.58);
+}
+
+.geometry-2d-popover-row > button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.geometry-2d-popover-row > button.primary {
+  color: #fff;
+  background: #079dcc;
+  border-color: #078db8;
+}
+
+.geometry-2d-popover-row svg {
+  width: 22px;
+  height: 22px;
+}
+
+.geometry-2d-popover-row > input,
+.geometry-2d-operation-row input {
+  width: 74px;
+  height: 34px;
+  padding: 0 7px;
+  color: #263f53;
+  background: #fff;
+  border: 1px solid #cbd9e3;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.geometry-2d-operation-row label {
+  gap: 6px;
+  color: #61798c;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .toolbar-icon svg,
@@ -3109,6 +3625,8 @@ button {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 6px 8px 8px;
 }
 
@@ -3161,11 +3679,30 @@ button {
 }
 
 .shape-library-category {
+  flex: 0 0 auto;
   margin-bottom: 6px;
   overflow: hidden;
   background: #fbfcfd;
   border: 1px solid #dbe5ed;
   border-radius: 5px;
+}
+
+.shape-library-body::-webkit-scrollbar {
+  width: 9px;
+}
+
+.shape-library-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.shape-library-body::-webkit-scrollbar-thumb {
+  background: #b7c7d3;
+  border: 2px solid #f5f8fa;
+  border-radius: 999px;
+}
+
+.shape-library-body::-webkit-scrollbar-thumb:hover {
+  background: #8fa6b7;
 }
 
 .shape-library-category-header {
@@ -3633,6 +4170,28 @@ button {
   stroke: none;
 }
 
+.sketch-region-badge {
+  position: absolute;
+  top: 54px;
+  left: 18px;
+  z-index: 4;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(24, 63, 96, 0.22);
+  background: rgba(255, 255, 255, 0.9);
+  color: #6f4e14;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+  box-shadow: 0 3px 12px rgba(25, 54, 78, 0.1);
+}
+
+.sketch-region-badge.ready {
+  border-color: rgba(28, 137, 82, 0.34);
+  background: rgba(229, 249, 237, 0.94);
+  color: #17683e;
+}
+
 .sketch-segments path {
   fill: none;
   stroke: #173f60;
@@ -3959,6 +4518,85 @@ button {
   color: #0879a5;
   background: #eaf8fc;
   border-color: #90cee2;
+}
+
+.sketch-entity-text-field,
+.sketch-entity-select-field {
+  display: grid;
+  gap: 6px;
+  color: #637286;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sketch-entity-text-field textarea,
+.sketch-entity-select-field select {
+  width: 100%;
+  padding: 8px 10px;
+  color: #405268;
+  font: 650 13px/1.35 var(--font-ui);
+  background: #fff;
+  border: 1px solid #cbd6e1;
+  border-radius: 7px;
+  outline: none;
+  resize: vertical;
+}
+
+.sketch-entity-text-field textarea:focus,
+.sketch-entity-select-field select:focus {
+  border-color: #74bdf0;
+  box-shadow: 0 0 0 3px rgba(0, 156, 222, 0.14);
+}
+
+.sketch-entity-transform-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.sketch-entity-transform-actions button {
+  min-height: 32px;
+  padding: 5px 7px;
+  color: #496176;
+  background: #f5f9fb;
+  border: 1px solid #cad8e2;
+  border-radius: 6px;
+  cursor: pointer;
+  font: 750 11px/1.2 var(--font-ui);
+}
+
+.sketch-entity-transform-actions button:last-child {
+  grid-column: 1 / -1;
+}
+
+.sketch-vector-summary {
+  display: grid;
+  gap: 3px;
+  padding: 8px 9px;
+  color: #53697c;
+  background: #f4f8fa;
+  border: 1px solid #d7e2e9;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+.sketch-vector-summary.dimensions {
+  padding: 6px 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-theme="dark"] .sketch-entity-text-field textarea,
+html[data-theme="dark"] .sketch-entity-select-field select {
+  color: #d2e0e8;
+  background: #233540;
+  border-color: #405563;
+}
+
+html[data-theme="dark"] .sketch-entity-transform-actions button,
+html[data-theme="dark"] .sketch-vector-summary {
+  color: #b9ccd8;
+  background: #22333e;
+  border-color: #3b505d;
 }
 
 .view-cube {
@@ -6479,6 +7117,110 @@ button {
   background: #eef4f7;
 }
 
+@media (max-width: 1500px) {
+  .toolbar-mode-content.geometry,
+  .toolbar-mode-content.sketch {
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(117, 143, 163, 0.55) transparent;
+  }
+
+  .toolbar-mode-content.geometry::-webkit-scrollbar,
+  .toolbar-mode-content.sketch::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .toolbar-mode-content.geometry::-webkit-scrollbar-thumb,
+  .toolbar-mode-content.sketch::-webkit-scrollbar-thumb {
+    background: rgba(117, 143, 163, 0.5);
+    border-radius: 999px;
+  }
+
+  .toolbar-mode-content .toolbar-section {
+    min-width: 68px;
+    flex: 0 0 auto;
+  }
+
+  .toolbar-mode-content .toolbar-section.compact {
+    min-width: 62px;
+  }
+
+  .toolbar-mode-content .toolbar-section-label {
+    padding-inline: 5px;
+    font-size: 9px;
+  }
+
+  .toolbar-mode-content .toolbar-icon {
+    width: 37px;
+    height: 39px;
+  }
+
+  .toolbar-mode-content .toolbar-icon svg,
+  .toolbar-mode-content .toolbar-icon .toolbar-sprite-icon,
+  .toolbar-mode-content .toolbar-icon .vector-toolbar-sprite-icon,
+  .toolbar-mode-content .toolbar-icon .toolbar-command-icon {
+    width: 37px;
+    height: 37px;
+  }
+
+  .toolbar-mode-content .toolbar-selection-mode-section .selection-mode-chip {
+    min-width: 44px;
+    padding-inline: 5px;
+    font-size: 10px;
+  }
+
+  .toolbar-mode-content .toolbar-actions-section {
+    flex-basis: 132px;
+    min-width: 132px;
+  }
+
+  .toolbar-spacer {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 1180px) {
+  .toolbar-mode-content .toolbar-section-label {
+    display: none;
+  }
+
+  .toolbar-mode-content .toolbar-section-tools {
+    height: 100%;
+    padding-block: 3px;
+  }
+
+  .toolbar-mode-content .toolbar-icon {
+    width: 34px;
+    height: 38px;
+  }
+
+  .toolbar-mode-content .toolbar-icon svg,
+  .toolbar-mode-content .toolbar-icon .toolbar-sprite-icon,
+  .toolbar-mode-content .toolbar-icon .vector-toolbar-sprite-icon,
+  .toolbar-mode-content .toolbar-icon .toolbar-command-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .geometry-create-section {
+    min-width: 64px !important;
+  }
+
+  .geometry-2d-trigger {
+    min-width: 52px;
+    height: 36px;
+    padding-inline: 7px;
+  }
+
+  .geometry-2d-popover {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
+
 @media (max-width: 980px) {
   .toolbar-mode-content.geometry,
   .toolbar-mode-content.sketch {
@@ -6802,6 +7544,153 @@ html[data-theme="dark"] .shape-menu-trigger.active,
 html[data-theme="dark"] .toolbar-workspace-tabs button:hover {
   color: #e5f4fc;
   background: #273946;
+}
+
+html[data-theme="dark"] .geometry-2d-trigger {
+  color: #c3d6e2;
+  background: #263744;
+  border-color: #415766;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .geometry-2d-trigger:hover,
+html[data-theme="dark"] .geometry-2d-trigger.active {
+  color: #66d7ff;
+  background: #304653;
+  border-color: #168fba;
+}
+
+html[data-theme="dark"] .geometry-2d-popover {
+  color: #d4e3ec;
+  background: rgba(25, 38, 48, 0.985);
+  border-color: #405561;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+}
+
+html[data-theme="dark"] .geometry-2d-popover-header {
+  border-color: #3a4e5a;
+}
+
+html[data-theme="dark"] .geometry-2d-popover-header span,
+html[data-theme="dark"] .geometry-2d-popover-label,
+html[data-theme="dark"] .geometry-2d-operation-row label {
+  color: #91a7b5;
+}
+
+html[data-theme="dark"] .geometry-2d-popover-header button:hover,
+html[data-theme="dark"] .geometry-2d-popover-row > button {
+  color: #bfd1dc;
+  background: #263945;
+  border-color: #405663;
+}
+
+html[data-theme="dark"] .geometry-2d-popover-row > button:hover:not(:disabled),
+html[data-theme="dark"] .geometry-2d-popover-row > button.active {
+  color: #65d8ff;
+  background: #304753;
+  border-color: #158db6;
+}
+
+html[data-theme="dark"] .geometry-2d-popover-row > input,
+html[data-theme="dark"] .geometry-2d-operation-row input {
+  color: #d8e6ee;
+  background: #1f303a;
+  border-color: #435965;
+}
+
+html[data-theme="dark"] .topology-inspector {
+  color: #d4e3ec;
+  background: rgba(25, 38, 48, 0.985);
+  border-color: #405561;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+}
+
+html[data-theme="dark"] .topology-inspector-header {
+  background: rgba(27, 42, 52, 0.97);
+  border-color: #3b4f5b;
+}
+
+html[data-theme="dark"] .topology-inspector-header span,
+html[data-theme="dark"] .topology-inspector-hint,
+html[data-theme="dark"] .topology-vector-inputs label,
+html[data-theme="dark"] .topology-step-input,
+html[data-theme="dark"] .topology-inline-action {
+  color: #91a7b5;
+}
+
+html[data-theme="dark"] .topology-live-control {
+  background: linear-gradient(145deg, rgba(0, 166, 219, 0.12), rgba(34, 197, 94, 0.05));
+  border-color: rgba(65, 178, 214, 0.28);
+}
+
+html[data-theme="dark"] .topology-construction-actions {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+html[data-theme="dark"] .topology-vertex-creation strong {
+  color: #c6d8e2;
+}
+
+html[data-theme="dark"] .topology-edge-ratio-grid button {
+  color: #f6d28b;
+  background: #49351c;
+  border-color: #765020;
+}
+
+html[data-theme="dark"] .topology-live-control-heading {
+  color: #afc4d0;
+}
+
+html[data-theme="dark"] .topology-live-control-heading output {
+  color: #65d8ff;
+}
+
+html[data-theme="dark"] .topology-inspector-section,
+html[data-theme="dark"] .topology-inspector-header {
+  border-color: #394d59;
+}
+
+html[data-theme="dark"] .topology-inspector-section-toggle,
+html[data-theme="dark"] .topology-axis-grid button,
+html[data-theme="dark"] .topology-align-row button,
+html[data-theme="dark"] .topology-inline-action button,
+html[data-theme="dark"] .topology-live-value-row button,
+html[data-theme="dark"] .topology-secondary-action {
+  color: #bed0db;
+  background: #263945;
+  border-color: #405663;
+}
+
+html[data-theme="dark"] .topology-align-row button.active {
+  color: #65d8ff;
+  background: #304753;
+  border-color: #158db6;
+}
+
+html[data-theme="dark"] .topology-vector-inputs input,
+html[data-theme="dark"] .topology-step-input input,
+html[data-theme="dark"] .topology-inline-action input {
+  color: #d8e6ee;
+  background: #1f303a;
+  border-color: #435965;
+}
+
+html[data-theme="dark"] .topology-live-value-row input {
+  color: #d8e6ee;
+  background: #1f303a;
+  border-color: #435965;
+}
+
+@media (max-width: 720px) {
+  .topology-inspector {
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    max-height: min(52vh, 440px);
+  }
 }
 
 html[data-theme="dark"] .shape-menu-dropdown,
@@ -7952,3 +8841,22 @@ html[data-theme="dark"] .sketch-entities rect.selected {
     border-bottom-color: #33454f;
   }
 }
+
+
+/* Real component library status */
+.shape-library-title small, .shape-library-category-header small { margin-left: 4px; color: #8296a7; font-size: 10px; font-weight: 700; }
+.shape-library-preview-wrap { position: relative; flex: 0 0 38px; width: 38px; height: 38px; display: grid; place-items: center; }
+.shape-library-preview-wrap > img { width: 36px; height: 36px; object-fit: contain; border-radius: 4px; }
+.shape-library-cache-badge { position: absolute; right: -2px; bottom: -2px; width: 16px; height: 16px; display: grid; place-items: center; color: #fff; border: 2px solid #fff; border-radius: 50%; }
+.shape-library-cache-badge svg { width: 9px; height: 9px; }
+.shape-library-cache-badge.remote { background: #168fc2; }
+.shape-library-cache-badge.cached { background: #2f9b63; }
+.shape-library-cache-summary { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 10px; color: #60778a; background: #edf3f7; border-top: 1px solid #dbe5ed; font-size: 10px; }
+.shape-library-cache-summary button { display: inline-flex; align-items: center; gap: 3px; padding: 3px 5px; color: #526b7d; background: #fff; border: 1px solid #cbd9e3; border-radius: 4px; font-size: 10px; }
+.shape-library-cache-summary button:disabled { opacity: .45; }
+.shape-library-cache-summary svg { width: 11px; height: 11px; }
+.shape-library-error { padding: 7px 10px; color: #8f2635; background: #fff0f2; border-bottom: 1px solid #f0c5cb; font-size: 11px; line-height: 1.35; }
+html[data-theme="dark"] .shape-library-cache-badge { border-color: #1b2a35; }
+html[data-theme="dark"] .shape-library-cache-summary { color: #9eb1bf; background: #1c2a35; border-top-color: #334652; }
+html[data-theme="dark"] .shape-library-cache-summary button { color: #c7d8e4; background: #243440; border-color: #3a4f5e; }
+html[data-theme="dark"] .shape-library-error { color: #ffb7c1; background: #45242b; border-bottom-color: #6d343e; }

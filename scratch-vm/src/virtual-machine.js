@@ -553,18 +553,45 @@ class VirtualMachine extends EventEmitter {
      * @param {object} deviceData Optional device data: {deviceProjects, codeState}
      * @param {object} circuitData Optional circuit data: {boards, activeBoardId, components, wires, fileGroups}
      * @param {object} sketchforgeData Optional 3D SketchForge project: {bytes: ArrayBuffer|Uint8Array}
+     * @param {string|object} programmingProjectData Optional Programación project JSON.
+     * @param {Blob|ArrayBuffer|Uint8Array} programmingProjectArchive Optional complete Programación SB3.
      * @return {!Promise} Promise that resolves with a Blob of the .flynt zip.
      */
-    saveProjectFlynt (aiData, deviceData, circuitData, sketchforgeData) {
-        const soundDescs = serializeSounds(this.runtime);
-        const costumeDescs = serializeCostumes(this.runtime);
-        const projectJson = this.toJSON();
-
+    async saveProjectFlynt (aiData, deviceData, circuitData, sketchforgeData,
+        programmingProjectData, programmingProjectArchive) {
         const zip = new JSZip();
+        let importedProgrammingArchive = false;
+
+        // Programación is the canonical Scratch project at the root of Flynt.
+        // When Electrónica is visible, its runtime is different, so import the
+        // previously captured SB3 to preserve Programación blocks and assets.
+        if (programmingProjectArchive) {
+            try {
+                const archiveData = typeof programmingProjectArchive.arrayBuffer === 'function' ?
+                    await programmingProjectArchive.arrayBuffer() : programmingProjectArchive;
+                const programmingZip = await JSZip.loadAsync(archiveData);
+                const entries = Object.keys(programmingZip.files);
+                await Promise.all(entries.map(async fileName => {
+                    const entry = programmingZip.files[fileName];
+                    if (!entry.dir) zip.file(fileName, await entry.async('uint8array'));
+                }));
+                importedProgrammingArchive = true;
+            } catch (e) {
+                log.warn('Could not import Programación archive into Flynt:', e);
+            }
+        }
 
         // Standard project files (same as .sb3)
+        const projectJson = programmingProjectData ?
+            (typeof programmingProjectData === 'string' ?
+                programmingProjectData : JSON.stringify(programmingProjectData)) :
+            this.toJSON();
         zip.file('project.json', projectJson);
-        this._addFileDescsToZip(soundDescs.concat(costumeDescs), zip);
+        if (!importedProgrammingArchive) {
+            const soundDescs = serializeSounds(this.runtime);
+            const costumeDescs = serializeCostumes(this.runtime);
+            this._addFileDescsToZip(soundDescs.concat(costumeDescs), zip);
+        }
 
         // Flynt metadata - version 3 includes circuit state
         zip.file('flynt.json', JSON.stringify({

@@ -11,10 +11,8 @@ import VM from 'scratch-vm';
 
 import Box from '../box/box.jsx';
 import Button from '../button/button.jsx';
-import {ComingSoonTooltip} from '../coming-soon/coming-soon.jsx';
 import MenuBarMenu from './menu-bar-menu.jsx';
 import {MenuItem, MenuSection} from '../menu/menu.jsx';
-import ProjectTitleInput from './project-title-input.jsx';
 import AuthorInfo from './author-info.jsx';
 import MenuBarHOC from '../../containers/menu-bar-hoc.jsx';
 import SettingsMenu from './settings-menu.jsx';
@@ -67,39 +65,55 @@ import {
 } from '../../reducers/device-mode';
 import sharedMessages from '../../lib/shared-messages';
 
-const MenuBarItemTooltip = ({
-    children,
-    className,
-    enable,
-    id,
-    place = 'bottom'
-}) => {
-    if (enable) {
-        return (
-            <React.Fragment>
-                {children}
-            </React.Fragment>
-        );
+const hasTauriRuntime = () => (
+    typeof window !== 'undefined' &&
+    window.__TAURI_INTERNALS__ &&
+    typeof window.__TAURI_INTERNALS__.invoke === 'function'
+);
+
+const getFlyntBytes = async content => {
+    let bytes;
+    if (content instanceof Blob) {
+        bytes = new Uint8Array(await content.arrayBuffer());
+    } else if (content instanceof ArrayBuffer) {
+        bytes = new Uint8Array(content);
+    } else if (ArrayBuffer.isView(content)) {
+        bytes = new Uint8Array(content.buffer, content.byteOffset, content.byteLength);
+    } else {
+        throw new TypeError('Flynt save returned unsupported binary content');
     }
-    return (
-        <ComingSoonTooltip
-            className={classNames(styles.comingSoon, className)}
-            place={place}
-            tooltipClassName={styles.comingSoonTooltip}
-            tooltipId={id}
-        >
-            {children}
-        </ComingSoonTooltip>
-    );
+
+    // Every .flynt project is a ZIP. Refuse to create a misleading empty or
+    // malformed download, since feeding it back to scratch-parser produces an
+    // unrelated FixedAsciiString assertion.
+    if (bytes.byteLength < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4B) {
+        throw new Error('Flynt save did not produce a valid ZIP archive');
+    }
+    return bytes;
 };
 
+const downloadProjectInBrowser = (bytes, filename) => {
+    const blob = new Blob([bytes], {type: 'application/x.scratch.flynt'});
 
-MenuBarItemTooltip.propTypes = {
-    children: PropTypes.node,
-    className: PropTypes.string,
-    enable: PropTypes.bool,
-    id: PropTypes.string,
-    place: PropTypes.oneOf(['top', 'bottom', 'left', 'right'])
+    if (navigator.msSaveOrOpenBlob) {
+        navigator.msSaveOrOpenBlob(blob, filename);
+        return;
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+
+    // Some browsers and embedded WordPress views consume large object URLs
+    // asynchronously. Revoking after one second can leave a zero-byte file.
+    window.setTimeout(() => {
+        URL.revokeObjectURL(objectUrl);
+        if (anchor.parentNode) anchor.parentNode.removeChild(anchor);
+    }, 60000);
 };
 
 const AboutButton = props => (
@@ -118,6 +132,12 @@ AboutButton.propTypes = {
 class MenuBar extends React.Component {
     constructor (props) {
         super(props);
+        this.state = {
+            hasSaveTarget: false,
+            isSavingToTarget: false
+        };
+        this.savedFileHandle = null;
+        this.savedFilePath = null;
         bindAll(this, [
             'handleClickNew',
             'handleClickRemix',
@@ -126,6 +146,7 @@ class MenuBar extends React.Component {
             'handleSetMode',
             'handleKeyPress',
             'handleSaveToComputer',
+            'handleQuickSave',
             'handleDeviceModeChange'
         ]);
     }
@@ -182,13 +203,60 @@ class MenuBar extends React.Component {
     handleKeyPress (event) {
         const modifier = bowser.mac ? event.metaKey : event.ctrlKey;
         if (modifier && event.key === 's') {
-            this.props.onClickSave();
+            if (this.state.hasSaveTarget) {
+                this.handleQuickSave();
+            } else {
+                this.props.onClickSave();
+            }
             event.preventDefault();
         }
     }
-    async handleSaveToComputer () {
+    handleSaveToComputer () {
+        return this.saveProjectToComputer(false);
+    }
+    handleQuickSave () {
+        if (this.state.isSavingToTarget || !this.state.hasSaveTarget) return;
+        return this.saveProjectToComputer(true);
+    }
+    async saveProjectToComputer (reuseSavedTarget) {
         this.props.onRequestCloseFile();
+        const tauriRuntime = hasTauriRuntime();
+        const filename = this.getProjectFilename();
+        let browserFileHandle = reuseSavedTarget ? this.savedFileHandle : null;
+
+        if (reuseSavedTarget &&
+            ((tauriRuntime && !this.savedFilePath) || (!tauriRuntime && !browserFileHandle))) {
+            return;
+        }
+
+        // The browser file picker must run directly from the user's click,
+        // before asynchronous project capture consumes the transient activation.
+        if (!tauriRuntime && !reuseSavedTarget && typeof window.showSaveFilePicker === 'function') {
+            try {
+                browserFileHandle = await window.showSaveFilePicker({
+                    suggestedName: filename,
+                    types: [{
+                        description: 'Proyecto STBlock',
+                        accept: {'application/x.scratch.flynt': ['.flynt']}
+                    }]
+                });
+            } catch (error) {
+                if (error && error.name === 'AbortError') return;
+                // Embedded or older browser policies may reject the picker.
+                // The normal download remains available, without claiming that
+                // the browser can later overwrite that download.
+                console.warn('[Flynt] Selector de archivo no disponible; usando descarga', error); // eslint-disable-line no-console
+                browserFileHandle = null;
+            }
+        }
+
+        this.setState({isSavingToTarget: true});
         try {
+            var workspaceState = null;
+            if (this.props.onRequestWorkspaceState) {
+                workspaceState = await this.props.onRequestWorkspaceState();
+            }
+
             // Gather AI data from localStorage for .flynt bundle
             var aiData = {};
             try {
@@ -211,8 +279,10 @@ class MenuBar extends React.Component {
             var deviceData = {};
             try {
                 // Device projects (workspaces per device)
-                if (this.props.deviceProjects && Object.keys(this.props.deviceProjects).length > 0) {
-                    deviceData.deviceProjects = this.props.deviceProjects;
+                var projectsToSave = workspaceState && workspaceState.deviceProjects ?
+                    workspaceState.deviceProjects : this.props.deviceProjects;
+                if (projectsToSave && Object.keys(projectsToSave).length > 0) {
+                    deviceData.deviceProjects = projectsToSave;
                 }
                 // Code editor state
                 deviceData.codeState = {
@@ -242,32 +312,67 @@ class MenuBar extends React.Component {
                 }
             } catch (_) {}
 
-            const content = await this.props.vm.saveProjectFlynt(aiData, deviceData, circuitData, sketchforgeData);
-            const filename = this.getProjectFilename();
+            const content = await this.props.vm.saveProjectFlynt(
+                aiData,
+                deviceData,
+                circuitData,
+                sketchforgeData,
+                workspaceState && workspaceState.programmingProject,
+                workspaceState && workspaceState.programmingProjectArchive
+            );
+            const contentBytes = await getFlyntBytes(content);
+            console.info('[Flynt] Proyecto listo para guardar', { // eslint-disable-line no-console
+                filename,
+                bytes: contentBytes.byteLength,
+                runtime: tauriRuntime ? 'tauri' : 'browser',
+                overwrite: reuseSavedTarget
+            });
 
-            const defaultPath = localStorage.getItem('scratchDefaultPath');
-            const defaultPathEnabled = localStorage.getItem('scratchDefaultPathEnabled') === 'true';
-
-            if (defaultPathEnabled && defaultPath) {
-                const filePath = `${defaultPath}\\${filename}`;
-                await invoke('save_file', { path: filePath, content: Array.from(new Uint8Array(content)) });
-            } else {
-                const filePath = await save({
-                    defaultPath: filename,
-                    filters: [{ name: 'Flynt Project', extensions: ['flynt'] }]
-                });
-                if (filePath) {
-                    await invoke('save_file', { path: filePath, content: Array.from(new Uint8Array(content)) });
+            if (tauriRuntime) {
+                let filePath = reuseSavedTarget ? this.savedFilePath : null;
+                if (!filePath) {
+                    const defaultPath = localStorage.getItem('scratchDefaultPath');
+                    const defaultPathEnabled = localStorage.getItem('scratchDefaultPathEnabled') === 'true';
+                    if (defaultPathEnabled && defaultPath) {
+                        filePath = `${defaultPath}\\${filename}`;
+                    } else {
+                        filePath = await save({
+                            defaultPath: filename,
+                            filters: [{name: 'Flynt Project', extensions: ['flynt']}]
+                        });
+                        if (!filePath) {
+                            this.setState({isSavingToTarget: false});
+                            return;
+                        }
+                    }
                 }
+                await invoke('save_file', {path: filePath, content: Array.from(contentBytes)});
+                this.savedFilePath = filePath;
+            } else if (browserFileHandle) {
+                const writable = await browserFileHandle.createWritable();
+                await writable.write(new Blob([contentBytes], {type: 'application/x.scratch.flynt'}));
+                await writable.close();
+                this.savedFileHandle = browserFileHandle;
+            } else {
+                downloadProjectInBrowser(contentBytes, filename);
             }
+
+            this.setState({
+                hasSaveTarget: Boolean(this.savedFilePath || this.savedFileHandle),
+                isSavingToTarget: false
+            });
         } catch (e) {
+            this.setState({isSavingToTarget: false});
             if (e instanceof Error && e.message === 'NotInvoking') {
                 // User cancelled the dialog
                 return;
             }
-            if (process.env.NODE_ENV !== 'production') {
-                console.warn('Tauri save not available, using browser download fallback:', e);
-            }
+            console.error('Project save failed:', e);
+            alert(this.props.intl.formatMessage({ // eslint-disable-line no-alert
+                id: 'gui.menuBar.saveError',
+                defaultMessage: 'The project could not be saved. Please try again.'
+            }));
+            return;
         }
         if (this.props.onProjectTelemetryEvent) {
             const metadata = collectMetadata(this.props.vm, this.props.projectTitle, this.props.locale);
@@ -277,7 +382,7 @@ class MenuBar extends React.Component {
     getProjectFilename () {
         let filenameTitle = this.props.projectTitle;
         if (!filenameTitle || filenameTitle.length === 0) {
-            filenameTitle = 'STBlock Project';
+            filenameTitle = 'Proyecto STBlock';
         }
         return `${filenameTitle.substring(0, 100)}.flynt`;
     }
@@ -464,9 +569,9 @@ class MenuBar extends React.Component {
                                         </MenuItem>
                                         <MenuItem onClick={this.handleSaveToComputer}>
                                             <FormattedMessage
-                                                defaultMessage="Save to your computer"
-                                                description="Menu bar item for downloading a project to your computer" // eslint-disable-line max-len
-                                                id="gui.menuBar.downloadToComputer"
+                                                defaultMessage="Guardar Proyecto STBlock"
+                                                description="Menu bar item for downloading a complete STBlock project" // eslint-disable-line max-len
+                                                id="gui.menuBar.saveSTBlockProject"
                                             />
                                         </MenuItem>
                                     </MenuSection>
@@ -578,16 +683,21 @@ class MenuBar extends React.Component {
                         )}
                     </div>
                 </div>
-                {this.props.canEditTitle ? (
+                {this.state.hasSaveTarget ? (
                     <div className={classNames(styles.menuBarItem, styles.titleFieldCentered)}>
-                        <MenuBarItemTooltip
-                            enable
-                            id="title-field"
+                        <button
+                            className={styles.quickSaveButton}
+                            disabled={this.state.isSavingToTarget}
+                            title="Sobrescribir el Proyecto STBlock guardado"
+                            type="button"
+                            onClick={this.handleQuickSave}
                         >
-                            <ProjectTitleInput />
-                        </MenuBarItemTooltip>
+                            {this.state.isSavingToTarget ? 'Guardando…' : 'Guardar'}
+                        </button>
                     </div>
-                ) : ((this.props.authorUsername && this.props.authorUsername !== this.props.username) ? (
+                ) : ((!this.props.canEditTitle &&
+                    this.props.authorUsername &&
+                    this.props.authorUsername !== this.props.username) ? (
                     <AuthorInfo
                         className={styles.authorInfo}
                         imageUrl={this.props.authorThumbnailUrl}
@@ -666,6 +776,7 @@ MenuBar.propTypes = {
     onStartSelectingFileUpload: PropTypes.func,
     onRequestCircuitState: PropTypes.func,
     onRequestSketchforgeSkf: PropTypes.func,
+    onRequestWorkspaceState: PropTypes.func,
     projectTitle: PropTypes.string,
     settingsMenuOpen: PropTypes.bool,
     username: PropTypes.string,

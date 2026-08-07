@@ -1196,6 +1196,12 @@ class ArduinoGenerator {
                     loopHatBlocks.push({id, block});
                 } else if (this.isSetupHatBlock(block.opcode)) {
                     setupHatBlocks.push({id, block});
+                } else if (block.opcode === 'procedures_definition') {
+                    // Always process procedure definitions. Their body can live in
+                    // inputs.SUBSTACK (C-block style) or in block.next, so gating on
+                    // block.next here would skip them and the function would never be
+                    // registered in this.functions.
+                    setupHatBlocks.push({id, block});
                 } else {
                     // Check if it looks like a hat block by having no parent and having a next
                     if (block.next) {

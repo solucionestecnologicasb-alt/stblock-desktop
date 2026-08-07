@@ -31,6 +31,11 @@ import {
 } from '../reducers/device-mode';
 
 const messages = defineMessages({
+    emptyProjectError: {
+        id: 'gui.projectLoader.emptyProjectError',
+        defaultMessage: 'The selected project file is empty. Save the project again and select the new file.',
+        description: 'An error that displays when a selected local project file has zero bytes.'
+    },
     loadError: {
         id: 'gui.projectLoader.loadError',
         defaultMessage: 'The project file that was selected failed to load.',
@@ -85,7 +90,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             // create <input> element and add it to DOM
             this.inputElement = document.createElement('input');
             this.inputElement.accept = '.sb,.sb2,.sb3,.flynt';
-            this.inputElement.style = 'display: none;';
+            this.inputElement.style.display = 'none';
             this.inputElement.type = 'file';
             this.inputElement.onchange = this.handleChange; // connects to step 3
             document.body.appendChild(this.inputElement);
@@ -103,8 +108,14 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 userOwnsProject
             } = this.props;
             const thisFileInput = e.target;
-            if (thisFileInput.files) { // Don't attempt to load if no file was selected
+            if (thisFileInput.files && thisFileInput.files.length > 0) {
                 this.fileToUpload = thisFileInput.files[0];
+                if (this.fileToUpload.size === 0) {
+                    alert(intl.formatMessage(messages.emptyProjectError)); // eslint-disable-line no-alert
+                    this.props.closeFileMenu();
+                    this.removeFileObjects();
+                    return;
+                }
 
                 // If user owns the project, or user has changed the project,
                 // we must confirm with the user that they really intend to
@@ -124,6 +135,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                     this.removeFileObjects();
                 }
                 this.props.closeFileMenu();
+            } else {
+                this.removeFileObjects();
             }
         }
         // step 4 is below, in mapDispatchToProps
@@ -157,6 +170,14 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 var self = this;
                 var buffer = this.fileReader.result;
                 var filename = this.fileToUpload && this.fileToUpload.name;
+
+                if (!(buffer instanceof ArrayBuffer) || buffer.byteLength === 0) {
+                    self.props.onLoadingStarted();
+                    alert(self.props.intl.formatMessage(messages.emptyProjectError)); // eslint-disable-line no-alert
+                    self.props.onLoadingFinished(self.props.loadingState, false);
+                    self.removeFileObjects();
+                    return;
+                }
 
                 // Check if .flynt format and extract AI, device and 3D data before loading project
                 var aiDataPromise = Promise.resolve(null);

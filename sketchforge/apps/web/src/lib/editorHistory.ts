@@ -1,5 +1,5 @@
 import type { CapDocument, WorkplaneShape } from "@/types/sketchforge";
-import { canonicalizeShape } from "@/lib/workplaneShapes";
+import { canonicalizeShape, canonicalizeShapes } from "@/lib/workplaneShapes";
 
 export const MAX_EDITOR_HISTORY_ENTRIES = 5000;
 // Hard cap on the total estimated bytes retained by the editor history. Entries
@@ -32,6 +32,7 @@ type ResourceSignature = {
 };
 
 const resourceSignatureCache = new WeakMap<object, ResourceSignature>();
+const sceneSignatureCache = new WeakMap<WorkplaneShape[], ResourceSignature>();
 const stringSignatureCache = new Map<string, ResourceSignature>();
 const MAX_CACHED_STRING_SIGNATURES = 64;
 const COMPACT_RESOURCE_KEYS = new Set([
@@ -87,6 +88,8 @@ function stringResourceSignature(resource: string) {
 }
 
 export function serializedSceneSignature(shapes: WorkplaneShape[]) {
+  const cachedScene = sceneSignatureCache.get(shapes);
+  if (cachedScene) return cachedScene;
   const countedObjects = new Set<object>();
   const countedStrings = new Set<string>();
   let resourceBytes = 0;
@@ -110,10 +113,12 @@ export function serializedSceneSignature(shapes: WorkplaneShape[]) {
     return value;
   });
   const signature = signatureFromSerialized(serialized);
-  return {
+  const result = {
     fingerprint: signature.fingerprint,
     estimatedBytes: signature.estimatedBytes + resourceBytes,
   };
+  sceneSignatureCache.set(shapes, result);
+  return result;
 }
 
 export function projectShapesFingerprint(shapes: WorkplaneShape[]) {
@@ -148,7 +153,7 @@ function capEntryFields(cap: CapDocument | null | undefined): Pick<EditorHistory
 }
 
 export function editorHistoryEntry(shapes: WorkplaneShape[], selectedIds: string[], cap?: CapDocument | null): EditorHistoryEntry {
-  const canonicalShapes = shapes.map(canonicalizeShape);
+  const canonicalShapes = canonicalizeShapes(shapes);
   const validSelection = selectedIds.filter((id, index) => selectedIds.indexOf(id) === index && canonicalShapes.some((shape) => shape.id === id));
   return {
     shapes: canonicalShapes,

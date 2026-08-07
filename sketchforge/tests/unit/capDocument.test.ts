@@ -85,6 +85,32 @@ describe("capDocument basics", () => {
     // dangling segment dropped
     expect(normalized.sections[0].sketchProfile.segments).toEqual([]);
   });
+
+  it("preserves safe text and vector entities", () => {
+    const text = { id: "txt", kind: "text", cx: 2, cz: 3, text: "Hola", font: "Sans", size: 14, scaleX: 1, scaleZ: 1, rotation: 12 };
+    const vector = { id: "vec", kind: "vector", cx: 0, cz: 0, name: "logo", loops: [[{ x: 0, z: 0 }, { x: 2, z: 0 }, { x: 1, z: 2 }]], scaleX: 1, scaleZ: 1, rotation: 0, sourceFormat: "svg" };
+    const normalized = normalizeCapDocument({
+      sections: [{ id: "a", name: "A", plane: { kind: "base" }, sketchProfile: { points: [], segments: [], entities: [text, vector] }, operation: "extrude", extrusionDepth: 5 }],
+      timeline: [],
+    });
+    expect(normalized.sections[0].sketchProfile.entities).toEqual([text, vector]);
+  });
+
+  it("preserves an associative face topology id with its geometric fallback", () => {
+    const plane = {
+      kind: "face",
+      shapeId: "body-1",
+      topologyId: "face-7",
+      center: [1, 2, 3],
+      normal: [0, 1, 0],
+      up: [0, 0, 1],
+    };
+    const normalized = normalizeCapDocument({
+      sections: [{ id: "face-op", name: "Pocket", plane, sketchProfile: { points: [], segments: [] }, operation: "extrude", extrusionDepth: 8 }],
+      timeline: [],
+    });
+    expect(normalized.sections[0].plane).toEqual(plane);
+  });
 });
 
 describe("capDocument section helpers", () => {

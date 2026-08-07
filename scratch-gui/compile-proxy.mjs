@@ -85,6 +85,61 @@ function resolveArduinoCli() {
 
 const ARDUINO_CLI = resolveArduinoCli();
 
+// Resolve the bundled Arduino tools directory (preinstalled cores + index files).
+// Only present when running inside the desktop app (BUNDLE_RESOURCES_DIR set).
+function resolveArduinoToolsDir() {
+    if (process.env.BUNDLE_RESOURCES_DIR) {
+        const cleanedDir = cleanPath(process.env.BUNDLE_RESOURCES_DIR);
+        const p = path.join(cleanedDir, 'tools', 'Arduino');
+        if (fs.existsSync(p)) return p;
+    }
+
+    // Dev fallback relative to the working directory
+    const cwd = cleanPath(process.cwd());
+    const candidates = [
+        path.join(cwd, 'src-tauri', 'tools', 'Arduino'),
+        path.join(cwd, '..', 'src-tauri', 'tools', 'Arduino'),
+        path.join(cwd, 'tools', 'Arduino'),
+    ];
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) return candidate;
+    }
+
+    return null;
+}
+
+// Generate a runtime arduino-cli config pointing `directories.data` at the
+// bundled tools (so the preinstalled cores are found without internet).
+// Returns the config file path, or null when the bundled tools are absent
+// (e.g. web/cPanel deployments use the system arduino-cli config).
+let _arduinoConfigPath = null;
+function resolveArduinoConfig() {
+    if (_arduinoConfigPath) return _arduinoConfigPath;
+    const toolsDir = resolveArduinoToolsDir();
+    if (!toolsDir) return null;
+
+    const userDir = path.join(os.tmpdir(), 'stblock-arduino');
+    const stagingDir = path.join(userDir, 'staging');
+    try {
+        fs.mkdirSync(stagingDir, { recursive: true });
+        // YAML single-quoted strings: backslashes stay literal; ' is doubled.
+        const cfg = [
+            "directories:",
+            `    data: '${toolsDir.replace(/'/g, "''")}'`,
+            `    downloads: '${stagingDir.replace(/'/g, "''")}'`,
+            `    user: '${userDir.replace(/'/g, "''")}'`,
+            "",
+        ].join("\n");
+        const cfgPath = path.join(userDir, 'arduino-cli.yaml');
+        fs.writeFileSync(cfgPath, cfg, 'utf8');
+        _arduinoConfigPath = cfgPath;
+        return cfgPath;
+    } catch (err) {
+        console.warn(`[compile-proxy] No se pudo generar config de arduino-cli: ${err.message}`);
+        return null;
+    }
+}
+
 function resolveLibrariesDir() {
     // 1. Env var BUNDLE_RESOURCES_DIR
     if (process.env.BUNDLE_RESOURCES_DIR) {
@@ -196,7 +251,15 @@ function compileSketch(files, fqbn) {
             '--fqbn', fqbn,
             '--output-dir', buildDir
         ];
-        
+
+        // Usar el config generado (cores empaquetados) cuando exista, para que
+        // compile en máquinas nuevas sin internet.
+        const arduinoConfig = resolveArduinoConfig();
+        if (arduinoConfig) {
+            console.log(`[compile-proxy] Usando config de arduino-cli: ${arduinoConfig}`);
+            compileArgs.push('--config-file', arduinoConfig);
+        }
+
         const libsDir = resolveLibrariesDir();
         if (libsDir) {
             console.log(`[compile-proxy] Usando librerías en: ${libsDir}`);

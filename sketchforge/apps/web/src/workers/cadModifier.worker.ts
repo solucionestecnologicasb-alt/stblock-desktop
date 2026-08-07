@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
 import { OcctKernel, type ShapeHandle } from "occt-wasm";
-import type { CadModifierComponentMesh, CadModifierDisplayEdge, CadModifierEdge, CadModifierMeshPart, CadModifierPrimitivePart, CadModifierQuality, CadModifierWorkerRequest, CadModifierWorkerResponse, CadTopologyEdge, CadTopologyFace, CadTopologyVertex } from "@/lib/cadModifierTypes";
+import type { CadModifierComponentMesh, CadModifierDisplayEdge, CadModifierEdge, CadModifierMeshPart, CadModifierPrimitivePart, CadModifierQuality, CadModifierWorkerRequest, CadModifierWorkerResponse, CadPartitionEdge, CadTopologyEdge, CadTopologyFace, CadTopologyVertex } from "@/lib/cadModifierTypes";
 import { CAD_MODIFIER_RUNTIME_BASE, cadModifierTopologyEdgeIsSelectable, cadTransformRequiresGeneralTransform, isCadModifierWasmMemoryFault } from "@/lib/cadModifierRuntime";
 import { moveMeshVerticesNear, splitMeshEdgeAtPoint, type MeshVertexUpdate } from "@/lib/meshTopologyEdit";
 import { buildMeshTopology, canonicalizeMesh, extrudeMeshFace, recomputeTriangleNormals } from "@/lib/meshTopology";
@@ -250,23 +250,30 @@ function reconstructSolid(cad: OcctKernel, part: CadModifierMeshPart) {
 function reconstructParts(cad: OcctKernel, parts: CadModifierMeshPart[]) {
   const arena = new ShapeArena(cad);
   try {
+    const preservePartitions = parts.some((part) => part.preservePartitions);
     const solids = parts.filter((part) => !part.hole).map((part) => arena.track(reconstructSolid(cad, part)));
     const holes = parts.filter((part) => part.hole).map((part) => arena.track(reconstructSolid(cad, part)));
     if (solids.length === 0) throw new Error("The group has no solid body to modify");
     let result = solids[0];
     for (let index = 1; index < solids.length; index += 1) {
       result = arena.track(cad.fuse(result, solids[index]));
-      result = arena.track(cad.simplify(result));
-      result = arena.track(cad.unifySameDomain(result));
+      if (!preservePartitions) {
+        result = arena.track(cad.simplify(result));
+        result = arena.track(cad.unifySameDomain(result));
+      }
     }
     for (const hole of holes) {
       result = arena.track(cad.cut(result, hole));
+      if (!preservePartitions) {
+        result = arena.track(cad.simplify(result));
+        result = arena.track(cad.unifySameDomain(result));
+      }
+    }
+    result = arena.track(cad.fixShape(result));
+    if (!preservePartitions) {
       result = arena.track(cad.simplify(result));
       result = arena.track(cad.unifySameDomain(result));
     }
-    result = arena.track(cad.fixShape(result));
-    result = arena.track(cad.simplify(result));
-    result = arena.track(cad.unifySameDomain(result));
     if (!cadShapeIsValid(cad, result)) throw new Error("The grouped solid could not be repaired into valid topology");
     return arena.keep(result);
   } finally {
@@ -655,6 +662,127 @@ function copyCadMesh(mesh: { positions: Float32Array; normals: Float32Array; ind
 
 type TopologyEditUpdate = { from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } };
 
+function pointDistance(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
+function partitionEdgesFromParts(parts: CadModifierMeshPart[]) {
+  return parts.flatMap((part) => part.partitionEdges ?? []);
+}
+
+function transformPartitionEdges(partitions: CadPartitionEdge[], updates: TopologyEditUpdate[], tolerance: number): CadPartitionEdge[] {
+  const transformPoint = (point: CadPartitionEdge["start"]) => {
+    const update = updates.find((candidate) => pointDistance(candidate.from, point) <= tolerance);
+    return update ? { ...update.to } : { ...point };
+  };
+  return partitions.map((partition) => ({
+    ...partition,
+    start: transformPoint(partition.start),
+    end: transformPoint(partition.end),
+  }));
+}
+
+function solidHasEdgeBetween(cad: OcctKernel, solid: ShapeHandle, start: CadPartitionEdge["start"], end: CadPartitionEdge["end"], tolerance: number) {
+  const edges = cad.getSubShapes(solid, "edge");
+  try {
+    return edges.some((edge) => {
+      const vertices = cad.getSubShapes(edge, "vertex");
+      try {
+        if (vertices.length < 2) return false;
+        const a = cad.vertexPosition(vertices[0]);
+        const b = cad.vertexPosition(vertices[1]);
+        return (pointDistance(a, start) <= tolerance && pointDistance(b, end) <= tolerance)
+          || (pointDistance(a, end) <= tolerance && pointDistance(b, start) <= tolerance);
+      } finally {
+        releaseHandles(cad, vertices);
+      }
+    });
+  } finally {
+    releaseHandles(cad, edges);
+  }
+}
+
+function splitSolidFaceBySegment(
+  cad: OcctKernel,
+  solid: ShapeHandle,
+  start: CadPartitionEdge["start"],
+  end: CadPartitionEdge["end"],
+) {
+  const tolerance = Math.max(0.02, topologyEditTolerance(cad, solid) * 5);
+  if (pointDistance(start, end) <= tolerance) throw new Error("Los vértices del corte están demasiado cerca");
+  if (solidHasEdgeBetween(cad, solid, start, end, tolerance)) {
+    return { shape: null, start: { ...start }, end: { ...end }, alreadyPresent: true };
+  }
+  const faces = cad.getSubShapes(solid, "face");
+  let best: { face: ShapeHandle; start: CadPartitionEdge["start"]; end: CadPartitionEdge["end"]; score: number } | null = null;
+  try {
+    for (const face of faces) {
+      if (cad.surfaceType(face) !== "plane") continue;
+      try {
+        const projectedStart = cad.projectPointOnFace(face, start);
+        const projectedEnd = cad.projectPointOnFace(face, end);
+        const startDistance = pointDistance(projectedStart, start);
+        const endDistance = pointDistance(projectedEnd, end);
+        if (startDistance > tolerance || endDistance > tolerance) continue;
+        const midpoint = {
+          x: (projectedStart.x + projectedEnd.x) / 2,
+          y: (projectedStart.y + projectedEnd.y) / 2,
+          z: (projectedStart.z + projectedEnd.z) / 2,
+        };
+        const startUv = cad.uvFromPoint(face, projectedStart);
+        const endUv = cad.uvFromPoint(face, projectedEnd);
+        const middleUv = cad.uvFromPoint(face, midpoint);
+        if ([
+          cad.classifyPointOnFace(face, startUv.u, startUv.v),
+          cad.classifyPointOnFace(face, endUv.u, endUv.v),
+          cad.classifyPointOnFace(face, middleUv.u, middleUv.v),
+        ].some((classification) => classification === "out")) continue;
+        const score = startDistance + endDistance;
+        if (!best || score < best.score) best = { face, start: projectedStart, end: projectedEnd, score };
+      } catch {
+        // Some analytic faces cannot project a boundary point reliably.
+      }
+    }
+    if (!best) throw new Error("Los dos vértices deben estar sobre la misma cara plana del sólido");
+    const beforeFaceCount = faces.length;
+    const cutter = cad.makeLineEdge(best.start, best.end);
+    try {
+      const result = cad.split(solid, [cutter]);
+      const resultFaces = cad.getSubShapes(result, "face");
+      try {
+        if (!cadShapeIsValid(cad, result) || resultFaces.length <= beforeFaceCount) {
+          cad.release(result);
+          throw new Error("La línea coincide con una arista existente o no atraviesa la cara");
+        }
+      } finally {
+        releaseHandles(cad, resultFaces);
+      }
+      return { shape: result, start: best.start, end: best.end, alreadyPresent: false };
+    } finally {
+      cad.release(cutter);
+    }
+  } finally {
+    releaseHandles(cad, faces);
+  }
+}
+
+function ensurePartitionEdges(cad: OcctKernel, solid: ShapeHandle, partitions: CadPartitionEdge[]) {
+  let current = solid;
+  let owned = false;
+  for (const partition of partitions) {
+    try {
+      const split = splitSolidFaceBySegment(cad, current, partition.start, partition.end);
+      if (!split.shape) continue;
+      if (owned) cad.release(current);
+      current = split.shape;
+      owned = true;
+    } catch (error) {
+      console.warn(`[TopoEdit] partition restore skipped: id=${partition.id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return { shape: current, owned };
+}
+
 function topologyEditTolerance(cad: OcctKernel, solid: ShapeHandle) {
   const bounds = cad.getBoundingBox(solid);
   const diagonal = Math.hypot(bounds.xmax - bounds.xmin, bounds.ymax - bounds.ymin, bounds.zmax - bounds.zmin);
@@ -666,7 +794,7 @@ function topologyEditTolerance(cad: OcctKernel, solid: ShapeHandle) {
  * solid finely, moves the matching vertices, re-solidifies from the deformed
  * mesh, and returns a preview tessellation of the result.
  */
-function deformSolidWithMeshUpdates(cad: OcctKernel, solid: ShapeHandle, updates: TopologyEditUpdate[]) {
+function deformSolidWithMeshUpdates(cad: OcctKernel, solid: ShapeHandle, updates: TopologyEditUpdate[], partitions: CadPartitionEdge[] = []) {
   const mesh = copyCadMesh(cad.tessellate(solid, { linearDeflection: 0.03, angularDeflection: 0.15 }));
   const tolerance = topologyEditTolerance(cad, solid);
   const positions = moveMeshVerticesNear(mesh.positions, updates, tolerance);
@@ -676,11 +804,14 @@ function deformSolidWithMeshUpdates(cad: OcctKernel, solid: ShapeHandle, updates
   }
   console.log(`[TopoEdit] deform: in=${mesh.positions.length / 3} verts / ${mesh.indices.length / 3} tris, tol=${tolerance.toFixed(4)}, updates=${updates.length}, movedVerts=${movedVerts}`);
   const newSolid = reconstructSolid(cad, { positions, indices: mesh.indices, hole: false });
+  const transformedPartitions = transformPartitionEdges(partitions, updates, tolerance * 2);
+  const restored = ensurePartitionEdges(cad, newSolid, transformedPartitions);
   try {
     const options = { linearDeflection: 0.1, angularDeflection: 0.25 };
-    const preview = copyCadMesh(cad.tessellate(newSolid, options));
-    const displayEdges = collectEdges(cad, newSolid, 0).displayEdges;
-    const brep = cad.toBREP(newSolid);
+    const preview = copyCadMesh(cad.tessellate(restored.shape, options));
+    const displayEdges = collectEdges(cad, restored.shape, 0).displayEdges;
+    transformedPartitions.forEach((partition) => displayEdges.push({ points: [partition.start.x, partition.start.y, partition.start.z, partition.end.x, partition.end.y, partition.end.z] }));
+    const brep = cad.toBREP(restored.shape);
     console.log(`[TopoEdit] deform -> solid: ${preview.triangleCount} tris, brep=${(brep.length / 1024).toFixed(1)}KB`);
     return {
       positions: preview.positions,
@@ -689,8 +820,10 @@ function deformSolidWithMeshUpdates(cad: OcctKernel, solid: ShapeHandle, updates
       triangleCount: preview.triangleCount,
       brep,
       displayEdges,
+      partitionEdges: transformedPartitions,
     };
   } finally {
+    if (restored.owned) cad.release(restored.shape);
     cad.release(newSolid);
   }
 }
@@ -892,9 +1025,9 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
       }
       try {
         console.log(`[TopoEdit] moveVertex: reqId=${request.requestId} from=(${request.from.x.toFixed(3)},${request.from.y.toFixed(3)},${request.from.z.toFixed(3)}) to=(${request.position.x.toFixed(3)},${request.position.y.toFixed(3)},${request.position.z.toFixed(3)})`);
-        const result = deformSolidWithMeshUpdates(activeCad, solid, [{ from: request.from, to: request.position }]);
+        const result = deformSolidWithMeshUpdates(activeCad, solid, [{ from: request.from, to: request.position }], partitionEdgesFromParts(request.parts));
         post(
-          { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges },
+          { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges, partitionEdges: result.partitionEdges },
           [result.positions.buffer, result.normals.buffer, result.indices.buffer],
         );
       } finally {
@@ -952,9 +1085,9 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
             releaseHandles(activeCad, vertexHandles);
           }
           console.log(`[TopoEdit] moveFace: reqId=${request.requestId} center=(${request.faceCenter.x.toFixed(3)},${request.faceCenter.y.toFixed(3)},${request.faceCenter.z.toFixed(3)}) faceVerts=${updates.length} offset=(${request.offset.x.toFixed(3)},${request.offset.y.toFixed(3)},${request.offset.z.toFixed(3)}) bestFaceDist=${bestDistance.toExponential(2)}`);
-          const result = deformSolidWithMeshUpdates(activeCad, solid, updates);
+          const result = deformSolidWithMeshUpdates(activeCad, solid, updates, partitionEdgesFromParts(request.parts));
           post(
-            { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges },
+            { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges, partitionEdges: result.partitionEdges },
             [result.positions.buffer, result.normals.buffer, result.indices.buffer],
           );
         } finally {
@@ -1026,6 +1159,35 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
       }
       return;
     }
+    if (request.type === "splitFaceBySegment") {
+      releaseSession(activeCad);
+      const solid = reconstructParts(activeCad, request.parts);
+      try {
+        const split = splitSolidFaceBySegment(activeCad, solid, request.start, request.end);
+        if (!split.shape || split.alreadyPresent) throw new Error("La línea ya pertenece a la topología del sólido");
+        try {
+          const partitionEdges = [
+            ...partitionEdgesFromParts(request.parts).filter((partition) => partition.id !== request.partitionId),
+            { id: request.partitionId, start: split.start, end: split.end },
+          ];
+          const preview = copyCadMesh(activeCad.tessellate(split.shape, { linearDeflection: 0.1, angularDeflection: 0.25 }));
+          const displayEdges = collectEdges(activeCad, split.shape, 0).displayEdges;
+          partitionEdges.forEach((partition) => displayEdges.push({ points: [partition.start.x, partition.start.y, partition.start.z, partition.end.x, partition.end.y, partition.end.z] }));
+          const brep = activeCad.toBREP(split.shape);
+          const topology = collectTopology(activeCad, split.shape);
+          console.log(`[TopoEdit] splitFace: reqId=${request.requestId} faces=${topology.faces.length} edges=${topology.edges.length} partitions=${partitionEdges.length}`);
+          post(
+            { type: "preview", requestId: request.requestId, positions: preview.positions, normals: preview.normals, indices: preview.indices, triangleCount: preview.triangleCount, brep, displayEdges, partitionEdges },
+            [preview.positions.buffer, preview.normals.buffer, preview.indices.buffer],
+          );
+        } finally {
+          activeCad.release(split.shape);
+        }
+      } finally {
+        activeCad.release(solid);
+      }
+      return;
+    }
     if (request.type === "moveTopologyEdge") {
       releaseSession(activeCad);
       const solid = tryReconstructParts(activeCad, request.parts);
@@ -1038,9 +1200,9 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
       }
       try {
         console.log(`[TopoEdit] moveEdge: reqId=${request.requestId} endpoints=${request.endpoints.length}`);
-        const result = deformSolidWithMeshUpdates(activeCad, solid, request.endpoints);
+        const result = deformSolidWithMeshUpdates(activeCad, solid, request.endpoints, partitionEdgesFromParts(request.parts));
         post(
-          { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges },
+          { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges, partitionEdges: result.partitionEdges },
           [result.positions.buffer, result.normals.buffer, result.indices.buffer],
         );
       } finally {
@@ -1060,9 +1222,9 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
       }
       try {
         console.log(`[TopoEdit] moveVertices: reqId=${request.requestId} updates=${request.updates.length}`);
-        const result = deformSolidWithMeshUpdates(activeCad, solid, request.updates);
+        const result = deformSolidWithMeshUpdates(activeCad, solid, request.updates, partitionEdgesFromParts(request.parts));
         post(
-          { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges },
+          { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges, partitionEdges: result.partitionEdges },
           [result.positions.buffer, result.normals.buffer, result.indices.buffer],
         );
       } finally {
@@ -1131,9 +1293,9 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
             }
           }
           console.log(`[TopoEdit] moveFaces: reqId=${request.requestId} faces=${request.faces.length} located=${locatedFaces} updates=${updates.length} tol=${tolerance.toExponential(2)}`);
-          const result = deformSolidWithMeshUpdates(activeCad, solid, updates);
+          const result = deformSolidWithMeshUpdates(activeCad, solid, updates, partitionEdgesFromParts(request.parts));
           post(
-            { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges },
+            { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges, partitionEdges: result.partitionEdges },
             [result.positions.buffer, result.normals.buffer, result.indices.buffer],
           );
         } finally {

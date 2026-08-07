@@ -259,23 +259,21 @@ if (-not (Test-Path -LiteralPath $GuiBuildDir)) {
 }
 
 if (-not $SkipPluginCopy) {
-    Write-Step "Copiando editor web al plugin WordPress"
+    Write-Step "Preparando editor web optimizado para WordPress"
     if (-not (Test-Path -LiteralPath $PluginPath)) {
         Fail "No existe plugin WordPress: $PluginPath"
     }
-    if (-not (Test-Path -LiteralPath $PluginEditorDir)) {
-        New-Item -ItemType Directory -Path $PluginEditorDir -Force | Out-Null
-    }
-    Copy-Item -Path (Join-Path $GuiBuildDir '*') -Destination $PluginEditorDir -Recurse -Force
-
-    $pluginIndex = Join-Path $PluginEditorDir 'index.html'
-    if (Test-Path -LiteralPath $pluginIndex) {
-        $cacheTag = "v=$($version)-$(Get-Date -Format 'yyyyMMddHHmmss')"
-        $html = Get-Content -LiteralPath $pluginIndex -Raw
-        $html = $html -replace 'gui\.js(\?v=[^"]*)?', "gui.js?$cacheTag"
-        [System.IO.File]::WriteAllText($pluginIndex, $html)
-        Write-OK "Cache buster web actualizado: $cacheTag"
-    }
+    # El preparador recrea unicamente assets/editor, elimina source maps y
+    # playgrounds que WordPress no usa, e instala cache local bajo demanda.
+    # El identificador cambia en cada deploy para invalidar el Service Worker.
+    $cacheVersion = "$version-$(Get-Date -Format 'yyyyMMddHHmmss')"
+    Invoke-Checked -File 'node' -Arguments @(
+        '.\scripts\prepare-wordpress-editor.mjs',
+        $GuiBuildDir,
+        $PluginEditorDir,
+        $cacheVersion
+    ) -WorkingDirectory $RootDir
+    Write-OK "Editor WordPress optimizado; version de cache: $cacheVersion"
 } else {
     Write-Warn "Copia al plugin saltada por parametro"
 }

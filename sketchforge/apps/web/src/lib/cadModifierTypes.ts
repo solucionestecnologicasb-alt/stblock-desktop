@@ -32,6 +32,14 @@ export type CadModifierMeshPart = {
   brepTransform?: number[];
   primitive?: CadModifierPrimitivePart;
   hole: boolean;
+  preservePartitions?: boolean;
+  partitionEdges?: CadPartitionEdge[];
+};
+
+export type CadPartitionEdge = {
+  id: string;
+  start: { x: number; y: number; z: number };
+  end: { x: number; y: number; z: number };
 };
 
 export type CadModifierComponentMesh = {
@@ -153,6 +161,14 @@ export type CadModifierWorkerRequest =
       position: { x: number; y: number; z: number };
     }
   | {
+      type: "splitFaceBySegment";
+      requestId: number;
+      parts: CadModifierMeshPart[];
+      partitionId: string;
+      start: { x: number; y: number; z: number };
+      end: { x: number; y: number; z: number };
+    }
+  | {
       type: "moveTopologyEdge";
       requestId: number;
       parts: CadModifierMeshPart[];
@@ -192,6 +208,7 @@ export type CadModifierWorkerResponse =
       triangleCount: number;
       brep: string;
       displayEdges: CadModifierDisplayEdge[];
+      partitionEdges?: CadPartitionEdge[];
       components?: CadModifierComponentMesh[];
     }
   | {

@@ -810,6 +810,9 @@ const GUIComponent = props => {
     }, []);
 
     const deviceSwitchInProgress = useRef(false);
+    const programmingProjectRef = useRef(null);
+    const programmingProjectArchiveRef = useRef(null);
+    const previousDeviceModeRef = useRef(deviceMode);
     const handleMentorGuidance = useCallback(d => setMentorGuidanceMsg(d), []);
 
     // Handle code generation from blocks - update device mode code view
@@ -878,19 +881,114 @@ const GUIComponent = props => {
         }
     }, [vm, deviceModeDevice, hasBlocksInWorkspace, onSaveDeviceProject]);
 
+    const captureProgrammingProject = useCallback(() => {
+        try {
+            programmingProjectRef.current = vm.toJSON();
+            programmingProjectArchiveRef.current = vm.saveProjectSb3();
+            console.info('[WorkspaceMode] Programación guardada'); // eslint-disable-line no-console
+        } catch (e) {
+            console.warn('[WorkspaceMode] No se pudo guardar Programación:', e);
+        }
+    }, [vm]);
+
+    // El guardado Flynt debe capturar el estado que está actualmente visible,
+    // sin depender de que Redux haya procesado antes un cambio de pestaña.
+    const requestWorkspaceState = useCallback(async () => {
+        let programmingProject = programmingProjectRef.current;
+        let programmingProjectArchive = programmingProjectArchiveRef.current;
+        const deviceProjects = Object.assign({}, deviceModeProjects || {});
+
+        if (deviceMode === 'device' && deviceModeDevice && deviceModeDevice.deviceId) {
+            deviceProjects[deviceModeDevice.deviceId] = {
+                projectData: vm.toJSON(),
+                hasBlocks: hasBlocksInWorkspace()
+            };
+        } else {
+            programmingProject = vm.toJSON();
+            programmingProjectArchive = vm.saveProjectSb3();
+            programmingProjectRef.current = programmingProject;
+            programmingProjectArchiveRef.current = programmingProjectArchive;
+        }
+
+        let resolvedArchive = null;
+        if (programmingProjectArchive) {
+            try {
+                resolvedArchive = await programmingProjectArchive;
+            } catch (e) {
+                console.warn('[Flynt] No se pudo capturar el archivo interno de Programación:', e);
+            }
+        }
+
+        console.info('[Flynt] Workspaces capturados', { // eslint-disable-line no-console
+            programming: Boolean(programmingProject),
+            electronics: Object.keys(deviceProjects).length,
+            programmingArchive: Boolean(resolvedArchive)
+        });
+        return {
+            programmingProject: programmingProject || vm.toJSON(),
+            programmingProjectArchive: resolvedArchive,
+            deviceProjects
+        };
+    }, [deviceMode, deviceModeDevice, deviceModeProjects, hasBlocksInWorkspace, vm]);
+
+    const loadProgrammingProject = useCallback(() => {
+        if (!programmingProjectRef.current) return Promise.resolve();
+        const profile = getDeviceProfile(deviceModeDevice);
+        deviceSwitchInProgress.current = true;
+        return vm.loadProject(programmingProjectRef.current)
+            .then(() => {
+                // La tarjeta seleccionada habilita su extensión/toolbox también
+                // en Programación, pero el hardware queda inactivo fuera de Electrónica.
+                vm.setDeviceProfile(profile, profile ? profile.defaultProgramMode : null);
+                vm.requestCodeUpdate();
+                console.info('[WorkspaceMode] Programación restaurada'); // eslint-disable-line no-console
+            })
+            .catch(e => {
+                console.warn('[WorkspaceMode] Error restaurando Programación:', e);
+            })
+            .then(() => {
+                deviceSwitchInProgress.current = false;
+            });
+    }, [vm, deviceModeDevice]);
+
     // Actually perform the device switch
     const performDeviceSwitch = useCallback((device) => {
         const profile = getDeviceProfile(device);
 
+        if (!profile) {
+            saveCurrentDeviceProject();
+            deviceSwitchInProgress.current = true;
+            onSelectDeviceModeDevice(null);
+            onSetDeviceMode('game');
+            vm.loadProject(programmingProjectRef.current || EMPTY_DEVICE_PROJECT)
+                .then(() => {
+                    vm.setDeviceProfile(null, null);
+                    vm.requestCodeUpdate();
+                })
+                .catch(e => {
+                    console.warn('[WorkspaceMode] Error restaurando Programación sin tarjeta:', e);
+                })
+                .then(() => {
+                    deviceSwitchInProgress.current = false;
+                });
+            onRequestCloseDeviceLibrary();
+            return;
+        }
 
+        // Si la tarjeta se elige desde Programación, preservar ese proyecto
+        // antes de cargar el workspace electrónico de la tarjeta.
+        if (deviceMode !== 'device') {
+            captureProgrammingProject();
+        }
+
+        // Set the guard before Redux changes mode. The mode effect runs after
+        // render and must not start a second load for this same transition.
+        deviceSwitchInProgress.current = true;
         // Update Redux FIRST so the blocks container has the correct selectedDevice
         // when emitWorkspaceUpdate() fires during vm.loadProject() → installTargets.
         // This prevents toolbox mode mismatch errors.
         onSelectDeviceModeDevice(profile);
         onSetDeviceMode(profile ? 'device' : 'game');
-
-        // Set flag to prevent PROJECT_LOADED handler from overwriting Redux state
-        deviceSwitchInProgress.current = true;
 
         // NOTE: vm.clear() is NOT called here because loadProject → deserializeProject
         // already calls clear() internally. Calling it here causes a double-clear
@@ -937,7 +1035,8 @@ const GUIComponent = props => {
         }
 
         onRequestCloseDeviceLibrary();
-    }, [vm, deviceModeProjects, onSelectDeviceModeDevice, onSetDeviceMode, onRequestCloseDeviceLibrary]);
+    }, [vm, deviceMode, deviceModeProjects, captureProgrammingProject, saveCurrentDeviceProject,
+        onSelectDeviceModeDevice, onSetDeviceMode, onRequestCloseDeviceLibrary]);
 
     // Handle device selection with confirmation if needed
     const handleDeviceSelected = useCallback(device => {
@@ -982,14 +1081,59 @@ const GUIComponent = props => {
         onCloseDeviceChangeConfirm();
     }, [onCloseDeviceChangeConfirm]);
 
+    // Programación y Electrónica comparten el renderer de Blockly, pero nunca
+    // el contenido del proyecto. Cada cambio de pestaña serializa el workspace
+    // saliente y carga la instantánea correspondiente.
+    useEffect(() => {
+        const previousMode = previousDeviceModeRef.current;
+        previousDeviceModeRef.current = deviceMode;
+        if (previousMode === deviceMode || deviceSwitchInProgress.current) return;
+
+        if (previousMode !== 'device' && deviceMode === 'device') {
+            captureProgrammingProject();
+            const profile = getDeviceProfile(deviceModeDevice);
+            const savedProject = profile && deviceModeProjects ?
+                deviceModeProjects[profile.deviceId] : null;
+            deviceSwitchInProgress.current = true;
+            vm.loadProject(savedProject && savedProject.projectData ?
+                savedProject.projectData : EMPTY_DEVICE_PROJECT)
+                .then(() => {
+                    vm.setDeviceProfile(profile, profile ? profile.defaultProgramMode : null);
+                    vm.requestCodeUpdate();
+                    console.info('[WorkspaceMode] Electrónica restaurada', { // eslint-disable-line no-console
+                        deviceId: profile && profile.deviceId,
+                        restored: Boolean(savedProject && savedProject.projectData)
+                    });
+                })
+                .catch(e => {
+                    console.warn('[WorkspaceMode] Error restaurando Electrónica:', e);
+                })
+                .then(() => {
+                    deviceSwitchInProgress.current = false;
+                });
+        } else if (previousMode === 'device' && deviceMode !== 'device') {
+            saveCurrentDeviceProject();
+            loadProgrammingProject();
+        }
+    }, [deviceMode, deviceModeDevice, deviceModeProjects, vm,
+        captureProgrammingProject, saveCurrentDeviceProject, loadProgrammingProject]);
+
     useEffect(() => {
         const restoreDeviceFromProject = () => {
             // Guard: skip if a device switch is in progress to avoid overwriting Redux
             if (deviceSwitchInProgress.current) return;
 
+            // Una carga externa siempre instala project.json como Programación.
+            // Sincronizar el ref y el modo evita que el efecto de salida de
+            // Electrónica copie ese proyecto recién cargado sobre su workspace.
+            programmingProjectRef.current = vm.toJSON();
+            programmingProjectArchiveRef.current = vm.saveProjectSb3();
+            previousDeviceModeRef.current = 'game';
+            onSetDeviceMode('game');
             const profile = vm.getDeviceProfile();
             onSelectDeviceModeDevice(profile);
-            onSetDeviceMode(profile ? 'device' : 'game');
+            // Una tarjeta activa sólo habilita sus bloques. No debe decidir si
+            // el usuario está trabajando en Programación o Electrónica.
         };
         vm.runtime.on('PROJECT_LOADED', restoreDeviceFromProject);
         return () => vm.runtime.removeListener('PROJECT_LOADED', restoreDeviceFromProject);
@@ -1246,6 +1390,10 @@ const GUIComponent = props => {
         });
     }, [onAppendDeviceTerminal]);
 
+    const handleVelxioStateChange = useCallback(state => {
+        if (state) onSetCircuitData(state);
+    }, [onSetCircuitData]);
+
     // Restaurar circuito cuando circuitData cambia (despues de cargar .flynt)
     useEffect(() => {
         if (!circuitData || !velxioRef.current) return;
@@ -1379,12 +1527,16 @@ const GUIComponent = props => {
         try {
             if (velxioRef.current && velxioRef.current.saveCircuitState) {
                 const state = await velxioRef.current.saveCircuitState();
-                if (state) return state;
+                if (state) {
+                    onSetCircuitData(state);
+                    return state;
+                }
             }
         } catch (e) {
             console.warn('[GUI] Error capturing circuit state:', e);
         }
-        // Fallback: estado persistido por Velxio al desmontar su iframe
+        // Fallback: estado sincronizado al ocultar Circuitos o persistido al desmontar.
+        if (circuitData) return circuitData;
         try {
             if (deviceModeDevice && deviceModeDevice.deviceId) {
                 const key = getVelxioStateKey(deviceModeDevice.deviceId);
@@ -1393,7 +1545,7 @@ const GUIComponent = props => {
             }
         } catch (e) { /* ignore */ }
         return null;
-    }, [deviceModeDevice]);
+    }, [circuitData, deviceModeDevice, onSetCircuitData]);
 
     // Listener de mensajes del iframe de SketchForge (shell + editor).
     useEffect(() => {
@@ -2016,6 +2168,7 @@ const GUIComponent = props => {
                     [styles['stage-large']]: stageSize === STAGE_DISPLAY_SIZES.large
                 })}>
                     <StageWrapper
+                        isFullScreen={isFullScreen}
                         isRendererSupported={isRendererSupported}
                         isRtl={isRtl}
                         stageSize={stageSize}
@@ -2139,6 +2292,7 @@ const GUIComponent = props => {
             onUploadFirmware={handleDeviceUploadFirmware}
             velxioRef={velxioRef}
             onVelxioSerialOutput={handleVelxioSerialOutput}
+            onVelxioStateChange={handleVelxioStateChange}
         />
     );
 
@@ -2316,10 +2470,11 @@ const GUIComponent = props => {
                 deviceModeConnected={deviceModeConnected}
                 onRequestCircuitState={requestCircuitState}
                 onRequestSketchforgeSkf={requestSketchforgeSkf}
+                onRequestWorkspaceState={requestWorkspaceState}
             />
             {deviceMode === 'device' ? renderDeviceMode() : deviceMode === 'diseno' ? renderDiseno3DMode() : deviceMode === 'evaluacion' ? renderEvaluacionMode() : renderEditor()}
-            <DragLayer />
-            {isAiOpen && (
+            {!isFullScreen && <DragLayer />}
+            {!isFullScreen && isAiOpen && (
                 <div className={classNames(styles.aiFloatingWindow, {[styles.minimized]: isAiMinimized})}>
                     <div className={styles.aiWindowHeader} onClick={() => setIsAiMinimized(!isAiMinimized)}>
                         <div className={styles.aiWindowTitle}>
@@ -2342,7 +2497,7 @@ const GUIComponent = props => {
                     )}
                 </div>
             )}
-            {!isAiOpen && (
+            {!isFullScreen && !isAiOpen && (
                 <button
                     className={styles.aiFloatingBtn}
                     style={aiBtnPos ? {left: aiBtnPos.x, top: aiBtnPos.y} : null}

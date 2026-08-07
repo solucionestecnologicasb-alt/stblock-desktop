@@ -251,11 +251,13 @@ const getVelxioStateKey = deviceId => {
     return VELXIO_STATE_KEY + '_' + compatBoard;
 };
 
-const VelxioCircuit = forwardRef(({code, deviceId, active, onSerialOutput}, ref) => {
+const VelxioCircuit = forwardRef(({code, deviceId, active, onSerialOutput, onStateChange}, ref) => {
     const iframeRef = useRef(null);
     const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState(null);
     const wasActive = useRef(false);
+    const previousActiveRef = useRef(active);
+    const sessionStateRef = useRef(null);
     const loadedRef = useRef(false);
     const codeRef = useRef(code);
     const serialLineBufferRef = useRef('');
@@ -487,9 +489,6 @@ const VelxioCircuit = forwardRef(({code, deviceId, active, onSerialOutput}, ref)
         if (win.__VELXIO_SET_ACTIVE_BOARD) {
             win.__VELXIO_SET_ACTIVE_BOARD(compatBoard);
         }
-        if (win.__VELXIO_KEEP_ONLY_BOARD) {
-            win.__VELXIO_KEEP_ONLY_BOARD(compatBoard);
-        }
         applyCodeToVelxio(win, sketch, compatBoard, 'tab-active');
     }, [active, loaded, deviceId, applyCodeToVelxio]);
 
@@ -606,17 +605,61 @@ const VelxioCircuit = forwardRef(({code, deviceId, active, onSerialOutput}, ref)
         });
     }, []);
 
+    const persistCircuitState = useCallback(async reason => {
+        const state = await saveCircuitState();
+        if (!state) return null;
+        sessionStateRef.current = state;
+        try {
+            window.localStorage.setItem(getVelxioStateKey(deviceId), JSON.stringify(state));
+        } catch (e) {
+            console.warn('[Velxio] Error persisting circuit state:', e);
+        }
+        if (onStateChange) onStateChange(state);
+        console.info('[Velxio] Circuito guardado', { // eslint-disable-line no-console
+            reason,
+            boards: state.boards.length,
+            components: state.components.length,
+            wires: state.wires.length
+        });
+        return state;
+    }, [deviceId, onStateChange, saveCircuitState]);
+
+    // El iframe permanece montado entre pestañas, pero guardamos/restauramos una
+    // instantánea explícita para protegerlo de las rutinas de reactivación de Velxio.
+    useEffect(() => {
+        const wasVisible = previousActiveRef.current;
+        previousActiveRef.current = active;
+
+        if (wasVisible && !active) {
+            persistCircuitState('tab-hidden');
+            return;
+        }
+        if (wasVisible || !active) return;
+
+        let state = sessionStateRef.current;
+        if (!state) {
+            try {
+                const raw = window.localStorage.getItem(getVelxioStateKey(deviceId));
+                if (raw) state = JSON.parse(raw);
+            } catch (e) {
+                console.warn('[Velxio] Error reading circuit session state:', e);
+            }
+        }
+        if (state) {
+            loadCircuitState(state).then(restored => {
+                console.info('[Velxio] Circuito restaurado al volver a la pestaña', { // eslint-disable-line no-console
+                    restored,
+                    components: state.components ? state.components.length : 0,
+                    wires: state.wires ? state.wires.length : 0
+                });
+            });
+        }
+    }, [active, deviceId, loadCircuitState, persistCircuitState]);
+
     // Persistir el circuito antes de desmontar el iframe (por ejemplo, al volver a modo Juego).
     useEffect(() => () => {
-        saveCircuitState().then((state) => {
-            if (!state) return;
-            try {
-                window.localStorage.setItem(getVelxioStateKey(deviceId), JSON.stringify(state));
-            } catch (e) {
-                console.warn('[Velxio] Error persisting circuit state:', e);
-            }
-        });
-    }, [saveCircuitState, deviceId]);
+        persistCircuitState('unmount');
+    }, [persistCircuitState]);
 
     // Exponer saveCircuitState y loadCircuitState al padre via ref
     useImperativeHandle(ref, () => ({
@@ -1112,15 +1155,9 @@ const VelxioCircuit = forwardRef(({code, deviceId, active, onSerialOutput}, ref)
                     const stateKey = getVelxioStateKey(deviceId);
                     const savedState = window.localStorage.getItem(stateKey);
                     if (!savedState) return;
-                    loadCircuitState(JSON.parse(savedState)).then((restored) => {
-                        if (restored) {
-                            const win = iframeRef.current && iframeRef.current.contentWindow;
-                            const compatBoard = getCompatBoard(deviceId);
-                            if (win && win.__VELXIO_KEEP_ONLY_BOARD) {
-                                win.__VELXIO_KEEP_ONLY_BOARD(compatBoard);
-                            }
-                        }
-                    });
+                    const parsedState = JSON.parse(savedState);
+                    sessionStateRef.current = parsedState;
+                    loadCircuitState(parsedState);
                 } catch (restoreError) {
                     console.warn('[Velxio] Error restoring saved circuit state:', restoreError);
                 }
@@ -1293,12 +1330,16 @@ VelxioCircuit.propTypes = {
     code: PropTypes.string,
     deviceId: PropTypes.string,
     active: PropTypes.bool,
+    onSerialOutput: PropTypes.func,
+    onStateChange: PropTypes.func
 };
 
 VelxioCircuit.defaultProps = {
     code: '',
     deviceId: null,
     active: false,
+    onSerialOutput: null,
+    onStateChange: null
 };
 
 export default VelxioCircuit;

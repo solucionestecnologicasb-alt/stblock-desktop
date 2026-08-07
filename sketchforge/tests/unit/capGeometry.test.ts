@@ -14,6 +14,9 @@ const circle: SketchEntity = { id: "e1", kind: "circle", cx: 10, cz: 5, radius: 
 const rectangle: SketchEntity = { id: "e2", kind: "rectangle", cx: 0, cz: 0, width: 40, depth: 20 };
 const semicircle: SketchEntity = { id: "e3", kind: "semicircle", cx: 0, cz: 0, radius: 10, startAngle: 0 };
 const arc: SketchEntity = { id: "e4", kind: "arc", cx: 0, cz: 0, radius: 10, startAngle: 0, endAngle: 90 };
+const ellipse: SketchEntity = { id: "e5", kind: "ellipse", cx: 0, cz: 0, radiusX: 20, radiusZ: 10, rotation: 0 };
+const polygon: SketchEntity = { id: "e6", kind: "polygon", cx: 0, cz: 0, radius: 10, sides: 6, rotation: 0 };
+const slot: SketchEntity = { id: "e7", kind: "slot", cx: 0, cz: 0, length: 30, width: 10, rotation: 0 };
 
 describe("capGeometry tessellation", () => {
   it("tessellates a circle into a deterministic closed loop", () => {
@@ -55,6 +58,13 @@ describe("capGeometry tessellation", () => {
     expect(result.segments.length).toBe(result.points.length - 1);
     // no closing chord
     expect(result.segments[result.segments.length - 1].endId).not.toBe("e4:p0");
+  });
+
+  it.each([[ellipse, 16], [polygon, 6], [slot, 12]] as const)("tessellates %s as a closed parametric loop", (entity, minimumPoints) => {
+    const result = tessellateSketchEntity(entity);
+    expect(result.points.length).toBeGreaterThanOrEqual(minimumPoints);
+    expect(result.segments.length).toBe(result.points.length);
+    expect(result.segments.at(-1)?.endId).toBe(`${entity.id}:p0`);
   });
 
   it("produces stable ids and topology across calls", () => {
@@ -139,6 +149,12 @@ describe("capGeometry entityFromDrag", () => {
   it("builds an arc with a 90° default sweep", () => {
     const entity = entityFromDrag("arc", { x: 0, z: 0 }, { x: 10, z: 0 });
     expect(entity).toMatchObject({ kind: "arc", cx: 0, cz: 0, radius: 10, startAngle: 0, endAngle: 90 });
+  });
+
+  it("builds ellipse, polygon and slot entities from drag", () => {
+    expect(entityFromDrag("ellipse", { x: 0, z: 0 }, { x: 10, z: 5 })).toMatchObject({ kind: "ellipse", radiusX: 10, radiusZ: 5 });
+    expect(entityFromDrag("polygon", { x: 0, z: 0 }, { x: 10, z: 0 })).toMatchObject({ kind: "polygon", radius: 10, sides: 6 });
+    expect(entityFromDrag("slot", { x: 0, z: 0 }, { x: 10, z: 0 })).toMatchObject({ kind: "slot", length: 20 });
   });
 });
 

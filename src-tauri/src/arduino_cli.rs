@@ -62,15 +62,119 @@ fn get_arduino_cli_path(app_handle: &tauri::AppHandle) -> String {
         .unwrap_or_else(|_| "arduino-cli".to_string())
 }
 
-/// Helper function to resolve the path of the bundled arduino-cli.yaml config file
-fn get_arduino_config_path(app_handle: &tauri::AppHandle) -> Option<String> {
+/// Resolve the directory containing the bundled Arduino toolchain:
+/// `arduino-cli.exe`, the preinstalled cores under `packages/` and the
+/// package index files. This is the `directories.data` the generated
+/// arduino-cli config will point to.
+fn bundled_arduino_tools_dir(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
+    // 1. Bundled resources: <resource_dir>/tools/Arduino
     if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        let bundled_config = clean_path(resource_dir.join("tools").join("Arduino").join("arduino-cli.yaml"));
-        if bundled_config.exists() {
-            return Some(bundled_config.to_string_lossy().to_string());
+        let p = clean_path(resource_dir.join("tools").join("Arduino"));
+        if p.is_dir() {
+            return Some(p);
         }
     }
+
+    // 2. Dev fallback: the binary lives at <repo>/src-tauri/target/{debug,release}/stblock.exe
+    if let Ok(exe) = std::env::current_exe() {
+        let cleaned_exe = clean_path(exe);
+        if let Some(dir) = cleaned_exe
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+        {
+            let p = dir.join("tools").join("Arduino");
+            if p.is_dir() {
+                return Some(p);
+            }
+        }
+    }
+
+    // 3. <cwd>/tools/Arduino
+    if let Ok(cwd) = std::env::current_dir() {
+        let p = clean_path(cwd).join("tools").join("Arduino");
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+
+    // 4. <cwd>/src-tauri/tools/Arduino
+    if let Ok(cwd) = std::env::current_dir() {
+        let p = clean_path(cwd).join("src-tauri").join("tools").join("Arduino");
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+
     None
+}
+
+/// Build a runtime arduino-cli config file whose `directories` point to the
+/// bundled Arduino tools (preinstalled cores + package indexes) and to writable
+/// per-user folders for downloads/user libraries.
+///
+/// The repo used to ship a config with hardcoded `C:\Arduino` paths, which
+/// broke on machines where that folder doesn't exist: arduino-cli could not
+/// find the preinstalled core, tried `core install`, and failed downloading
+/// indexes without internet ("Failed to install core ... no such host").
+fn get_arduino_config_path(app_handle: &tauri::AppHandle) -> Option<String> {
+    let tools_arduino = bundled_arduino_tools_dir(app_handle)?;
+
+    // Writable per-user folder for downloads/staging and user libraries,
+    // independent of the (possibly read-only) install dir.
+    let data_root = app_handle.path().app_data_dir().ok()?;
+    let user_dir = data_root.join("arduino");
+    let staging_dir = user_dir.join("staging");
+    let _ = fs::create_dir_all(&user_dir);
+    let _ = fs::create_dir_all(&staging_dir);
+
+    // YAML single-quoted strings: backslashes stay literal; ' is doubled.
+    let data_path = tools_arduino.to_string_lossy().replace('\'', "''");
+    let downloads_path = staging_dir.to_string_lossy().replace('\'', "''");
+    let user_path = user_dir.to_string_lossy().replace('\'', "''");
+
+    let config = format!(
+        r#"board_manager:
+    additional_urls:
+        - https://espressif.github.io/arduino-esp32/package_esp32_index.json
+        - https://arduino.esp8266.com/stable/package_esp8266com_index.json
+        - https://raw.githubusercontent.com/sparkfun/Arduino_Boards/master/IDE_Board_Manager/package_sparkfun_index.json
+        - http://dl.sipeed.com/MAIX/Maixduino/package_Maixduino_k210_index.json
+        - https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+        - http://drazzy.com/package_drazzy.com_index.json
+build_cache:
+    compilations_before_purge: 10
+    ttl: 720h0m0s
+daemon:
+    port: "50051"
+directories:
+    data: '{data}'
+    downloads: '{downloads}'
+    user: '{user}'
+library:
+    enable_unsafe_install: false
+logging:
+    file: ""
+    format: text
+    level: info
+metrics:
+    addr: :9090
+    enabled: false
+output:
+    no_color: false
+sketch:
+    always_export_binaries: false
+updater:
+    enable_notification: false
+"#,
+        data = data_path,
+        downloads = downloads_path,
+        user = user_path
+    );
+
+    let config_path = user_dir.join("arduino-cli.yaml");
+    fs::write(&config_path, config).ok()?;
+    Some(config_path.to_string_lossy().to_string())
 }
 
 /// Resolve the directory containing the bundled preinstalled libraries.

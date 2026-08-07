@@ -142,25 +142,45 @@ export function mirroredAxisCount(shape: WorkplaneShape) {
 }
 
 export function canonicalizeShape(shape: WorkplaneShape): WorkplaneShape {
-  const next: WorkplaneShape = {
+  const rotation = cleanRotationDegrees(shape.rotation ?? 0);
+  const rotationX = cleanRotationDegrees(shape.rotationX ?? 0);
+  const rotationZ = cleanRotationDegrees(shape.rotationZ ?? 0);
+  const mirrorX = shape.mirrorX || undefined;
+  const mirrorY = shape.mirrorY || undefined;
+  const mirrorZ = shape.mirrorZ || undefined;
+  const groupedShapes = shape.groupedShapes?.map(canonicalizeShape);
+  const groupedChanged = Boolean(groupedShapes?.some((child, index) => child !== shape.groupedShapes?.[index]));
+  const edgeTreatmentHistory = shape.edgeTreatmentHistory?.map((entry) => {
+    const before = canonicalizeShape(entry.before);
+    return before === entry.before ? entry : { ...entry, before };
+  });
+  const historyChanged = Boolean(edgeTreatmentHistory?.some((entry, index) => entry !== shape.edgeTreatmentHistory?.[index]));
+  const unchanged =
+    rotation === shape.rotation &&
+    rotationX === shape.rotationX &&
+    rotationZ === shape.rotationZ &&
+    mirrorX === shape.mirrorX &&
+    mirrorY === shape.mirrorY &&
+    mirrorZ === shape.mirrorZ &&
+    !groupedChanged &&
+    !historyChanged;
+  if (unchanged) return shape;
+  return {
     ...shape,
-    rotation: cleanRotationDegrees(shape.rotation ?? 0),
-    rotationX: cleanRotationDegrees(shape.rotationX ?? 0),
-    rotationZ: cleanRotationDegrees(shape.rotationZ ?? 0),
-    mirrorX: shape.mirrorX || undefined,
-    mirrorY: shape.mirrorY || undefined,
-    mirrorZ: shape.mirrorZ || undefined,
+    rotation,
+    rotationX,
+    rotationZ,
+    mirrorX,
+    mirrorY,
+    mirrorZ,
+    ...(groupedShapes ? { groupedShapes } : {}),
+    ...(edgeTreatmentHistory ? { edgeTreatmentHistory } : {}),
   };
-  if (shape.groupedShapes) {
-    next.groupedShapes = shape.groupedShapes.map(canonicalizeShape);
-  }
-  if (shape.edgeTreatmentHistory) {
-    next.edgeTreatmentHistory = shape.edgeTreatmentHistory.map((entry) => ({
-      ...entry,
-      before: canonicalizeShape(entry.before),
-    }));
-  }
-  return next;
+}
+
+export function canonicalizeShapes(shapes: WorkplaneShape[]): WorkplaneShape[] {
+  const canonical = shapes.map(canonicalizeShape);
+  return canonical.every((shape, index) => shape === shapes[index]) ? shapes : canonical;
 }
 
 export function workplaneShapesEqual(a: WorkplaneShape, b: WorkplaneShape) {
@@ -210,8 +230,11 @@ export function workplaneShapesEqual(a: WorkplaneShape, b: WorkplaneShape) {
     a.cadDisplayEdgesVersion === b.cadDisplayEdgesVersion &&
     a.edgeResizeMode === b.edgeResizeMode &&
     a.cadBrep === b.cadBrep &&
+    Boolean(a.cadPartitioned) === Boolean(b.cadPartitioned) &&
     a.cadBrepFrame === b.cadBrepFrame &&
     a.cadPrimitiveFrame === b.cadPrimitiveFrame &&
+    a.constructionEdges === b.constructionEdges &&
+    a.constructionVertices === b.constructionVertices &&
     a.groupedShapes === b.groupedShapes &&
     a.groupedBaseWidth === b.groupedBaseWidth &&
     a.groupedBaseDepth === b.groupedBaseDepth &&
@@ -224,5 +247,5 @@ export function workplaneShapesEqual(a: WorkplaneShape, b: WorkplaneShape) {
 }
 
 export function serializeShapesForSync(shapes: WorkplaneShape[]) {
-  return JSON.stringify(shapes.map(canonicalizeShape));
+  return JSON.stringify(canonicalizeShapes(shapes));
 }

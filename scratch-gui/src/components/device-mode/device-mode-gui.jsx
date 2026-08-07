@@ -779,7 +779,7 @@ SimulatorPanel.propTypes = {
 // Circuits Panel (Velxio simulator)
 // Usamos un wrapper que siempre mantiene VelxioCircuit montado
 // pero lo oculta visualmente cuando no está activo
-const CircuitsPanel = ({code, deviceId, active, componentRef, onSerialOutput}) => (
+const CircuitsPanel = ({code, deviceId, active, componentRef, onSerialOutput, onStateChange}) => (
     <div style={{
         width: '100%',
         height: '100%',
@@ -793,6 +793,7 @@ const CircuitsPanel = ({code, deviceId, active, componentRef, onSerialOutput}) =
             deviceId={deviceId}
             active={active}
             onSerialOutput={onSerialOutput}
+            onStateChange={onStateChange}
         />
     </div>
 );
@@ -802,7 +803,8 @@ CircuitsPanel.propTypes = {
     deviceId: PropTypes.string,
     active: PropTypes.bool,
     componentRef: PropTypes.object,
-    onSerialOutput: PropTypes.func
+    onSerialOutput: PropTypes.func,
+    onStateChange: PropTypes.func
 };
 
 // Vertical Resizer Component for Code/Terminal split
@@ -886,7 +888,8 @@ const DeviceModeGUI = ({
     onManualCodeChange,
     onUploadFirmware,
     velxioRef,
-    onVelxioSerialOutput
+    onVelxioSerialOutput,
+    onVelxioStateChange
 }) => {
     // Size mode state - default to small view
     const [isLarge, setIsLarge] = useState(false);
@@ -1035,8 +1038,10 @@ const DeviceModeGUI = ({
             active={isCircuitsVisible}
             componentRef={velxioRef}
             onSerialOutput={onVelxioSerialOutput}
+            onStateChange={onVelxioStateChange}
         />
-    ), [effectiveCode, velxioDeviceId, isCircuitsVisible, velxioRef, onVelxioSerialOutput]);
+    ), [effectiveCode, velxioDeviceId, isCircuitsVisible, velxioRef,
+        onVelxioSerialOutput, onVelxioStateChange]);
 
     const panels = useMemo(() => [blocksPanel, simulatorPanel, circuitsPanel],
         [blocksPanel, simulatorPanel, circuitsPanel]);
@@ -1230,7 +1235,8 @@ DeviceModeGUI.propTypes = {
     onManualCodeChange: PropTypes.func,
     onUploadFirmware: PropTypes.func,
     velxioRef: PropTypes.object,
-    onVelxioSerialOutput: PropTypes.func
+    onVelxioSerialOutput: PropTypes.func,
+    onVelxioStateChange: PropTypes.func
 };
 
 DeviceModeGUI.defaultProps = {

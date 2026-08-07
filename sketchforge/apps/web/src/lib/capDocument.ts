@@ -40,7 +40,15 @@ function normalizePlane(value: unknown): WorkplanePlane | null {
     const normal = Array.isArray(value.normal) && value.normal.length === 3 ? value.normal.map(Number) : [0, 1, 0];
     const up = Array.isArray(value.up) && value.up.length === 3 ? value.up.map(Number) : [0, 0, 1];
     const shapeId = typeof value.shapeId === "string" ? value.shapeId : "";
-    return { kind: "face", shapeId, center: center as [number, number, number], normal: normal as [number, number, number], up: up as [number, number, number] };
+    const topologyId = typeof value.topologyId === "string" && value.topologyId ? value.topologyId : undefined;
+    return {
+      kind: "face",
+      shapeId,
+      ...(topologyId ? { topologyId } : {}),
+      center: center as [number, number, number],
+      normal: normal as [number, number, number],
+      up: up as [number, number, number],
+    };
   }
   return null;
 }
@@ -73,6 +81,7 @@ function normalizeSketchProfile(value: unknown): SketchProfile {
           startId: typeof segment.startId === "string" ? segment.startId : "",
           endId: typeof segment.endId === "string" ? segment.endId : "",
           kind: segment.kind === "line" || segment.kind === "bezier" || segment.kind === "smooth" ? segment.kind : "line",
+          construction: segment.construction === true,
           sourceEntityId: typeof segment.sourceEntityId === "string" ? segment.sourceEntityId : undefined,
         };
       })
@@ -103,11 +112,62 @@ function normalizeSketchProfile(value: unknown): SketchProfile {
       if (entity.kind === "rectangle" && typeof entity.width === "number" && typeof entity.depth === "number") {
         return [{ id, kind: "rectangle" as const, cx: Number(entity.cx) || 0, cz: Number(entity.cz) || 0, width: entity.width, depth: entity.depth }];
       }
+      if (entity.kind === "ellipse" && typeof entity.radiusX === "number" && typeof entity.radiusZ === "number") {
+        return [{ id, kind: "ellipse" as const, cx: Number(entity.cx) || 0, cz: Number(entity.cz) || 0, radiusX: Math.max(0.05, entity.radiusX), radiusZ: Math.max(0.05, entity.radiusZ), rotation: Number(entity.rotation) || 0 }];
+      }
+      if (entity.kind === "polygon" && typeof entity.radius === "number") {
+        return [{ id, kind: "polygon" as const, cx: Number(entity.cx) || 0, cz: Number(entity.cz) || 0, radius: Math.max(0.05, entity.radius), sides: Math.max(3, Math.min(64, Math.round(Number(entity.sides) || 6))), rotation: Number(entity.rotation) || 0 }];
+      }
+      if (entity.kind === "slot" && typeof entity.length === "number" && typeof entity.width === "number") {
+        const width = Math.max(0.1, entity.width);
+        return [{ id, kind: "slot" as const, cx: Number(entity.cx) || 0, cz: Number(entity.cz) || 0, length: Math.max(width, entity.length), width, rotation: Number(entity.rotation) || 0 }];
+      }
       if (entity.kind === "semicircle" && typeof entity.radius === "number") {
         return [{ id, kind: "semicircle" as const, cx: Number(entity.cx) || 0, cz: Number(entity.cz) || 0, radius: entity.radius, startAngle: Number(entity.startAngle) || 0 }];
       }
       if (entity.kind === "arc" && typeof entity.radius === "number") {
         return [{ id, kind: "arc" as const, cx: Number(entity.cx) || 0, cz: Number(entity.cz) || 0, radius: entity.radius, startAngle: Number(entity.startAngle) || 0, endAngle: Number(entity.endAngle) || 0 }];
+      }
+      if (entity.kind === "text" && typeof entity.text === "string") {
+        const allowedFonts = new Set(["Multilanguage", "Sans", "Serif", "Script", "Monospace", "Rounded", "Stencil"]);
+        const font = typeof entity.font === "string" && allowedFonts.has(entity.font) ? entity.font : "Sans";
+        return [{
+          id,
+          kind: "text" as const,
+          cx: Number(entity.cx) || 0,
+          cz: Number(entity.cz) || 0,
+          text: entity.text.slice(0, 120),
+          font: font as Extract<SketchEntity, { kind: "text" }>["font"],
+          size: Math.max(0.1, Number(entity.size) || 12),
+          scaleX: Number.isFinite(Number(entity.scaleX)) ? Number(entity.scaleX) : 1,
+          scaleZ: Number.isFinite(Number(entity.scaleZ)) ? Number(entity.scaleZ) : 1,
+          rotation: Number(entity.rotation) || 0,
+        }];
+      }
+      if (entity.kind === "vector" && Array.isArray(entity.loops)) {
+        const loops = entity.loops.slice(0, 2_000).flatMap((rawLoop): Array<Array<{ x: number; z: number }>> => {
+          if (!Array.isArray(rawLoop)) return [];
+          const loop = rawLoop.slice(0, 20_000).flatMap((rawPoint): Array<{ x: number; z: number }> => {
+            if (!isRecord(rawPoint)) return [];
+            const x = Number(rawPoint.x);
+            const z = Number(rawPoint.z);
+            return Number.isFinite(x) && Number.isFinite(z) ? [{ x, z }] : [];
+          });
+          return loop.length >= 3 ? [loop] : [];
+        });
+        if (!loops.length) return [];
+        return [{
+          id,
+          kind: "vector" as const,
+          cx: Number(entity.cx) || 0,
+          cz: Number(entity.cz) || 0,
+          name: typeof entity.name === "string" ? entity.name.slice(0, 160) : "Vector",
+          loops,
+          scaleX: Number.isFinite(Number(entity.scaleX)) ? Number(entity.scaleX) : 1,
+          scaleZ: Number.isFinite(Number(entity.scaleZ)) ? Number(entity.scaleZ) : 1,
+          rotation: Number(entity.rotation) || 0,
+          sourceFormat: entity.sourceFormat === "trace" ? "trace" as const : "svg" as const,
+        }];
       }
       return [];
     });
@@ -273,6 +333,7 @@ function orderedSketchPaths(profile: SketchProfile): OrderedPath[] {
   const adjacency = new Map<string, Array<{ pointId: string; segment: SketchProfile["segments"][number] }>>();
   profile.points.forEach((point) => adjacency.set(point.id, []));
   const validSegments = profile.segments.filter((segment) => {
+    if (segment.construction) return false;
     if (!pointById.has(segment.startId) || !pointById.has(segment.endId) || segment.startId === segment.endId) return false;
     adjacency.get(segment.startId)?.push({ pointId: segment.endId, segment });
     adjacency.get(segment.endId)?.push({ pointId: segment.startId, segment });

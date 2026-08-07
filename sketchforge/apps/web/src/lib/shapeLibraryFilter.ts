@@ -11,7 +11,8 @@ export function assetMatchesQuery(asset: LibraryAsset, query: string): boolean {
   if (asset.name.toLocaleLowerCase().includes(q) || asset.id.toLocaleLowerCase().includes(q)) {
     return true;
   }
-  return (asset.tags ?? []).some((tag) => tag.toLocaleLowerCase().includes(q));
+  const metadata = [asset.metadata?.manufacturer, asset.metadata?.partNumber, asset.metadata?.source, asset.metadata?.license];
+  return [...(asset.tags ?? []), ...metadata].some((value) => value?.toLocaleLowerCase().includes(q));
 }
 
 export function filterLibraryAssets(categories: LibraryCategory[], filters: { query?: string }): LibraryAsset[] {

@@ -79,9 +79,10 @@ module.exports = {
 
     // Custom procedure definition
     procedures_definition (block, blocks) {
-        // Get the prototype
+        // Get the prototype. The real prototype may be connected as the `block`,
+        // or (e.g. when deserialized from a shadow) only as `shadow`.
         if (block.inputs && block.inputs.custom_block) {
-            const protoId = block.inputs.custom_block.block;
+            const protoId = block.inputs.custom_block.block || block.inputs.custom_block.shadow;
             if (protoId) {
                 const proto = blocks[protoId];
                 if (proto && proto.mutation) {

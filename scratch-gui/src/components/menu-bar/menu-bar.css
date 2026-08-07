@@ -69,6 +69,35 @@
     z-index: 1;
 }
 
+.quick-save-button {
+    min-width: 6.5rem;
+    height: 2rem;
+    padding: 0 .9rem;
+    border: 1px solid rgba(255, 255, 255, .45);
+    border-radius: 1rem;
+    background: $ui-white;
+    color: $looks-secondary;
+    font: inherit;
+    font-size: .78rem;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .16);
+    transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+}
+
+.quick-save-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 9px rgba(0, 0, 0, .22);
+}
+
+.quick-save-button:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.quick-save-button:disabled {
+    cursor: wait;
+    opacity: .72;
+}
+
 .title-field-growable {
     flex-grow: 1;
     width: 2rem;

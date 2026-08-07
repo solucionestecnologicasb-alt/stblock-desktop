@@ -4,6 +4,8 @@
 
 .sprite-selector {
     flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
     position: relative;
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     margin-right: calc($space / 2);

@@ -5,6 +5,7 @@
 // increases toward +Z (which maps to the SVG "down" direction, i.e. the
 // natural screen orientation of the sketch workspace).
 import { createLocalId } from "@/lib/localIds";
+import { entityContourLoops, entityContourPathData } from "@/lib/sketchEntityContours";
 import type { SketchEntity, SketchPoint, SketchProfile, SketchSegment } from "@/types/sketchforge";
 
 // Tessellation resolution: fixed 8° angular step.
@@ -66,6 +67,30 @@ export function tessellateSketchEntity(entity: SketchEntity): TessellationResult
   const points: SketchPoint[] = [];
   const segments: SketchSegment[] = [];
 
+  if (entity.kind === "text" || entity.kind === "vector") {
+    entityContourLoops(entity).forEach((loop, loopIndex) => {
+      loop.forEach((point, pointIndex) => {
+        points.push({
+          id: `${entity.id}:l${loopIndex}:p${pointIndex}`,
+          x: point.x,
+          z: point.z,
+          mode: "corner",
+          sourceEntityId: entity.id,
+        });
+      });
+      loop.forEach((_, pointIndex) => {
+        segments.push({
+          id: `${entity.id}:l${loopIndex}:s${pointIndex}`,
+          startId: `${entity.id}:l${loopIndex}:p${pointIndex}`,
+          endId: `${entity.id}:l${loopIndex}:p${(pointIndex + 1) % loop.length}`,
+          kind: "line",
+          sourceEntityId: entity.id,
+        });
+      });
+    });
+    return { points, segments };
+  }
+
   if (entity.kind === "circle") {
     const count = Math.max(4, Math.round(360 / ANGULAR_STEP_DEGREES));
     for (let index = 0; index < count; index += 1) {
@@ -84,6 +109,45 @@ export function tessellateSketchEntity(entity: SketchEntity): TessellationResult
     return { points, segments };
   }
 
+  if (entity.kind === "ellipse" || entity.kind === "polygon" || entity.kind === "slot") {
+    const rotation = degreesToRadians(entity.rotation);
+    const cosine = Math.cos(rotation);
+    const sine = Math.sin(rotation);
+    const transform = (x: number, z: number) => ({
+      x: entity.cx + x * cosine - z * sine,
+      z: entity.cz + x * sine + z * cosine,
+    });
+    const outline: Array<{ x: number; z: number }> = [];
+    if (entity.kind === "ellipse") {
+      const count = Math.max(16, Math.round(360 / ANGULAR_STEP_DEGREES));
+      for (let index = 0; index < count; index += 1) {
+        const angle = degreesToRadians((index / count) * 360);
+        outline.push(transform(entity.radiusX * Math.cos(angle), entity.radiusZ * Math.sin(angle)));
+      }
+    } else if (entity.kind === "polygon") {
+      const sides = Math.max(3, Math.min(64, Math.round(entity.sides)));
+      for (let index = 0; index < sides; index += 1) {
+        const angle = (index / sides) * Math.PI * 2;
+        outline.push(transform(entity.radius * Math.cos(angle), entity.radius * Math.sin(angle)));
+      }
+    } else {
+      const radius = Math.max(0.05, entity.width / 2);
+      const straightHalf = Math.max(0, (entity.length - entity.width) / 2);
+      const arcSegments = Math.max(6, Math.round(180 / ANGULAR_STEP_DEGREES));
+      for (let index = 0; index <= arcSegments; index += 1) {
+        const angle = -Math.PI / 2 + (index / arcSegments) * Math.PI;
+        outline.push(transform(straightHalf + radius * Math.cos(angle), radius * Math.sin(angle)));
+      }
+      for (let index = 0; index <= arcSegments; index += 1) {
+        const angle = Math.PI / 2 + (index / arcSegments) * Math.PI;
+        outline.push(transform(-straightHalf + radius * Math.cos(angle), radius * Math.sin(angle)));
+      }
+    }
+    outline.forEach((point, index) => points.push({ id: `${entity.id}:p${index}`, ...point, mode: "corner", sourceEntityId: entity.id }));
+    outline.forEach((_, index) => segments.push({ id: `${entity.id}:s${index}`, startId: `${entity.id}:p${index}`, endId: `${entity.id}:p${(index + 1) % outline.length}`, kind: "line", sourceEntityId: entity.id }));
+    return { points, segments };
+  }
+
   if (entity.kind === "rectangle") {
     const halfWidth = entity.width / 2;
     const halfDepth = entity.depth / 2;
@@ -91,7 +155,7 @@ export function tessellateSketchEntity(entity: SketchEntity): TessellationResult
       { x: entity.cx - halfWidth, z: entity.cz - halfDepth },
       { x: entity.cx + halfWidth, z: entity.cz - halfDepth },
       { x: entity.cx + halfWidth, z: entity.cz + halfDepth },
-      { x: entity.cx - halfWidth, z: entity.cz - halfDepth },
+      { x: entity.cx - halfWidth, z: entity.cz + halfDepth },
     ];
     for (let index = 0; index < corners.length; index += 1) {
       points.push({ id: `${entity.id}:p${index}`, x: corners[index].x, z: corners[index].z, mode: "corner", sourceEntityId: entity.id });
@@ -189,7 +253,7 @@ export function materializeSketchEntities(profile: SketchProfile): SketchProfile
  *   90° sweep as a sensible default (fully editable later).
  */
 export function entityFromDrag(
-  kind: SketchEntity["kind"],
+  kind: Extract<SketchEntity, { kind: "circle" | "semicircle" | "arc" | "rectangle" | "ellipse" | "polygon" | "slot" }>["kind"],
   origin: { x: number; z: number },
   current: { x: number; z: number },
 ): SketchEntity {
@@ -204,6 +268,12 @@ export function entityFromDrag(
       return { id, kind: "circle", cx: origin.x, cz: origin.z, radius };
     case "rectangle":
       return { id, kind: "rectangle", cx: origin.x, cz: origin.z, width: Math.max(0.1, Math.abs(dx) * 2), depth: Math.max(0.1, Math.abs(dz) * 2) };
+    case "ellipse":
+      return { id, kind: "ellipse", cx: origin.x, cz: origin.z, radiusX: Math.max(0.05, Math.abs(dx)), radiusZ: Math.max(0.05, Math.abs(dz)), rotation: 0 };
+    case "polygon":
+      return { id, kind: "polygon", cx: origin.x, cz: origin.z, radius, sides: 6, rotation: startAngle };
+    case "slot":
+      return { id, kind: "slot", cx: origin.x, cz: origin.z, length: Math.max(0.1, radius * 2), width: Math.max(0.1, radius * 0.65), rotation: startAngle };
     case "semicircle":
       return { id, kind: "semicircle", cx: origin.x, cz: origin.z, radius, startAngle };
     case "arc":
@@ -217,6 +287,11 @@ export function entityFromDrag(
  * in the workspace, so they are not handled here.
  */
 export function entityPathData(entity: SketchEntity): string | null {
+  if (entity.kind === "text" || entity.kind === "vector") return entityContourPathData(entity);
+  if (entity.kind === "ellipse" || entity.kind === "polygon" || entity.kind === "slot") {
+    const points = tessellateSketchEntity(entity).points;
+    return points.length ? `M ${points.map((point) => `${point.x} ${point.z}`).join(" L ")} Z` : null;
+  }
   if (entity.kind !== "semicircle" && entity.kind !== "arc") return null;
   const sweep = entity.kind === "semicircle" ? 180 : normalizeSweep(entity.startAngle, entity.endAngle);
   const d = arcPathData(entity, entity.startAngle, sweep);

@@ -5,13 +5,15 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import { SnapGridControl } from "@/components/workplane/ShapeInspector";
 import { SketchRevolvePreview } from "@/components/SketchRevolvePreview";
 import { entityFromDrag, entityPathData, materializeSketchEntities } from "@/lib/capGeometry";
+import { entityContourBounds, SKETCH_TEXT_FONTS } from "@/lib/sketchEntityContours";
 import { parseMeasurementInput } from "@/lib/measurementUnits";
 import { WORKPLANE_MAJOR_GRID_INTERVAL } from "@/lib/workplaneGrid";
 import { mirrorSign, resizedImportedMeshPositions } from "@/lib/workplaneShapes";
 import { DEFAULT_SNAP_GRID, DEFAULT_WORKPLANE_WORKSPACE, normalizeSnapGrid, normalizeWorkspaceSettings } from "@/lib/workplaneSettings";
 import type { GridSize, SketchEntity, SketchImage, SketchOperation, SketchPoint, SketchProfile, SketchSegment, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
 
-export type SketchTool = "line" | "bezier" | "smooth" | "select" | "refine" | "erase" | "measure" | "circle" | "semicircle" | "arc" | "rectangle";
+export type SketchTool = "line" | "construction" | "bezier" | "smooth" | "select" | "refine" | "erase" | "measure" | "circle" | "semicircle" | "arc" | "rectangle" | "ellipse" | "polygon" | "slot";
+type DrawableSketchEntityKind = Extract<SketchEntity, { kind: "circle" | "semicircle" | "arc" | "rectangle" | "ellipse" | "polygon" | "slot" }>["kind"];
 export type SketchSelection =
   | { kind: "point"; id: string }
   | { kind: "segment"; id: string }
@@ -42,14 +44,17 @@ type SketchWorkspaceProps = {
   onDeleteImage: (id: string) => void;
   onDeletePoint: (id: string) => void;
   onDeleteSegment: (id: string) => void;
+  onSetSegmentDimensions: (id: string, length: number, angle: number) => void;
   onMovePoint: (id: string, point: { x: number; z: number }) => void;
   onMoveHandle: (id: string, handle: "in" | "out", point: { x: number; z: number }) => void;
   onInsertPoint: (segmentId: string, point: { x: number; z: number }) => void;
   onSetPointMode: (id: string, mode: "corner" | "smooth" | "split") => void;
+  onBevelPoint: (id: string, kind: "chamfer" | "fillet") => void;
   onClearMeasurement: () => void;
   onAddEntity: (entity: SketchEntity) => void;
   onUpdateEntity: (id: string, patch: Partial<SketchEntity>, message?: string) => void;
   onDeleteEntity: (id: string) => void;
+  onDeriveEntity: (id: string, action: "offset" | "mirror-x" | "mirror-y" | "pattern-linear" | "pattern-circular") => void;
   onSelectEntity: (id: string) => void;
   badgeLabel?: string;
 };
@@ -65,7 +70,7 @@ type PointerAction =
   | { kind: "marquee"; pointerId: number; origin: { x: number; z: number }; current: { x: number; z: number } }
   | { kind: "move-image"; pointerId: number; imageId: string; origin: { x: number; z: number }; current: { x: number; z: number }; start: SketchImage }
   | { kind: "resize-image"; pointerId: number; imageId: string; handle: ResizeHandle; current: { x: number; z: number }; start: SketchImage }
-  | { kind: "entity-draft"; pointerId: number; entityKind: SketchEntity["kind"]; origin: { x: number; z: number }; current: { x: number; z: number } }
+  | { kind: "entity-draft"; pointerId: number; entityKind: DrawableSketchEntityKind; origin: { x: number; z: number }; current: { x: number; z: number } }
   | { kind: "move-entity"; pointerId: number; entityId: string; origin: { x: number; z: number }; current: { x: number; z: number }; start: SketchEntity };
 
 type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
@@ -183,6 +188,7 @@ function orderedPaths(profile: SketchProfile): DisplayPath[] {
   const adjacency = new Map<string, Array<{ pointId: string; segment: SketchSegment }>>();
   profile.points.forEach((point) => adjacency.set(point.id, []));
   const valid = profile.segments.filter((segment) => {
+    if (segment.construction) return false;
     if (!pointById.has(segment.startId) || !pointById.has(segment.endId)) return false;
     adjacency.get(segment.startId)?.push({ pointId: segment.endId, segment });
     adjacency.get(segment.endId)?.push({ pointId: segment.startId, segment });
@@ -431,14 +437,17 @@ export function SketchWorkspace({
   onDeleteImage,
   onDeletePoint,
   onDeleteSegment,
+  onSetSegmentDimensions,
   onMovePoint,
   onMoveHandle,
   onInsertPoint,
   onSetPointMode,
+  onBevelPoint,
   onClearMeasurement,
   onAddEntity,
   onUpdateEntity,
   onDeleteEntity,
+  onDeriveEntity,
   onSelectEntity,
   badgeLabel,
 }: SketchWorkspaceProps) {
@@ -530,8 +539,10 @@ export function SketchWorkspace({
   }, [pointerAction, profile.images]);
   const pointById = useMemo(() => new Map(displayProfile.points.map((point) => [point.id, point])), [displayProfile.points]);
   const paths = useMemo(() => orderedPaths(displayProfile), [displayProfile]);
+  const closedRegionCount = paths.filter((path) => path.closed).length;
   const activePoint = activePointId ? pointById.get(activePointId) ?? null : null;
   const selectedPoint = selected?.kind === "point" ? pointById.get(selected.id) ?? null : null;
+  const selectedSegment = selected?.kind === "segment" ? displayProfile.segments.find((segment) => segment.id === selected.id && !segment.sourceEntityId) ?? null : null;
   const selectedImage = selected?.kind === "image" ? displayImages.find((image) => image.id === selected.id) ?? null : null;
   const isPointSelected = (id: string) => selected?.kind === "point" ? selected.id === id : selected?.kind === "multiple" ? selected.pointIds.includes(id) : false;
   const isSegmentSelected = (id: string) => selected?.kind === "segment" ? selected.id === id : selected?.kind === "multiple" ? selected.segmentIds.includes(id) : false;
@@ -600,11 +611,11 @@ export function SketchWorkspace({
     } else if (tool === "select") {
       event.currentTarget.setPointerCapture(event.pointerId);
       setPointerAction({ kind: "marquee", pointerId: event.pointerId, origin: point, current: point });
-    } else if (tool === "line" || tool === "smooth" || tool === "measure") {
+    } else if (tool === "line" || tool === "construction" || tool === "smooth" || tool === "measure") {
       onPlanePoint(point);
-    } else if (tool === "circle" || tool === "semicircle" || tool === "arc" || tool === "rectangle") {
+    } else if (["circle", "semicircle", "arc", "rectangle", "ellipse", "polygon", "slot"].includes(tool)) {
       event.currentTarget.setPointerCapture(event.pointerId);
-      setPointerAction({ kind: "entity-draft", pointerId: event.pointerId, entityKind: tool, origin: point, current: point });
+      setPointerAction({ kind: "entity-draft", pointerId: event.pointerId, entityKind: tool as DrawableSketchEntityKind, origin: point, current: point });
     }
   };
 
@@ -734,6 +745,9 @@ export function SketchWorkspace({
   return (
     <main className="sketch-workspace-stage">
       <div className="sketch-mode-badge">{badgeLabel ?? (operation === "revolve" ? "Boceto de revolución" : "Vista de boceto")}</div>
+      <div className={`sketch-region-badge ${closedRegionCount ? "ready" : "open"}`}>
+        {closedRegionCount ? `${closedRegionCount} región${closedRegionCount === 1 ? "" : "es"} 3D lista${closedRegionCount === 1 ? "" : "s"}` : "Perfil abierto · cierra un contorno"}
+      </div>
       {operation === "revolve" ? <SketchRevolvePreview positions={revolvePreviewPositions} /> : null}
       <div className="camera-controls sketch-camera-controls" aria-label="Controles de la vista de boceto">
         <button aria-label="Restablecer vista de boceto" onClick={() => { setZoom(1); setPan({ x: 0, z: 0 }); }}><Home size={28} /></button>
@@ -871,14 +885,14 @@ export function SketchWorkspace({
                 return <rect key={entity.id} x={entity.cx - entity.width / 2} y={entity.cz - entity.depth / 2} width={entity.width} height={entity.depth} {...common} />;
               }
               const entityD = entityPathData(entity);
-              return entityD ? <path key={entity.id} d={entityD} {...common} /> : null;
+              return entityD ? <path key={entity.id} d={entityD} fillRule="evenodd" {...common} /> : null;
             })}
           </g>
           <g className="sketch-segments">
             {displayProfile.segments.filter((segment) => !segment.sourceEntityId).map((segment) => (
               <path
                 data-sketch-entity="segment"
-                className={isSegmentSelected(segment.id) ? "selected" : ""}
+                className={`${isSegmentSelected(segment.id) ? "selected" : ""} ${segment.construction ? "construction" : ""}`}
                 key={segment.id}
                 d={segmentData(segment, pointById)}
                 onPointerDown={(event) => {
@@ -907,8 +921,8 @@ export function SketchWorkspace({
               );
             })}
           </g>
-          {activePoint && hover && ["line", "bezier", "smooth"].includes(tool) ? <line className="sketch-preview-line" x1={activePoint.x} y1={activePoint.z} x2={hover.x} y2={hover.z} pointerEvents="none" /> : null}
-          {activePoint && hover && ["line", "bezier", "smooth"].includes(tool) ? (
+          {activePoint && hover && ["line", "construction", "bezier", "smooth"].includes(tool) ? <line className={`sketch-preview-line ${tool === "construction" ? "construction" : ""}`} x1={activePoint.x} y1={activePoint.z} x2={hover.x} y2={hover.z} pointerEvents="none" /> : null}
+          {activePoint && hover && ["line", "construction", "bezier", "smooth"].includes(tool) ? (
             <g className="sketch-segment-dimensions preview" pointerEvents="none" transform={`translate(${(activePoint.x + hover.x) / 2} ${(activePoint.z + hover.z) / 2 - labelOffset})`}>
               {(() => {
                 const pill = dimensionPillSize(previewLabel, screenUnit, 18);
@@ -1053,7 +1067,7 @@ export function SketchWorkspace({
               ))}
             </g>
           ) : null}
-          {hover && ["line", "bezier", "smooth", "measure"].includes(tool) ? <circle className="sketch-cursor-point" cx={hover.x} cy={hover.z} r={hoverPointRadius} pointerEvents="none" /> : null}
+          {hover && ["line", "construction", "bezier", "smooth", "measure"].includes(tool) ? <circle className="sketch-cursor-point" cx={hover.x} cy={hover.z} r={hoverPointRadius} pointerEvents="none" /> : null}
         </svg>
       </section>
       {selectedImage && tool === "select" ? (
@@ -1072,6 +1086,18 @@ export function SketchWorkspace({
           onClose={() => onSelectMany([], [], [])}
           onUpdate={(patch, message) => onUpdateEntity(selected.id, patch, message)}
           onDelete={() => onDeleteEntity(selected.id)}
+          onDerive={(action) => onDeriveEntity(selected.id, action)}
+        />
+      ) : null}
+      {selectedSegment && tool === "select" ? (
+        <SketchSegmentInspector
+          segment={selectedSegment}
+          start={pointById.get(selectedSegment.startId) ?? null}
+          end={pointById.get(selectedSegment.endId) ?? null}
+          accuracy={workspace.accuracy}
+          onClose={() => onSelectMany([], [], [])}
+          onUpdate={(length, angle) => onSetSegmentDimensions(selectedSegment.id, length, angle)}
+          onDelete={() => onDeleteSegment(selectedSegment.id)}
         />
       ) : null}
       {selectedPoint && tool === "select" ? (
@@ -1079,6 +1105,8 @@ export function SketchWorkspace({
           <button type="button" title="Convertir en esquina" onClick={() => onSetPointMode(selectedPoint.id, "corner")}><CornerDownRight /><span>Esquina</span></button>
           <button type="button" title="Convertir en suave" onClick={() => onSetPointMode(selectedPoint.id, "smooth")}><Waves /><span>Suave</span></button>
           <button type="button" title="Separar controles" onClick={() => onSetPointMode(selectedPoint.id, "split")}><Split /><span>Separar</span></button>
+          <button type="button" title="Crear chaflán de 2 mm" onClick={() => onBevelPoint(selectedPoint.id, "chamfer")}><CornerDownRight /><span>Chaflán 2 mm</span></button>
+          <button type="button" title="Crear redondeo de 2 mm" onClick={() => onBevelPoint(selectedPoint.id, "fillet")}><Waves /><span>Redondeo 2 mm</span></button>
         </div>
       ) : null}
       <div className="grid-settings sketch-grid-settings">
@@ -1227,24 +1255,60 @@ function SketchImagePositionField({
   );
 }
 
+function SketchEntityTextField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    const normalized = draft.replace(/[\r\n]+/g, " ").slice(0, 120);
+    setDraft(normalized);
+    if (normalized !== value) onChange(normalized);
+  };
+  return (
+    <label className="sketch-entity-text-field">
+      <span>Contenido</span>
+      <textarea
+        autoFocus
+        value={draft}
+        maxLength={120}
+        rows={3}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            event.currentTarget.blur();
+          }
+        }}
+      />
+    </label>
+  );
+}
+
 function CapEntityInspector({
   entity,
   accuracy,
   onClose,
   onUpdate,
   onDelete,
+  onDerive,
 }: {
   entity: SketchEntity | null;
   accuracy: 1 | 2 | 3;
   onClose: () => void;
   onUpdate: (patch: Partial<SketchEntity>, message?: string) => void;
   onDelete: () => void;
+  onDerive: (action: "offset" | "mirror-x" | "mirror-y" | "pattern-linear" | "pattern-circular") => void;
 }) {
   const labels: Record<SketchEntity["kind"], string> = {
     circle: "Círculo",
     semicircle: "Semicírculo",
     arc: "Arco",
     rectangle: "Rectángulo",
+    ellipse: "Elipse",
+    polygon: "Polígono regular",
+    slot: "Ranura",
+    text: "Texto 3D",
+    vector: "Contorno importado",
   };
   if (!entity) return null;
   const label = labels[entity.kind];
@@ -1275,6 +1339,63 @@ function CapEntityInspector({
               <SketchImageRange label="Alto" value={entity.depth} min={0.1} max={400} accuracy={accuracy} onChange={(depth) => update({ depth }, "Alto de entidad actualizado")} />
             </>
           ) : null}
+          {entity.kind === "ellipse" ? (
+            <>
+              <SketchImageRange label="Radio X" value={entity.radiusX} min={0.05} max={200} accuracy={accuracy} onChange={(radiusX) => update({ radiusX }, "Radio X de elipse actualizado")} />
+              <SketchImageRange label="Radio Y" value={entity.radiusZ} min={0.05} max={200} accuracy={accuracy} onChange={(radiusZ) => update({ radiusZ }, "Radio Y de elipse actualizado")} />
+              <SketchImageRange label="Rotación" value={entity.rotation} min={-180} max={180} accuracy={1} suffix="°" onChange={(rotation) => update({ rotation }, "Rotación de elipse actualizada")} />
+            </>
+          ) : null}
+          {entity.kind === "polygon" ? (
+            <>
+              <SketchImageRange label="Radio" value={entity.radius} min={0.05} max={200} accuracy={accuracy} onChange={(radius) => update({ radius }, "Radio de polígono actualizado")} />
+              <SketchImageRange label="Lados" value={entity.sides} min={3} max={64} accuracy={1} onChange={(sides) => update({ sides: Math.max(3, Math.round(sides)) }, "Cantidad de lados actualizada")} />
+              <SketchImageRange label="Rotación" value={entity.rotation} min={-180} max={180} accuracy={1} suffix="°" onChange={(rotation) => update({ rotation }, "Rotación de polígono actualizada")} />
+            </>
+          ) : null}
+          {entity.kind === "slot" ? (
+            <>
+              <SketchImageRange label="Longitud" value={entity.length} min={0.1} max={400} accuracy={accuracy} onChange={(length) => update({ length: Math.max(entity.width, length) }, "Longitud de ranura actualizada")} />
+              <SketchImageRange label="Ancho" value={entity.width} min={0.1} max={200} accuracy={accuracy} onChange={(width) => update({ width, length: Math.max(width, entity.length) }, "Ancho de ranura actualizado")} />
+              <SketchImageRange label="Rotación" value={entity.rotation} min={-180} max={180} accuracy={1} suffix="°" onChange={(rotation) => update({ rotation }, "Rotación de ranura actualizada")} />
+            </>
+          ) : null}
+          {entity.kind === "text" ? (
+            <>
+              <SketchEntityTextField value={entity.text} onChange={(text) => update({ text }, "Texto de boceto actualizado")} />
+              <label className="sketch-entity-select-field">
+                <span>Tipografía</span>
+                <select value={entity.font} onChange={(event) => update({ font: event.currentTarget.value as typeof entity.font }, "Tipografía actualizada")}>
+                  {SKETCH_TEXT_FONTS.map((font) => <option key={font} value={font}>{font}</option>)}
+                </select>
+              </label>
+              <SketchImageRange label="Tamaño" value={entity.size} min={0.5} max={200} accuracy={accuracy} onChange={(size) => update({ size }, "Tamaño del texto actualizado")} />
+            </>
+          ) : null}
+          {entity.kind === "vector" ? (
+            <div className="sketch-vector-summary">
+              <strong>{entity.name}</strong>
+              <span>{entity.sourceFormat === "svg" ? "SVG vectorial" : "Imagen vectorizada"} · {entity.loops.length} contornos</span>
+            </div>
+          ) : null}
+          {entity.kind === "text" || entity.kind === "vector" ? (
+            <>
+              <SketchImageRange label="Escala X" value={Math.abs(entity.scaleX)} min={0.05} max={10} accuracy={accuracy} onChange={(value) => update({ scaleX: Math.sign(entity.scaleX || 1) * value }, "Escala horizontal actualizada")} />
+              <SketchImageRange label="Escala Y" value={Math.abs(entity.scaleZ)} min={0.05} max={10} accuracy={accuracy} onChange={(value) => update({ scaleZ: Math.sign(entity.scaleZ || 1) * value }, "Escala vertical actualizada")} />
+              <SketchImageRange label="Rotación" value={entity.rotation} min={-180} max={180} accuracy={1} suffix="°" onChange={(rotation) => update({ rotation }, "Rotación actualizada")} />
+              <div className="sketch-entity-transform-actions">
+                <button type="button" onClick={() => update({ scaleX: -entity.scaleX }, "Contorno reflejado horizontalmente")}>Reflejar X</button>
+                <button type="button" onClick={() => update({ scaleZ: -entity.scaleZ }, "Contorno reflejado verticalmente")}>Reflejar Y</button>
+                <button type="button" onClick={() => update({ scaleX: 1, scaleZ: 1, rotation: 0 }, "Transformación restablecida")}>Restablecer</button>
+              </div>
+              <div className="sketch-vector-summary dimensions">
+                <span>{(() => {
+                  const bounds = entityContourBounds(entity);
+                  return `Tamaño final: ${bounds.width.toFixed(accuracy)} × ${bounds.depth.toFixed(accuracy)} mm`;
+                })()}</span>
+              </div>
+            </>
+          ) : null}
           {entity.kind === "semicircle" || entity.kind === "arc" ? (
             <SketchImageRange label="Ángulo inicial" value={entity.startAngle} min={0} max={360} accuracy={1} suffix="°" onChange={(startAngle) => update({ startAngle }, "Ángulo inicial de entidad actualizado")} />
           ) : null}
@@ -1283,6 +1404,56 @@ function CapEntityInspector({
           ) : null}
           <SketchImagePositionField label="Posición X" value={entity.cx} accuracy={accuracy} onChange={(cx) => update({ cx }, "Entidad paramétrica movida")} />
           <SketchImagePositionField label="Posición Y" value={entity.cz} accuracy={accuracy} onChange={(cz) => update({ cz }, "Entidad paramétrica movida")} />
+          <div className="sketch-entity-transform-actions">
+            <button type="button" onClick={() => onDerive("offset")}>Offset +2 mm</button>
+            <button type="button" onClick={() => onDerive("mirror-x")}>Espejo X</button>
+            <button type="button" onClick={() => onDerive("mirror-y")}>Espejo Y</button>
+            <button type="button" onClick={() => onDerive("pattern-linear")}>Patrón lineal ×3</button>
+            <button type="button" onClick={() => onDerive("pattern-circular")}>Patrón circular ×4</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function SketchSegmentInspector({
+  segment,
+  start,
+  end,
+  accuracy,
+  onClose,
+  onUpdate,
+  onDelete,
+}: {
+  segment: SketchSegment;
+  start: SketchPoint | null;
+  end: SketchPoint | null;
+  accuracy: 1 | 2 | 3;
+  onClose: () => void;
+  onUpdate: (length: number, angle: number) => void;
+  onDelete: () => void;
+}) {
+  if (!start || !end) return null;
+  const length = Math.max(0.05, Math.hypot(end.x - start.x, end.z - start.z));
+  const angle = Math.atan2(end.z - start.z, end.x - start.x) * 180 / Math.PI;
+  return (
+    <aside className="shape-inspector sketch-image-inspector cap-entity-inspector" aria-label="Dimensiones del segmento" onPointerDown={(event) => event.stopPropagation()}>
+      <div className="shape-inspector-header">
+        <button className="inspector-header-icon" type="button" aria-label="Cerrar dimensiones" onClick={onClose}><ChevronUp size={26} strokeWidth={2.8} /></button>
+        <strong>{segment.kind === "bezier" ? "Curva Bézier" : segment.kind === "smooth" ? "Curva suave" : "Línea"}</strong>
+        <div className="inspector-header-actions"><button className="inspector-header-icon danger" type="button" aria-label="Eliminar segmento" onClick={onDelete}><Trash2 size={25} strokeWidth={2.2} /></button></div>
+      </div>
+      <div className="property-card">
+        <div className="property-card-header static"><span>Cotas conductoras</span></div>
+        <div className="property-list">
+          <SketchImageRange label="Longitud" value={length} min={0.05} max={1000} accuracy={accuracy} suffix=" mm" onChange={(next) => onUpdate(next, angle)} />
+          <SketchImageRange label="Ángulo" value={angle} min={-180} max={180} accuracy={1} suffix="°" onChange={(next) => onUpdate(length, next)} />
+          <div className="sketch-entity-transform-actions">
+            <button type="button" onClick={() => onUpdate(length, 0)}>Horizontal</button>
+            <button type="button" onClick={() => onUpdate(length, 90)}>Vertical</button>
+            <button type="button" onClick={() => onUpdate(length, angle + 180)}>Invertir</button>
+          </div>
         </div>
       </div>
     </aside>
