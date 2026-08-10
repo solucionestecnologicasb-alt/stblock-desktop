@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import styles from './python-panel.css';
 import PythonHighlighter from './python-highlighter.jsx';
 import PythonReferencePanel from './python-reference-panel.jsx';
+import {loadPreferences, savePreferences} from '../../lib/python/python-storage.js';
 
 // Icono de Python oficial (serpientes entrelazadas)
 const PythonIcon = () => (
@@ -35,6 +36,25 @@ const UnlockIcon = () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
         <path d="M7 11V7a5 5 0 019.9-1"/>
+    </svg>
+);
+
+// Icono de llave (configurar candado con clave)
+const KeyIcon = () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+        <circle cx="7.5" cy="15.5" r="4.5" />
+        <path d="M10.5 12.5L21 2" />
+        <path d="M15 5l4 4" />
+    </svg>
+);
+
+// Icono de candado con ojo de cerradura (bloqueado con clave)
+const LockKeyIcon = () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0110 0v4" />
+        <circle cx="12" cy="16.5" r="1.5" fill="currentColor" stroke="none" />
+        <path d="M12 18v4" />
     </svg>
 );
 
@@ -117,8 +137,11 @@ const PythonPanel = ({
     isOpen,
     pythonCode,
     isLocked,
+    isKeyLocked,
     onToggleOpen,
     onToggleLock,
+    onRequestKeyLock,
+    onRequestKeyUnlock,
     onCodeChange,
     onCopyCode,
     onSyncToBlocks,
@@ -128,6 +151,7 @@ const PythonPanel = ({
 }) => {
     const codeRef = useRef(null);
     const highlighterRef = useRef(null);
+    const editorWrapperRef = useRef(null);
     const syncTimerRef = useRef(null);
     const lastSyncedCodeRef = useRef('');
     const lastTargetRef = useRef(targetName);
@@ -135,6 +159,40 @@ const PythonPanel = ({
     const [showHelp, setShowHelp] = useState(false);
     const [errors, setErrors] = useState([]); // Lista de errores
     const [showErrors, setShowErrors] = useState(true); // Mostrar/ocultar panel de errores
+    // Tamaño de fuente del editor Python (persistido)
+    const [fontSize, setFontSize] = useState(() => {
+        try {
+            const prefs = loadPreferences();
+            return (prefs && prefs.fontSize) || 14;
+        } catch (e) {
+            return 14;
+        }
+    });
+
+    // Medir el ancho del scrollbar del textarea y compensar el ancho del
+    // highlighter para que AMBAS capas envuelvan (wrap) las líneas largas en
+    // el MISMO punto. Si no se compensa, en equipos con scrollbars permanentes
+    // (p. ej. Windows) el textarea pierde ancho de contenido mientras el
+    // highlighter ocupa el ancho completo → las líneas se cortan distinto → el
+    // cursor (textarea) no coincide con lo que se ve (highlighter). En equipos
+    // con scrollbars overlay (p. ej. macOS) el ancho es 0 y no hay problema;
+    // por eso el bug "varía según la máquina".
+    useLayoutEffect(() => {
+        const measureScrollbar = () => {
+            const wrapper = editorWrapperRef.current;
+            if (!wrapper) return;
+            let sbw = 0;
+            // Solo hay textarea en modo edición; en modo lectura el highlighter
+            // muestra su propio scrollbar y no necesita compensación.
+            if (codeRef.current) {
+                sbw = codeRef.current.offsetWidth - codeRef.current.clientWidth;
+            }
+            wrapper.style.setProperty('--editor-sbw', `${sbw}px`);
+        };
+        measureScrollbar();
+        window.addEventListener('resize', measureScrollbar);
+        return () => window.removeEventListener('resize', measureScrollbar);
+    }, [pythonCode, isLocked]);
 
     // Resetear estado cuando cambia el target (sprite/escenario)
     useEffect(() => {
@@ -220,6 +278,19 @@ const PythonPanel = ({
         }
     };
 
+    // Ajustar tamaño de fuente del editor Python (10px - 28px)
+    const updateFontSize = (delta) => {
+        setFontSize(prev => {
+            const next = Math.min(28, Math.max(10, prev + delta));
+            try {
+                savePreferences({fontSize: next});
+            } catch (e) {
+                // Ignorar errores de persistencia
+            }
+            return next;
+        });
+    };
+
     const defaultCode = `# Codigo Python generado por STBlock
 # Arrastra bloques para ver el codigo aqui
 
@@ -234,13 +305,18 @@ const PythonPanel = ({
             {/* Boton de toggle en el borde */}
             <div
                 className={classNames(styles.toggleButton, {
-                    [styles.panelOpen]: isOpen
+                    [styles.panelOpen]: isOpen,
+                    [styles.toggleButtonDisabled]: isKeyLocked
                 })}
-                onClick={onToggleOpen}
-                title={isOpen ? 'Cerrar panel Python' : 'Abrir panel Python'}
+                onClick={isKeyLocked ? undefined : onToggleOpen}
+                title={isKeyLocked
+                    ? 'El candado con clave impide cerrar el panel Python'
+                    : (isOpen ? 'Cerrar panel Python' : 'Abrir panel Python')}
                 role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && onToggleOpen()}
+                tabIndex={isKeyLocked ? -1 : 0}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !isKeyLocked) onToggleOpen();
+                }}
             >
                 <div className={styles.toggleIcon}>
                     <span className={styles.pythonLogo}>Py</span>
@@ -263,7 +339,11 @@ const PythonPanel = ({
                             {isStage ? <StageIcon /> : <SpriteIcon />}
                             {targetName || (isStage ? 'Escenario' : 'Sprite')}
                         </span>
-                        {isLocked ? (
+                        {isKeyLocked ? (
+                            <span className={classNames(styles.modeIndicator, styles.keyLockedIndicator)}>
+                                Bloqueado con clave
+                            </span>
+                        ) : isLocked ? (
                             <span className={styles.modeIndicator}>Solo lectura</span>
                         ) : (
                             <span className={classNames(styles.modeIndicator, styles.editMode)}>
@@ -286,10 +366,26 @@ const PythonPanel = ({
                             className={classNames(styles.actionButton, {
                                 [styles.unlocked]: !isLocked
                             })}
-                            onClick={onToggleLock}
-                            title={isLocked ? 'Desbloquear para editar' : 'Bloquear edicion'}
+                            onClick={isKeyLocked ? undefined : onToggleLock}
+                            disabled={isKeyLocked}
+                            title={isKeyLocked
+                                ? 'El candado con clave fija el modo Python (no puedes cambiar a bloques)'
+                                : (isLocked ? 'Desbloquear para editar' : 'Bloquear edicion')}
                         >
                             {isLocked ? <LockIcon /> : <UnlockIcon />}
+                        </button>
+                        {/* Botón candado con clave (solo sesión) */}
+                        <button
+                            className={classNames(styles.actionButton, {
+                                [styles.keyLockActive]: isKeyLocked
+                            })}
+                            onClick={isKeyLocked ? onRequestKeyUnlock : onRequestKeyLock}
+                            title={isKeyLocked
+                                ? 'Desbloquear modo bloque (ingresa la clave)'
+                                : 'Bloquear modo Python con clave (solo alumnos)'
+                            }
+                        >
+                            {isKeyLocked ? <LockKeyIcon /> : <KeyIcon />}
                         </button>
                         <button
                             className={classNames(styles.actionButton, {
@@ -305,8 +401,9 @@ const PythonPanel = ({
                         </button>
                         <button
                             className={styles.actionButton}
-                            onClick={onToggleOpen}
-                            title="Cerrar panel"
+                            onClick={isKeyLocked ? undefined : onToggleOpen}
+                            disabled={isKeyLocked}
+                            title={isKeyLocked ? 'El candado con clave impide cerrar el panel' : 'Cerrar panel'}
                         >
                             <CloseIcon />
                         </button>
@@ -320,8 +417,27 @@ const PythonPanel = ({
                         <span className={styles.fileName}>
                             {(targetName || (isStage ? 'escenario' : 'sprite')).toLowerCase().replace(/\s+/g, '_')}.py
                         </span>
+                        <div className={styles.zoomControls}>
+                            <button
+                                className={styles.zoomButton}
+                                onClick={() => updateFontSize(-1)}
+                                title="Reducir tamaño del texto"
+                                disabled={fontSize <= 10}
+                            >−</button>
+                            <span className={styles.zoomLabel}>{fontSize}px</span>
+                            <button
+                                className={styles.zoomButton}
+                                onClick={() => updateFontSize(1)}
+                                title="Aumentar tamaño del texto"
+                                disabled={fontSize >= 28}
+                            >+</button>
+                        </div>
                     </div>
-                    <div className={styles.editorWrapper}>
+                    <div
+                        ref={editorWrapperRef}
+                        className={styles.editorWrapper}
+                        style={{'--py-font-size': `${fontSize}px`}}
+                    >
                         {/* Capa de syntax highlighting (siempre visible) */}
                         <div
                             ref={highlighterRef}
@@ -330,7 +446,7 @@ const PythonPanel = ({
                             })}
                         >
                             <PythonHighlighter
-                                code={pythonCode || defaultCode}
+                                code={isLocked ? (pythonCode || defaultCode) : pythonCode}
                                 showLineNumbers={true}
                                 errorLines={errorLines}
                                 className={classNames(styles.highlighterLayer, {
@@ -343,7 +459,7 @@ const PythonPanel = ({
                             <textarea
                                 ref={codeRef}
                                 className={`${styles.editorTextarea} python-editor-textarea no-vm-keyboard`}
-                                value={pythonCode || defaultCode}
+                                value={pythonCode}
                                 onChange={handleCodeEdit}
                                 onScroll={handleScroll}
                                 onKeyDown={(e) => {
@@ -380,6 +496,37 @@ const PythonPanel = ({
                                 placeholder="# Escribe codigo Python..."
                             />
                         )}
+                        {/* Botones de zoom flotantes (estilo bloques) */}
+                        <div className={styles.floatingZoomControls}>
+                            <button
+                                className={styles.floatingZoomButton}
+                                onClick={() => updateFontSize(1)}
+                                title="Aumentar tamaño del texto"
+                                disabled={fontSize >= 28}
+                            >
+                                +
+                            </button>
+                            <button
+                                className={styles.floatingZoomButton}
+                                onClick={() => {
+                                    setFontSize(14);
+                                    try {
+                                        savePreferences({fontSize: 14});
+                                    } catch (e) {}
+                                }}
+                                title="Restablecer zoom"
+                            >
+                                ⟲
+                            </button>
+                            <button
+                                className={styles.floatingZoomButton}
+                                onClick={() => updateFontSize(-1)}
+                                title="Reducir tamaño del texto"
+                                disabled={fontSize <= 10}
+                            >
+                                −
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -442,11 +589,13 @@ const PythonPanel = ({
                 <div className={styles.footer}>
                     <InfoIcon />
                     <span className={styles.footerInfo}>
-                        {isLocked
-                            ? 'Arrastra bloques para generar código • Usa la bandera verde para ejecutar'
-                            : errors.length > 0
-                                ? `${errors.length} error(es) encontrado(s) - Revisa tu código`
-                                : 'Escribe código y los bloques se crean automáticamente'
+                        {isKeyLocked
+                            ? 'Modo solo Python con candado • Los bloques están bloqueados, ingresa la clave para salir'
+                            : isLocked
+                                ? 'Arrastra bloques para generar código • Usa la bandera verde para ejecutar'
+                                : errors.length > 0
+                                    ? `${errors.length} error(es) encontrado(s) - Revisa tu código`
+                                    : 'Escribe código y los bloques se crean automáticamente'
                         }
                     </span>
                 </div>
@@ -459,8 +608,11 @@ PythonPanel.propTypes = {
     isOpen: PropTypes.bool,
     pythonCode: PropTypes.string,
     isLocked: PropTypes.bool,
+    isKeyLocked: PropTypes.bool,
     onToggleOpen: PropTypes.func,
     onToggleLock: PropTypes.func,
+    onRequestKeyLock: PropTypes.func,
+    onRequestKeyUnlock: PropTypes.func,
     onCodeChange: PropTypes.func,
     onCopyCode: PropTypes.func,
     onSyncToBlocks: PropTypes.func,
@@ -473,6 +625,9 @@ PythonPanel.defaultProps = {
     isOpen: false,
     pythonCode: '',
     isLocked: true,
+    isKeyLocked: false,
+    onRequestKeyLock: () => {},
+    onRequestKeyUnlock: () => {},
     isProgrammingMode: true,
     targetName: 'Sprite',
     isStage: false

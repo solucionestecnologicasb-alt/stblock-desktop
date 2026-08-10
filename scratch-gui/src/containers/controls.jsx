@@ -5,6 +5,7 @@ import VM from 'scratch-vm';
 import {connect} from 'react-redux';
 
 import ControlsComponent from '../components/controls/controls.jsx';
+import classroomController from '../lib/classroom/classroom-controller';
 
 import {
     setDebugArmed,
@@ -24,27 +25,58 @@ class Controls extends React.Component {
     }
     handleGreenFlagClick (e) {
         e.preventDefault();
-        if (e.shiftKey) {
-            this.props.vm.setTurboMode(!this.props.turbo);
+        const classroomState = classroomController.getState();
+        if (classroomState.active && classroomState.role === 'servidor') {
+            classroomController.runClass();
         } else {
-            if (!this.props.isStarted) {
-                this.props.vm.start();
-            }
-            this.props.vm.greenFlag();
+            if (e.shiftKey) {
+                this.props.vm.setTurboMode(!this.props.turbo);
+            } else {
+                if (!this.props.isStarted) {
+                    this.props.vm.start();
+                }
+                
+                if (classroomState.active && classroomState.role === 'cliente') {
+                    const vm = this.props.vm;
+                    vm.runtime.stopAll();
+                    vm.runtime.emit('PROJECT_START');
+                    vm.runtime.ioDevices.clock.resetProjectTimer();
+                    vm.runtime.targets.forEach(target => target.clearEdgeActivatedValues());
+                    
+                    const assignments = classroomState.assignments || {};
+                    const myId = classroomState.clientId;
+                    
+                    for (let i = 0; i < vm.runtime.targets.length; i++) {
+                        const target = vm.runtime.targets[i];
+                        const isAssignedToMe = assignments[target.getName()] === myId;
+                        if (isAssignedToMe) {
+                            target.onGreenFlag();
+                            vm.runtime.startHats('event_whenflagclicked', null, target);
+                        }
+                    }
+                } else {
+                    this.props.vm.greenFlag();
+                }
 
-            // Si debug está armado, reactivar debug y comenzar stepping controlado
-            if (this.props.debugArmed) {
-                this.props.vm.setDebugMode(this.props.debugSpeed);
-                this.props.vm.startDebug();
-                this.props.onDebugActive(true);
+                // Si debug está armado, reactivar debug y comenzar stepping controlado
+                if (this.props.debugArmed) {
+                    this.props.vm.setDebugMode(this.props.debugSpeed);
+                    this.props.vm.startDebug();
+                    this.props.onDebugActive(true);
+                }
             }
         }
     }
     handleStopAllClick (e) {
         e.preventDefault();
-        // stopAll() ya desactiva debug mode internamente
-        // DEBUG_MODE_DEACTIVATED event limpia el estado Redux automáticamente
-        this.props.vm.stopAll();
+        const classroomState = classroomController.getState();
+        if (classroomState.active && classroomState.role === 'servidor') {
+            classroomController.stopClass();
+        } else {
+            // stopAll() ya desactiva debug mode internamente
+            // DEBUG_MODE_DEACTIVATED event limpia el estado Redux automáticamente
+            this.props.vm.stopAll();
+        }
     }
     handleDebugClick (e) {
         e.preventDefault();

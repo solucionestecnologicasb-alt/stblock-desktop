@@ -59,6 +59,52 @@ def al_presionar_derecha():
                 params: [
                     { name: 'MENSAJE', type: 'texto', desc: 'Nombre del mensaje' }
                 ]
+            },
+            {
+                name: 'Enviar mensaje y esperar',
+                python: 'enviar_mensaje_y_esperar("nombre")',
+                description: 'Envía un mensaje y espera a que todos terminen',
+                example: `enviar_mensaje_y_esperar("animacion")
+sprite.decir("¡La animación terminó!")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del mensaje a enviar' }
+                ]
+            },
+            {
+                name: 'Al cambiar fondo',
+                python: '@cuando_fondo_cambia_a("fondo")\ndef al_cambiar_fondo():',
+                description: 'Ejecuta el código cuando el fondo cambia a uno específico',
+                example: `@cuando_fondo_cambia_a("noche")
+def al_cambiar_fondo():
+    sprite.decir("Se hizo de noche")
+    sprite.esconder()`,
+                params: [
+                    { name: 'fondo', type: 'texto', desc: 'Nombre del fondo que dispara el evento' }
+                ]
+            },
+            {
+                name: 'Cuando mayor que',
+                python: '@cuando_mayor_que("timer", valor)\ndef al_superar_valor():',
+                description: 'Ejecuta el código cuando un valor supera el número indicado',
+                example: `@cuando_mayor_que("timer", 10)
+def al_superar_valor():
+    sprite.decir("¡Se acabó el tiempo!")`,
+                params: [
+                    { name: 'medida', type: 'texto', desc: '"timer" (cronómetro)' },
+                    { name: 'valor', type: 'número', desc: 'Valor a superar' }
+                ]
+            },
+            {
+                name: 'Al comenzar como clon',
+                python: '@cuando_comience_como_clon\ndef al_clonar():',
+                description: 'Ejecuta el código cuando este sprite se clona',
+                example: `crear_clon("mi_mismo")
+@cuando_comience_como_clon
+def al_clonar():
+    sprite.decir("¡Soy un clon!")
+    esperar(2)
+    borrar_este_clon()`,
+                params: []
             }
         ]
     },
@@ -199,6 +245,49 @@ sprite.cambiar_y(-10)  # Mover abajo`,
                 description: 'Obtiene la dirección actual del sprite',
                 example: `angulo = sprite.direccion`,
                 params: []
+            },
+            {
+                name: 'Ir a',
+                python: 'sprite.ir_a("_mouse_")',
+                description: 'Va a la posición de un objeto (ratón u otro sprite)',
+                example: `sprite.ir_a("_mouse_")   # Ir donde está el ratón
+sprite.ir_a("enemigo")    # Ir a la posición de otro sprite
+sprite.ir_a("_random_")   # Posición aleatoria`,
+                params: [
+                    { name: 'destino', type: 'texto', desc: '"_mouse_", "_random_" o nombre de otro sprite' }
+                ]
+            },
+            {
+                name: 'Deslizar a',
+                python: 'sprite.deslizar_a("_mouse_", segundos)',
+                description: 'Se desliza suavemente hasta un objeto en un tiempo',
+                example: `sprite.deslizar_a("_mouse_", 1)   # Desliza al ratón en 1s
+sprite.deslizar_a("enemigo", 2)  # Desliza a otro sprite`,
+                params: [
+                    { name: 'destino', type: 'texto', desc: '"_mouse_", "_random_" o nombre de otro sprite' },
+                    { name: 'segundos', type: 'número', desc: 'Duración del deslizamiento' }
+                ]
+            },
+            {
+                name: 'Apuntar hacia',
+                python: 'sprite.apuntar_hacia("_mouse_")',
+                description: 'Gira el sprite para apuntar hacia un objeto',
+                example: `sprite.apuntar_hacia("_mouse_")
+sprite.apuntar_hacia("enemigo")`,
+                params: [
+                    { name: 'objetivo', type: 'texto', desc: '"_mouse_" o nombre de otro sprite' }
+                ]
+            },
+            {
+                name: 'Fijar estilo de rotación',
+                python: 'sprite.fijar_estilo_rotacion("360")',
+                description: 'Controla cómo rota el sprite',
+                example: `sprite.fijar_estilo_rotacion("360")       # Rota libremente
+sprite.fijar_estilo_rotacion("left-right")  # Solo izquierda/derecha
+sprite.fijar_estilo_rotacion("none")        # No rota`,
+                params: [
+                    { name: 'estilo', type: 'texto', desc: '"360", "left-right" o "none"' }
+                ]
             }
         ]
     },
@@ -304,6 +393,117 @@ sprite.fijar_tamaño(50)   # Mitad de tamaño`,
                 example: `if sprite.tamaño > 100:
     sprite.decir("Soy grande")`,
                 params: []
+            },
+            {
+                name: 'Pensar por segundos',
+                python: 'sprite.pensar("mensaje", segundos)',
+                description: 'Muestra un bocadillo de pensamiento por un tiempo',
+                example: `sprite.pensar("¿Qué hacer...?", 2)`,
+                params: [
+                    { name: 'mensaje', type: 'texto', desc: 'Texto del pensamiento' },
+                    { name: 'segundos', type: 'número', desc: 'Duración' }
+                ]
+            },
+            {
+                name: 'Cambiar efecto',
+                python: 'sprite.cambiar_efecto("color", valor)',
+                description: 'Cambia un efecto gráfico del sprite',
+                example: `sprite.cambiar_efecto("color", 25)   # Cambia el color
+sprite.cambiar_efecto("ghost", 50)    # Hace más transparente
+sprite.cambiar_efecto("brightness", -20)`,
+                params: [
+                    { name: 'efecto', type: 'texto', desc: '"color", "ghost", "brightness", "saturation" o "fisheye"' },
+                    { name: 'valor', type: 'número', desc: 'Cantidad a cambiar' }
+                ]
+            },
+            {
+                name: 'Fijar efecto',
+                python: 'sprite.fijar_efecto("ghost", valor)',
+                description: 'Establece el valor de un efecto gráfico',
+                example: `sprite.fijar_efecto("ghost", 100)   # Totalmente invisible
+sprite.fijar_efecto("color", 0)     # Color normal`,
+                params: [
+                    { name: 'efecto', type: 'texto', desc: '"color", "ghost", "brightness", "saturation" o "fisheye"' },
+                    { name: 'valor', type: 'número', desc: 'Valor del efecto (0-100)' }
+                ]
+            },
+            {
+                name: 'Ir a capa',
+                python: 'sprite.ir_a_capa("front")',
+                description: 'Lleva el sprite al frente o al fondo',
+                example: `sprite.ir_a_capa("front")   # Al frente
+sprite.ir_a_capa("back")    # Al fondo`,
+                params: [
+                    { name: 'capa', type: 'texto', desc: '"front" o "back"' }
+                ]
+            },
+            {
+                name: 'Cambiar capa',
+                python: 'sprite.cambiar_capa("backward", capas)',
+                description: 'Mueve el sprite hacia delante o atrás N capas',
+                example: `sprite.cambiar_capa("forward", 1)  # Una capa al frente
+sprite.cambiar_capa("backward", 2) # Dos capas al fondo`,
+                params: [
+                    { name: 'direccion', type: 'texto', desc: '"forward" o "backward"' },
+                    { name: 'capas', type: 'número', desc: 'Número de capas a mover' }
+                ]
+            }
+        ]
+    },
+    escenario: {
+        name: 'Escenario',
+        icon: '🖼️',
+        color: '#0BBD8C',
+        description: 'Bloques para cambiar el fondo y conocer el escenario',
+        blocks: [
+            {
+                name: 'Cambiar fondo',
+                python: 'escenario.cambiar_fondo("nombre")',
+                description: 'Cambia el fondo del escenario al que indiques',
+                example: `escenario.cambiar_fondo("fondo1")
+escenario.cambiar_fondo("espacio")
+escenario.cambiar_fondo("cueva")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del fondo a mostrar' }
+                ]
+            },
+            {
+                name: 'Siguiente fondo',
+                python: 'escenario.siguiente_fondo()',
+                description: 'Cambia al siguiente fondo de la lista',
+                example: `for _ in range(10):
+    escenario.siguiente_fondo()
+    esperar(0.5)`,
+                params: []
+            },
+            {
+                name: 'Nombre del fondo',
+                python: 'escenario.fondo_nombre',
+                description: 'Obtiene el nombre del fondo actual',
+                example: `if escenario.fondo_nombre == "fondo1":
+    sprite.decir("Estamos en el primer fondo")`,
+                params: []
+            },
+            {
+                name: 'Número del fondo',
+                python: 'escenario.fondo_numero',
+                description: 'Obtiene el número del fondo actual',
+                example: `numero = escenario.fondo_numero`,
+                params: []
+            },
+            {
+                name: 'Ancho del escenario',
+                python: 'escenario.ancho',
+                description: 'Obtiene el ancho del escenario en pasos',
+                example: `mitad = escenario.ancho / 2`,
+                params: []
+            },
+            {
+                name: 'Alto del escenario',
+                python: 'escenario.alto',
+                description: 'Obtiene el alto del escenario en pasos',
+                example: `centro_y = escenario.alto / 2`,
+                params: []
             }
         ]
     },
@@ -362,6 +562,35 @@ sprite.decir("Ya terminó el sonido")`,
                 python: 'sonido.volumen',
                 description: 'Obtiene el volumen actual',
                 example: `vol = sonido.volumen`,
+                params: []
+            },
+            {
+                name: 'Cambiar efecto de sonido',
+                python: 'sonido.cambiar_efecto("pitch", valor)',
+                description: 'Cambia un efecto del sonido (tono o balance)',
+                example: `sonido.cambiar_efecto("pitch", 20)   # Sube el tono
+sonido.cambiar_efecto("pan", -50)     # Suena más a la izquierda`,
+                params: [
+                    { name: 'efecto', type: 'texto', desc: '"pitch" o "pan"' },
+                    { name: 'valor', type: 'número', desc: 'Cantidad a cambiar' }
+                ]
+            },
+            {
+                name: 'Fijar efecto de sonido',
+                python: 'sonido.fijar_efecto("pan", valor)',
+                description: 'Establece el valor de un efecto de sonido',
+                example: `sonido.fijar_efecto("pitch", 0)   # Tono normal
+sonido.fijar_efecto("pan", 100)  # Suena a la derecha`,
+                params: [
+                    { name: 'efecto', type: 'texto', desc: '"pitch" o "pan"' },
+                    { name: 'valor', type: 'número', desc: 'Valor del efecto' }
+                ]
+            },
+            {
+                name: 'Quitar efectos de sonido',
+                python: 'sonido.quitar_efectos()',
+                description: 'Elimina todos los efectos de sonido',
+                example: `sonido.quitar_efectos()`,
                 params: []
             }
         ]
@@ -569,6 +798,82 @@ sprite.decir("Hola " + respuesta)`,
                 description: 'Reinicia el cronómetro a 0',
                 example: `reiniciar_cronometro()`,
                 params: []
+            },
+            {
+                name: 'Tocando color',
+                python: 'sprite.tocando_color("#ff0000")',
+                description: 'Detecta si el sprite toca un color específico',
+                example: `if sprite.tocando_color("#ff0000"):
+    sprite.decir("¡Estoy tocando algo rojo!")`,
+                params: [
+                    { name: 'color', type: 'texto', desc: 'Color en formato #RRGGBB' }
+                ]
+            },
+            {
+                name: 'Color tocando color',
+                python: 'sprite.color_tocando_color("#fff", "#000")',
+                description: 'Detecta si un color del sprite toca otro color',
+                example: `if sprite.color_tocando_color("#000000", "#ff0000"):
+    sprite.decir("El negro toca el rojo")`,
+                params: [
+                    { name: 'color1', type: 'texto', desc: 'Color del sprite' },
+                    { name: 'color2', type: 'texto', desc: 'Color a detectar' }
+                ]
+            },
+            {
+                name: 'Fijar modo arrastre',
+                python: 'sprite.fijar_modo_arrastre("arrastrable")',
+                description: 'Permite o impide arrastrar el sprite con el ratón',
+                example: `sprite.fijar_modo_arrastre("arrastrable")
+sprite.fijar_modo_arrastre("no arrastrable")`,
+                params: [
+                    { name: 'modo', type: 'texto', desc: '"arrastrable" o "no arrastrable"' }
+                ]
+            },
+            {
+                name: 'Obtener de',
+                python: 'obtener_de("x position", "enemigo")',
+                description: 'Obtiene una propiedad de otro sprite o del escenario',
+                example: `x_enemigo = obtener_de("x position", "enemigo")
+vida_enemigo = obtener_de("health", "enemigo")
+nombre_fondo = obtener_de("backdrop name", "_stage_")`,
+                params: [
+                    { name: 'propiedad', type: 'texto', desc: '"x position", "y position", "direction", "size", "health" o "costume name"' },
+                    { name: 'objeto', type: 'texto', desc: 'Nombre del sprite o "_stage_"' }
+                ]
+            },
+            {
+                name: 'Fecha actual',
+                python: 'fecha_actual("hour")',
+                description: 'Obtiene la hora, fecha o año actual',
+                example: `hora = fecha_actual("hour")
+minuto = fecha_actual("minute")
+anio = fecha_actual("year")`,
+                params: [
+                    { name: 'parte', type: 'texto', desc: '"year", "month", "date", "day of week", "hour", "minute" o "second"' }
+                ]
+            },
+            {
+                name: 'Velocidad del ratón',
+                python: 'raton.velocidad',
+                description: 'Obtiene la velocidad de movimiento del ratón',
+                example: `if raton.velocidad > 50:
+    sprite.decir("¡Raton muy rapido!")`,
+                params: []
+            },
+            {
+                name: 'Posición X anterior del ratón',
+                python: 'raton.x_anterior',
+                description: 'Obtiene la posición X del ratón en el frame anterior',
+                example: `dx = raton.x - raton.x_anterior`,
+                params: []
+            },
+            {
+                name: 'Posición Y anterior del ratón',
+                python: 'raton.y_anterior',
+                description: 'Obtiene la posición Y del ratón en el frame anterior',
+                example: `dy = raton.y - raton.y_anterior`,
+                params: []
             }
         ]
     },
@@ -690,6 +995,40 @@ sprite.ir_a_xy(aleatorio(-200, 200), 0)`,
                 params: [
                     { name: 'num', type: 'número', desc: 'Número' }
                 ]
+            },
+            {
+                name: 'Unir',
+                python: 'unir("texto1", "texto2")',
+                description: 'Une dos textos en uno solo',
+                example: `mensaje = unir("Hola ", "mundo")  # "Hola mundo"
+nombre_completo = unir(nombre, apellido)
+sprite.decir(unir("Tienes ", str(puntos)) + " puntos")`,
+                params: [
+                    { name: 'texto1', type: 'texto', desc: 'Primer texto' },
+                    { name: 'texto2', type: 'texto', desc: 'Segundo texto' }
+                ]
+            },
+            {
+                name: 'Letra de',
+                python: 'letra_de(posicion, "texto")',
+                description: 'Obtiene una letra de un texto por su posición',
+                example: `primera = letra_de(1, "hola")   # "h"
+segunda = letra_de(2, "hola")   # "o"`,
+                params: [
+                    { name: 'posicion', type: 'número', desc: 'Posición de la letra (empieza en 1)' },
+                    { name: 'texto', type: 'texto', desc: 'Texto de donde extraer' }
+                ]
+            },
+            {
+                name: 'Longitud',
+                python: 'longitud("texto")',
+                description: 'Cuenta cuántos caracteres tiene un texto',
+                example: `n = longitud("hola")  # 4
+if longitud(respuesta) > 10:
+    sprite.decir("Respuesta larga")`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto a medir' }
+                ]
             }
         ]
     },
@@ -802,6 +1141,57 @@ ultimo = inventario[len(inventario)]`,
                 example: `if "espada" in inventario:
     sprite.decir("¡Tienes espada!")`,
                 params: []
+            },
+            {
+                name: 'Insertar en lista',
+                python: 'lista.insertar(indice, elemento)',
+                description: 'Inserta un elemento en una posición específica',
+                example: `inventario.insertar(1, "escudo")  # Inserta al inicio
+inventario.insertar(3, "poción")  # Inserta en la posición 3`,
+                params: [
+                    { name: 'indice', type: 'número', desc: 'Posición (empieza en 1)' },
+                    { name: 'elemento', type: 'cualquiera', desc: 'Elemento a insertar' }
+                ]
+            },
+            {
+                name: 'Reemplazar elemento',
+                python: 'lista[indice] = elemento',
+                description: 'Sustituye el elemento de una posición',
+                example: `inventario[1] = "espada mágica"
+inventario[2] = "poción grande"`,
+                params: [
+                    { name: 'indice', type: 'número', desc: 'Posición (empieza en 1)' },
+                    { name: 'elemento', type: 'cualquiera', desc: 'Nuevo elemento' }
+                ]
+            },
+            {
+                name: 'Índice de elemento',
+                python: 'lista.indice_de(elemento)',
+                description: 'Busca la posición de un elemento',
+                example: `pos = inventario.indice_de("espada")
+if pos > 0:
+    sprite.decir("La espada está en: " + str(pos))`,
+                params: [
+                    { name: 'elemento', type: 'cualquiera', desc: 'Elemento a buscar' }
+                ]
+            },
+            {
+                name: 'Mostrar lista',
+                python: 'mostrar_lista("nombre")',
+                description: 'Muestra la lista en el escenario',
+                example: `mostrar_lista("inventario")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre de la lista' }
+                ]
+            },
+            {
+                name: 'Ocultar lista',
+                python: 'ocultar_lista("nombre")',
+                description: 'Oculta la lista del escenario',
+                example: `ocultar_lista("inventario")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre de la lista' }
+                ]
             }
         ]
     },
@@ -1013,7 +1403,12 @@ if calcular_distancia() < 50:
             { name: 'Porcentaje', python: 'porcentaje(parte, total)', description: 'Calcula porcentaje', example: 'pct = porcentaje(25, 200)', params: [{ name: 'parte', type: 'numero', desc: 'Parte' }, { name: 'total', type: 'numero', desc: 'Total' }] },
             { name: 'Signo', python: 'signo(valor)', description: 'Signo de un numero (-1, 0, 1)', example: 's = signo(-5)', params: [{ name: 'valor', type: 'numero', desc: 'Numero' }] },
             { name: 'Redondear decimales', python: 'redondear_decimales(valor, decimales)', description: 'Redondea a N decimales', example: 'precio = redondear_decimales(19.567, 2)', params: [{ name: 'valor', type: 'numero', desc: 'Numero' }, { name: 'decimales', type: 'numero', desc: 'Decimales' }] },
-            { name: 'Reemplazar texto', python: 'reemplazar_texto(texto, buscar, reemplazar)', description: 'Reemplaza ocurrencias en texto', example: 'texto = reemplazar_texto("Hola mundo", "mundo", "Python")', params: [{ name: 'texto', type: 'texto', desc: 'Texto' }, { name: 'buscar', type: 'texto', desc: 'Buscar' }, { name: 'reemplazar', type: 'texto', desc: 'Reemplazo' }] }
+            { name: 'Reemplazar texto', python: 'reemplazar_texto(texto, buscar, reemplazar)', description: 'Reemplaza ocurrencias en texto', example: 'texto = reemplazar_texto("Hola mundo", "mundo", "Python")', params: [{ name: 'texto', type: 'texto', desc: 'Texto' }, { name: 'buscar', type: 'texto', desc: 'Buscar' }, { name: 'reemplazar', type: 'texto', desc: 'Reemplazo' }] },
+            { name: 'Interpolar', python: 'interpolar(a, b, t)', description: 'Interpola entre a y b con factor t (0-1)', example: 'pos = interpolar(0, 100, 0.5)  # 50', params: [{ name: 'a', type: 'numero', desc: 'Inicio' }, { name: 'b', type: 'numero', desc: 'Fin' }, { name: 't', type: 'numero', desc: 'Progreso 0-1' }] },
+            { name: 'Angulo hacia', python: 'angulo_hacia(x1, y1, x2, y2)', description: 'Angulo entre dos puntos', example: 'a = angulo_hacia(0, 0, 10, 10)', params: [{ name: 'x1', type: 'numero', desc: 'X1' }, { name: 'y1', type: 'numero', desc: 'Y1' }, { name: 'x2', type: 'numero', desc: 'X2' }, { name: 'y2', type: 'numero', desc: 'Y2' }] },
+            { name: 'Contador', python: 'conteo("nombre")', description: 'Cuenta las veces que se ejecuta', example: 'conteo("enemigos_muertos")', params: [{ name: 'nombre', type: 'texto', desc: 'Nombre del contador' }] },
+            { name: 'Delta tiempo', python: 'delta_tiempo()', description: 'Tiempo transcurrido desde el frame anterior', example: 'mov = 5 * delta_tiempo() * 60', params: [] },
+            { name: 'FPS', python: 'fps()', description: 'Fotogramas por segundo actuales', example: 'if fps() < 30:\n    debug.imprimir("Bajo rendimiento")', params: [] }
         ]
     },
     datos_avanzados: {
@@ -1036,7 +1431,10 @@ if calcular_distancia() < 50:
         blocks: [
             { name: 'Emitir evento', python: 'emitir_evento(nombre)', description: 'Dispara un evento personalizado', example: 'emitir_evento("nivel_completado")', params: [{ name: 'nombre', type: 'texto', desc: 'Nombre del evento' }] },
             { name: 'Emitir con datos', python: 'emitir_evento(nombre, datos)', description: 'Evento con datos', example: 'emitir_evento("enemigo_muerto", {"puntos": 100})', params: [{ name: 'nombre', type: 'texto', desc: 'Nombre' }, { name: 'datos', type: 'cualquiera', desc: 'Datos' }] },
-            { name: 'Dato de evento', python: 'dato_evento(nombre)', description: 'Obtiene dato de evento', example: 'puntos = dato_evento("enemigo_muerto")', params: [{ name: 'nombre', type: 'texto', desc: 'Nombre' }] }
+            { name: 'Dato de evento', python: 'dato_evento(nombre)', description: 'Obtiene dato de evento', example: 'puntos = dato_evento("enemigo_muerto")', params: [{ name: 'nombre', type: 'texto', desc: 'Nombre' }] },
+            { name: 'Cada frame', python: '@cada_frame\ndef cada_frame():', description: 'Se ejecuta en cada frame del juego', example: '@cada_frame\ndef cada_frame():\n    sprite.aplicar_gravedad()', params: [] },
+            { name: 'Cada N segundos', python: '@cada_segundos(segundos)\ndef cada_segundo():', description: 'Se ejecuta cada cierto tiempo', example: '@cada_segundos(1)\ndef cada_segundo():\n    sprite.cambiar_salud(-1)', params: [{ name: 'segundos', type: 'numero', desc: 'Intervalo' }] },
+            { name: 'Cuando evento', python: '@cuando_evento("nombre")\ndef al_recibir_evento():', description: 'Se ejecuta al recibir un evento personalizado', example: '@cuando_evento("nivel_inicio")\ndef al_recibir_evento():\n    sprite.mostrar()', params: [{ name: 'nombre', type: 'texto', desc: 'Nombre del evento' }] }
         ]
     },
     estados: {
@@ -1095,7 +1493,9 @@ if calcular_distancia() < 50:
             { name: 'Cambiar gravedad', python: 'fisica.cambiar_gravedad(valor)', description: 'Modifica la gravedad', example: 'fisica.cambiar_gravedad(0.5)', params: [{ name: 'valor', type: 'numero', desc: 'Cambio' }] },
             { name: 'Gravedad actual', python: 'fisica.gravedad', description: 'Gravedad actual', example: 'if fisica.gravedad > 2:\n    debug.imprimir("Alta")', params: [] },
             { name: 'Velocidad terminal', python: 'fisica.fijar_velocidad_terminal(valor)', description: 'Velocidad max de caida', example: 'fisica.fijar_velocidad_terminal(15)', params: [{ name: 'valor', type: 'numero', desc: 'Velocidad max' }] },
-            { name: 'Suelo Y', python: 'fisica.fijar_suelo_y(y)', description: 'Posicion Y del suelo', example: 'fisica.fijar_suelo_y(-150)', params: [{ name: 'y', type: 'numero', desc: 'Posicion Y' }] }
+            { name: 'Suelo Y', python: 'fisica.fijar_suelo_y(y)', description: 'Posicion Y del suelo', example: 'fisica.fijar_suelo_y(-150)', params: [{ name: 'y', type: 'numero', desc: 'Posicion Y' }] },
+            { name: 'Velocidad terminal actual', python: 'fisica.velocidad_terminal', description: 'Velocidad maxima de caida actual', example: 'if fisica.velocidad_terminal > 20:\n    debug.imprimir("Caida rapida")', params: [] },
+            { name: 'Suelo Y actual', python: 'fisica.suelo_y', description: 'Posicion Y del suelo actual', example: 'if sprite.y < fisica.suelo_y:\n    sprite.fijar_y(fisica.suelo_y)', params: [] }
         ]
     },
     fisicas: {
@@ -1117,7 +1517,13 @@ if calcular_distancia() < 50:
             { name: 'Mantener en escenario', python: 'sprite.mantener_en_escenario()', description: 'Mantiene dentro del escenario', example: 'sprite.mantener_en_escenario()', params: [] },
             { name: 'Rapidez', python: 'sprite.rapidez', description: 'Magnitud de velocidad', example: 'if sprite.rapidez > 20:\n    debug.imprimir("Rapido")', params: [] },
             { name: 'Fijar masa', python: 'sprite.fijar_masa(valor)', description: 'Establece la masa', example: 'sprite.fijar_masa(2)', params: [{ name: 'valor', type: 'numero', desc: 'Masa' }] },
-            { name: 'Reiniciar fisicas', python: 'sprite.reiniciar_fisicas()', description: 'Reinicia propiedades fisicas', example: 'sprite.reiniciar_fisicas()', params: [] }
+            { name: 'Reiniciar fisicas', python: 'sprite.reiniciar_fisicas()', description: 'Reinicia propiedades fisicas', example: 'sprite.reiniciar_fisicas()', params: [] },
+            { name: 'Fijar velocidad X', python: 'sprite.fijar_velocidad_x(vx)', description: 'Velocidad horizontal exacta', example: 'sprite.fijar_velocidad_x(5)', params: [{ name: 'vx', type: 'numero', desc: 'Velocidad X' }] },
+            { name: 'Fijar velocidad Y', python: 'sprite.fijar_velocidad_y(vy)', description: 'Velocidad vertical exacta', example: 'sprite.fijar_velocidad_y(-10)', params: [{ name: 'vy', type: 'numero', desc: 'Velocidad Y' }] },
+            { name: 'Fijar aceleracion', python: 'sprite.fijar_aceleracion(ax, ay)', description: 'Aceleracion en X e Y', example: 'sprite.fijar_aceleracion(0, -0.5)  # Gravedad', params: [{ name: 'ax', type: 'numero', desc: 'Aceleracion X' }, { name: 'ay', type: 'numero', desc: 'Aceleracion Y' }] },
+            { name: 'Fijar rebote', python: 'sprite.fijar_rebote(valor)', description: 'Coeficiente de rebote (0-1)', example: 'sprite.fijar_rebote(0.8)', params: [{ name: 'valor', type: 'numero', desc: 'Coeficiente' }] },
+            { name: 'Control aire', python: 'sprite.fijar_control_aire(valor)', description: 'Control del sprite en el aire', example: 'sprite.fijar_control_aire(0.5)', params: [{ name: 'valor', type: 'numero', desc: 'Cantidad de control' }] },
+            { name: 'Rebotar borde escenario', python: 'sprite.rebotar_en_borde_escenario()', description: 'Rebota al tocar el borde del escenario', example: 'sprite.rebotar_en_borde_escenario()', params: [] }
         ]
     },
     camara: {
@@ -1132,7 +1538,15 @@ if calcular_distancia() < 50:
             { name: 'Seguir objetivo', python: 'camara.seguir_objetivo(objetivo, suavidad)', description: 'Sigue a un objetivo', example: 'camara.seguir_objetivo("enemigo", 0.05)', params: [{ name: 'objetivo', type: 'texto', desc: 'Nombre' }, { name: 'suavidad', type: 'numero', desc: 'Suavizado' }] },
             { name: 'Mover', python: 'camara.mover(x, y)', description: 'Desplaza la camara', example: 'camara.mover(10, 0)', params: [{ name: 'x', type: 'numero', desc: 'DX' }, { name: 'y', type: 'numero', desc: 'DY' }] },
             { name: 'Fijar zoom', python: 'camara.fijar_zoom(nivel)', description: 'Nivel de zoom', example: 'camara.fijar_zoom(2)', params: [{ name: 'nivel', type: 'numero', desc: 'Zoom' }] },
-            { name: 'Cambiar zoom', python: 'camara.cambiar_zoom(cambio)', description: 'Modifica el zoom', example: 'camara.cambiar_zoom(0.1)', params: [{ name: 'cambio', type: 'numero', desc: 'Cambio' }] }
+            { name: 'Cambiar zoom', python: 'camara.cambiar_zoom(cambio)', description: 'Modifica el zoom', example: 'camara.cambiar_zoom(0.1)', params: [{ name: 'cambio', type: 'numero', desc: 'Cambio' }] },
+            { name: 'Posicion X camara', python: 'camara.x', description: 'Posicion X de la camara', example: 'if camara.x > 500:\n    camara.fijar_posicion(500, camara.y)', params: [] },
+            { name: 'Posicion Y camara', python: 'camara.y', description: 'Posicion Y de la camara', example: 'y_cam = camara.y', params: [] },
+            { name: 'Zoom camara', python: 'camara.zoom', description: 'Nivel de zoom actual', example: 'if camara.zoom > 3:\n    camara.fijar_zoom(1)', params: [] },
+            { name: 'Mundo a pantalla X', python: 'camara.mundo_a_pantalla_x(x)', description: 'Convierte coord. mundo X a pantalla', example: 'sx = camara.mundo_a_pantalla_x(100)', params: [{ name: 'x', type: 'numero', desc: 'Coordenada mundo' }] },
+            { name: 'Mundo a pantalla Y', python: 'camara.mundo_a_pantalla_y(y)', description: 'Convierte coord. mundo Y a pantalla', example: 'sy = camara.mundo_a_pantalla_y(200)', params: [{ name: 'y', type: 'numero', desc: 'Coordenada mundo' }] },
+            { name: 'Pantalla a mundo X', python: 'camara.pantalla_a_mundo_x(x)', description: 'Convierte coord. pantalla X a mundo', example: 'mx = camara.pantalla_a_mundo_x(240)', params: [{ name: 'x', type: 'numero', desc: 'Coordenada pantalla' }] },
+            { name: 'Pantalla a mundo Y', python: 'camara.pantalla_a_mundo_y(y)', description: 'Convierte coord. pantalla Y a mundo', example: 'my = camara.pantalla_a_mundo_y(180)', params: [{ name: 'y', type: 'numero', desc: 'Coordenada pantalla' }] },
+            { name: 'Colocar en mundo', python: 'sprite.colocar_en_mundo(x, y)', description: 'Coloca el sprite en coordenadas del mundo', example: 'sprite.colocar_en_mundo(500, 300)', params: [{ name: 'x', type: 'numero', desc: 'X del mundo' }, { name: 'y', type: 'numero', desc: 'Y del mundo' }] }
         ]
     },
     ia_enemigos: {
@@ -1148,7 +1562,10 @@ if calcular_distancia() < 50:
             { name: 'Distancia a', python: 'ia.distancia_a(objetivo)', description: 'Distancia al objetivo', example: 'if ia.distancia_a("jugador") < 100:\n    ia.perseguir("jugador", 3)', params: [{ name: 'objetivo', type: 'texto', desc: 'Objetivo' }] },
             { name: 'En rango', python: 'ia.en_rango(objetivo, rango)', description: 'Objetivo en rango?', example: 'if ia.en_rango("jugador", 200):\n    ia.perseguir("jugador", 3)', params: [{ name: 'objetivo', type: 'texto', desc: 'Objetivo' }, { name: 'rango', type: 'numero', desc: 'Rango' }] },
             { name: 'Patrullar X', python: 'ia.patrullar_x(x1, x2, velocidad)', description: 'Patrulla entre puntos', example: 'ia.patrullar_x(-100, 100, 1)', params: [{ name: 'x1', type: 'numero', desc: 'X1' }, { name: 'x2', type: 'numero', desc: 'X2' }, { name: 'velocidad', type: 'numero', desc: 'Velocidad' }] },
-            { name: 'Deambular', python: 'ia.deambular(velocidad)', description: 'Se mueve aleatoriamente', example: 'ia.deambular(1)', params: [{ name: 'velocidad', type: 'numero', desc: 'Velocidad' }] }
+            { name: 'Deambular', python: 'ia.deambular(velocidad)', description: 'Se mueve aleatoriamente', example: 'ia.deambular(1)', params: [{ name: 'velocidad', type: 'numero', desc: 'Velocidad' }] },
+            { name: 'Perseguir si rango', python: 'ia.perseguir_si_rango(objetivo, rango, velocidad)', description: 'Persigue solo si esta en rango', example: 'ia.perseguir_si_rango("jugador", 200, 3)', params: [{ name: 'objetivo', type: 'texto', desc: 'Objetivo' }, { name: 'rango', type: 'numero', desc: 'Rango' }, { name: 'velocidad', type: 'numero', desc: 'Velocidad' }] },
+            { name: 'Mantener distancia', python: 'ia.mantener_distancia(objetivo, min, max, velocidad)', description: 'Mantiene distancia del objetivo', example: 'ia.mantener_distancia("jugador", 50, 200, 1)', params: [{ name: 'objetivo', type: 'texto', desc: 'Objetivo' }, { name: 'min', type: 'numero', desc: 'Dist. minima' }, { name: 'max', type: 'numero', desc: 'Dist. maxima' }, { name: 'velocidad', type: 'numero', desc: 'Velocidad' }] },
+            { name: 'Cerca de', python: 'ia.cerca_de(objetivo, distancia)', description: 'Esta cerca del objetivo?', example: 'if ia.cerca_de("jugador", 30):\n    sprite.atacar_si_toca("jugador")', params: [{ name: 'objetivo', type: 'texto', desc: 'Objetivo' }, { name: 'distancia', type: 'numero', desc: 'Distancia' }] }
         ]
     },
     combate: {
@@ -1166,7 +1583,15 @@ if calcular_distancia() < 50:
             { name: 'Esta vivo', python: 'sprite.esta_vivo()', description: 'Esta vivo?', example: 'if sprite.esta_vivo():\n    sprite.decir("Vivo")', params: [] },
             { name: 'Atacar si toca', python: 'sprite.atacar_si_toca(objetivo)', description: 'Ataca si toca objetivo', example: 'sprite.atacar_si_toca("enemigo")', params: [{ name: 'objetivo', type: 'texto', desc: 'Objetivo' }] },
             { name: 'Hacer invencible', python: 'sprite.hacer_invencible(segundos)', description: 'Invencible por N seg', example: 'sprite.hacer_invencible(2)', params: [{ name: 'segundos', type: 'numero', desc: 'Segundos' }] },
-            { name: 'Colisiona con', python: 'sprite.colisiona_con(objetivo)', description: 'Colisiona con objetivo?', example: 'if sprite.colisiona_con("plataforma"):\n    sprite.fijar_velocidad_y(0)', params: [{ name: 'objetivo', type: 'texto', desc: 'Objetivo' }] }
+            { name: 'Colisiona con', python: 'sprite.colisiona_con(objetivo)', description: 'Colisiona con objetivo?', example: 'if sprite.colisiona_con("plataforma"):\n    sprite.fijar_velocidad_y(0)', params: [{ name: 'objetivo', type: 'texto', desc: 'Objetivo' }] },
+            { name: 'Salud maxima', python: 'sprite.salud_maxima', description: 'Salud maxima actual', example: 'if sprite.salud >= sprite.salud_maxima:\n    sprite.decir("Salud completa")', params: [] },
+            { name: 'Salud porcentaje', python: 'sprite.salud_porcentaje()', description: 'Salud como porcentaje', example: 'barra = sprite.salud_porcentaje()  # 0-100', params: [] },
+            { name: 'Esta muerto', python: 'sprite.esta_muerto()', description: 'Esta muerto el sprite?', example: 'if sprite.esta_muerto():\n    detener_todo()', params: [] },
+            { name: 'Fijar dano ataque', python: 'sprite.fijar_dano_ataque(valor)', description: 'Establece el dano del ataque', example: 'sprite.fijar_dano_ataque(25)', params: [{ name: 'valor', type: 'numero', desc: 'Dano' }] },
+            { name: 'Danar objetivo', python: 'sprite.danar_objetivo(cantidad, objetivo)', description: 'Hace dano a otro sprite', example: 'if sprite.tocando("enemigo"):\n    sprite.danar_objetivo(10, "enemigo")', params: [{ name: 'cantidad', type: 'numero', desc: 'Dano' }, { name: 'objetivo', type: 'texto', desc: 'Objetivo' }] },
+            { name: 'Es invencible', python: 'sprite.es_invencible', description: 'Es invencible?', example: 'if sprite.es_invencible:\n    sprite.decir("No me pueden golpear")', params: [] },
+            { name: 'Retroceso desde', python: 'sprite.retroceso_desde(objetivo, fuerza)', description: 'Empuja al sprite lejos de un objetivo', example: 'if sprite.tocando("enemigo"):\n    sprite.retroceso_desde("enemigo", 15)', params: [{ name: 'objetivo', type: 'texto', desc: 'Origen del golpe' }, { name: 'fuerza', type: 'numero', desc: 'Fuerza del retroceso' }] },
+            { name: 'Revivir', python: 'sprite.revivir(salud)', description: 'Revive al sprite con salud', example: 'if sprite.esta_muerto():\n    esperar(2)\n    sprite.revivir(100)', params: [{ name: 'salud', type: 'numero', desc: 'Salud al revivir' }] }
         ]
     }
 };

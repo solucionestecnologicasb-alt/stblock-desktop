@@ -63,6 +63,7 @@ class TargetPane extends React.Component {
         this.props.vm.postSpriteInfo({rotationStyle});
     }
     handleChangeSpriteName (name) {
+        if (this.props.classroomCanRenameSprite === false) return;
         this.props.vm.renameSprite(this.props.editingTarget, name);
     }
     handleChangeSpriteSize (size) {
@@ -78,6 +79,7 @@ class TargetPane extends React.Component {
         this.props.vm.postSpriteInfo({y});
     }
     handleDeleteSprite (id) {
+        if (this.props.classroomCanDeleteSprite === false) return;
         const restoreSprite = this.props.vm.deleteSprite(id);
         const restoreFun = () => restoreSprite().then(this.handleActivateBlocksTab);
 
@@ -88,6 +90,7 @@ class TargetPane extends React.Component {
 
     }
     handleDuplicateSprite (id) {
+        if (this.props.classroomCanAddSprite === false) return;
         this.props.vm.duplicateSprite(id);
     }
     handleExportSprite (id) {
@@ -106,6 +109,7 @@ class TargetPane extends React.Component {
         }
     }
     handleSurpriseSpriteClick () {
+        if (this.props.classroomCanAddSprite === false) return;
         const surpriseSprites = spriteLibraryContent.filter(sprite =>
             (sprite.tags.indexOf('letters') === -1) && (sprite.tags.indexOf('numbers') === -1)
         );
@@ -115,6 +119,7 @@ class TargetPane extends React.Component {
             .then(this.handleActivateBlocksTab);
     }
     handlePaintSpriteClick () {
+        if (this.props.classroomCanAddSprite === false) return;
         const formatMessage = this.props.intl.formatMessage;
         const emptyItem = emptySprite(
             formatMessage(sharedMessages.sprite, {index: 1}),
@@ -131,6 +136,7 @@ class TargetPane extends React.Component {
         this.props.onActivateTab(BLOCKS_TAB_INDEX);
     }
     handleNewSprite (spriteJSONString) {
+        if (this.props.classroomCanAddSprite === false) return Promise.resolve();
         return this.props.vm.addSprite(spriteJSONString)
             .then(this.handleActivateBlocksTab);
     }
@@ -138,6 +144,7 @@ class TargetPane extends React.Component {
         this.fileInput.click();
     }
     handleSpriteUpload (e) {
+        if (this.props.classroomCanAddSprite === false) return;
         const storage = this.props.vm.runtime.storage;
         this.props.onShowImporting();
         handleFileUpload(e.target, (buffer, fileType, fileName, fileIndex, fileCount) => {
@@ -201,9 +208,14 @@ class TargetPane extends React.Component {
         } else if (dragInfo.dragType === DragConstants.BACKPACK_SPRITE) {
             // TODO storage does not have a way of loading zips right now, and may never need it.
             // So for now just grab the zip manually.
+            if (this.props.classroomCanAddSprite === false) return;
             fetchSprite(dragInfo.payload.bodyUrl)
                 .then(sprite3Zip => this.props.vm.addSprite(sprite3Zip));
         } else if (targetId) {
+            // Modo Aula: no se pueden soltar disfraces/sonidos sobre recursos ajenos.
+            if (this.props.classroomCanEditTargetId && !this.props.classroomCanEditTargetId(targetId)) {
+                return;
+            }
             // Something is being dragged over one of the sprite tiles or the backdrop.
             // Dropping assets like sounds and costumes duplicate the asset on the
             // hovered target. Shared costumes also become the current costume on that target.
@@ -236,6 +248,7 @@ class TargetPane extends React.Component {
     render () {
         /* eslint-disable no-unused-vars */
         const {
+            classroomCanEditTargetId,
             dispatchUpdateRestore,
             isRtl,
             onActivateTab,
@@ -259,9 +272,9 @@ class TargetPane extends React.Component {
                 onChangeSpriteVisibility={this.handleChangeSpriteVisibility}
                 onChangeSpriteX={this.handleChangeSpriteX}
                 onChangeSpriteY={this.handleChangeSpriteY}
-                onDeleteSprite={this.handleDeleteSprite}
+                onDeleteSprite={this.props.classroomCanDeleteSprite === false ? null : this.handleDeleteSprite}
                 onDrop={this.handleDrop}
-                onDuplicateSprite={this.handleDuplicateSprite}
+                onDuplicateSprite={this.props.classroomCanAddSprite === false ? null : this.handleDuplicateSprite}
                 onExportSprite={this.handleExportSprite}
                 onFileUploadClick={this.handleFileUploadClick}
                 onPaintSpriteClick={this.handlePaintSpriteClick}
@@ -280,6 +293,11 @@ const {
 } = TargetPaneComponent.propTypes;
 
 TargetPane.propTypes = {
+    classroomCanAddSprite: PropTypes.bool,
+    classroomCanDeleteSprite: PropTypes.bool,
+    classroomCanRenameSprite: PropTypes.bool,
+    classroomCanEditCurrent: PropTypes.bool,
+    classroomCanEditTargetId: PropTypes.func,
     intl: intlShape.isRequired,
     onCloseImporting: PropTypes.func,
     onShowImporting: PropTypes.func,

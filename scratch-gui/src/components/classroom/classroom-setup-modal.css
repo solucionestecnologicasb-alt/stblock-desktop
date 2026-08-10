@@ -1,0 +1,561 @@
+/**
+ * STBlock - Modo Aula
+ * Estilos del modal de creación / unión a sesión.
+ *
+ * Sigue la lógica visual STBlock:
+ * - Primary: #19663d (verde oscuro)
+ * - Accent: #00b359 (verde brillante)
+ * - Background: #f0f4f8 (gris claro)
+ * - Surface: #ffffff (blanco)
+ * - Text: #3d4f66 (gris azulado)
+ */
+
+/* ═══════════════════════════════════════════════════════════
+   MODAL OVERLAY
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: classroomFadeIn 0.2s ease-out;
+}
+
+@keyframes classroomFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PANEL PRINCIPAL
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-modal {
+    width: 95%;
+    max-width: 560px;
+    background: #f0f4f8;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: classroomSlideUp 0.3s ease-out;
+}
+
+@keyframes classroomSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-header {
+    background: linear-gradient(135deg, #19663d 0%, #0d4a2a 100%);
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid #00b359;
+}
+
+.classroom-header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.classroom-logo {
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    animation: classroomBounce 2.5s ease-in-out infinite;
+}
+
+@keyframes classroomBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+
+.classroom-title-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.classroom-title {
+    color: white;
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.3px;
+}
+
+.classroom-subtitle {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+    margin: 0;
+}
+
+.classroom-btn-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+}
+
+.classroom-btn-icon:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(1.05);
+}
+
+.classroom-btn-close {
+    background: rgba(255, 100, 100, 0.2);
+}
+
+.classroom-btn-close:hover {
+    background: rgba(255, 100, 100, 0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TABS
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-nav {
+    background: white;
+    padding: 0 24px;
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.classroom-nav-tab {
+    padding: 14px 20px;
+    border: none;
+    background: transparent;
+    color: #666;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.classroom-nav-tab:hover {
+    color: #19663d;
+    background: rgba(0, 179, 89, 0.05);
+}
+
+.classroom-nav-tab.active {
+    color: #19663d;
+    font-weight: 600;
+}
+
+.classroom-nav-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #00b359, #19663d);
+    border-radius: 3px 3px 0 0;
+}
+
+.classroom-nav-icon {
+    font-size: 16px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CONTENT
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.classroom-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.classroom-body::-webkit-scrollbar-track {
+    background: #e8f3ed;
+    border-radius: 4px;
+}
+
+.classroom-body::-webkit-scrollbar-thumb {
+    background: #00b359;
+    border-radius: 4px;
+}
+
+.classroom-body::-webkit-scrollbar-thumb:hover {
+    background: #19663d;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CAMPOS DE FORMULARIO
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.classroom-field-row {
+    display: flex;
+    gap: 12px;
+}
+
+.classroom-field-row .classroom-field {
+    flex: 1;
+    min-width: 0;
+}
+
+.classroom-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #19663d;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.classroom-label-icon {
+    font-size: 15px;
+}
+
+.classroom-input {
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: #333;
+    background: white;
+    outline: none;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.classroom-input:focus {
+    border-color: #00b359;
+    box-shadow: 0 0 0 3px rgba(0, 179, 89, 0.12);
+}
+
+.classroom-input::placeholder {
+    color: #aaa;
+}
+
+.classroom-input.code-input {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 6px;
+    text-align: center;
+    color: #19663d;
+    font-family: monospace;
+}
+
+.classroom-select {
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: #333;
+    background: white;
+    outline: none;
+    transition: all 0.2s;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.classroom-select:focus {
+    border-color: #00b359;
+    box-shadow: 0 0 0 3px rgba(0, 179, 89, 0.12);
+}
+
+.classroom-hint {
+    font-size: 12px;
+    color: #888;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.classroom-hint-icon {
+    margin-right: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TARJETAS DE OPCIÓN (alcance)
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-options {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.classroom-option {
+    flex: 1;
+    min-width: 110px;
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.classroom-option:hover {
+    border-color: #00b359;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 179, 89, 0.15);
+}
+
+.classroom-option.selected {
+    border-color: #00b359;
+    background: #f0faf5;
+    box-shadow: 0 0 0 3px rgba(0, 179, 89, 0.12);
+}
+
+.classroom-option-icon {
+    font-size: 26px;
+}
+
+.classroom-option-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+}
+
+.classroom-option-desc {
+    font-size: 11px;
+    color: #888;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BOTONES
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-btn {
+    padding: 13px 24px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: all 0.2s;
+    border: none;
+    font-family: inherit;
+}
+
+.classroom-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.classroom-btn-primary {
+    background: linear-gradient(135deg, #00b359 0%, #19663d 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(0, 179, 89, 0.3);
+    width: 100%;
+}
+
+.classroom-btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 179, 89, 0.4);
+}
+
+.classroom-btn-primary:focus {
+    animation: classroomPulse 1s infinite;
+}
+
+@keyframes classroomPulse {
+    0% { box-shadow: 0 0 0 0 rgba(0, 179, 89, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(0, 179, 89, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 179, 89, 0); }
+}
+
+.classroom-btn-secondary {
+    background: white;
+    color: #19663d;
+    border: 2px solid #e0e0e0;
+}
+
+.classroom-btn-secondary:hover:not(:disabled) {
+    border-color: #00b359;
+    background: #f0faf5;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ESTADO DE CONEXIÓN
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 500;
+    animation: classroomSlideUp 0.2s ease-out;
+}
+
+.classroom-status-icon {
+    font-size: 20px;
+}
+
+.classroom-status-info {
+    background: #e8f3ed;
+    color: #19663d;
+    border: 1px solid #c5e5d2;
+}
+
+.classroom-status-pending {
+    background: #fff8e1;
+    color: #a9791c;
+    border: 1px solid #ffe9a8;
+}
+
+.classroom-status-error {
+    background: #ffe5e5;
+    color: #d63031;
+    border: 1px solid #ffc1c1;
+}
+
+.classroom-status-loading {
+    background: #e8f3ed;
+    color: #19663d;
+    border: 1px solid #c5e5d2;
+}
+
+.classroom-spinner {
+    width: 16px;
+    height: 16px;
+    border: 3px solid #c5e5d2;
+    border-top-color: #00b359;
+    border-radius: 50%;
+    animation: classroomSpin 0.8s linear infinite;
+}
+
+@keyframes classroomSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CÓDIGO DE SESIÓN (generado)
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-code-box {
+    background: #e8f3ed;
+    border: 2px dashed #00b359;
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+}
+
+.classroom-code-label {
+    font-size: 12px;
+    color: #19663d;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.classroom-code-value {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 8px;
+    color: #19663d;
+    font-family: monospace;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INFO / AYUDA
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-tip {
+    background: white;
+    border-left: 4px solid #00b359;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 12px;
+    color: #666;
+    line-height: 1.6;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 600px) {
+    .classroom-modal {
+        width: 98%;
+        max-height: 92vh;
+        border-radius: 12px;
+    }
+
+    .classroom-header {
+        padding: 14px 16px;
+    }
+
+    .classroom-title {
+        font-size: 17px;
+    }
+
+    .classroom-body {
+        padding: 16px;
+    }
+
+    .classroom-field-row {
+        flex-direction: column;
+        gap: 12px;
+    }
+}

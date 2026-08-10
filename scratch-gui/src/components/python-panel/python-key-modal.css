@@ -1,0 +1,190 @@
+/* Python Key Modal - Candado con clave para modo solo Python */
+@import "../../css/colors.css";
+
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: key-modal-fade-in 0.2s ease;
+    backdrop-filter: blur(3px);
+}
+
+@keyframes key-modal-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal {
+    background: #ffffff;
+    border-radius: 16px;
+    width: 430px;
+    max-width: 92vw;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    animation: key-modal-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes key-modal-in {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 20px;
+    background: linear-gradient(135deg, #19663d 0%, #00b359 100%);
+    color: white;
+    position: relative;
+}
+
+.header.locked {
+    background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+}
+
+.header-icon {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+}
+
+.title {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+    flex: 1;
+}
+
+.close-button {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.close-button:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.body {
+    padding: 20px;
+}
+
+.description {
+    color: #4a5568;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 0 0 16px;
+}
+
+.input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: #2d3748;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    margin-bottom: 12px;
+}
+
+.input:focus {
+    border-color: #00b359;
+    box-shadow: 0 0 0 3px rgba(0, 179, 89, 0.15);
+}
+
+.input::placeholder {
+    color: #a0aec0;
+}
+
+.error {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff5f5;
+    border: 1px solid #feb2b2;
+    color: #c53030;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 4px;
+}
+
+.error svg {
+    flex-shrink: 0;
+    color: #e74c3c;
+}
+
+.actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 20px;
+    background: #f7fafc;
+    border-top: 1px solid #edf2f7;
+}
+
+.cancel-button {
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e0;
+    background: #ffffff;
+    color: #4a5568;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.cancel-button:hover {
+    background: #edf2f7;
+}
+
+.confirm-button {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(135deg, #00b359 0%, #19663d 100%);
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.confirm-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(0, 179, 89, 0.3);
+}
+
+.confirm-button:active {
+    transform: translateY(0) scale(0.97);
+}
+
+.confirm-button.unlock {
+    background: linear-gradient(135deg, #e67e22 0%, #c0392b 100%);
+}
+
+.confirm-button.unlock:hover {
+    box-shadow: 0 6px 16px rgba(192, 57, 43, 0.3);
+}

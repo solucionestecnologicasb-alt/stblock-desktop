@@ -11,9 +11,10 @@ import {FormattedMessage} from 'react-intl';
 // react-contextmenu requires unique id to match trigger and context menu
 let contextMenuId = 0;
 
-const SpriteSelectorItem = props => (
-    <ContextMenuTrigger
-        attributes={{
+const SpriteSelectorItem = props => {
+    return (
+        <ContextMenuTrigger
+            attributes={{
             className: classNames(props.className, styles.spriteSelectorItem, {
                 [styles.isSelected]: props.selected
             }),
@@ -29,6 +30,20 @@ const SpriteSelectorItem = props => (
     >
         {typeof props.number === 'undefined' ? null : (
             <div className={styles.number}>{props.number}</div>
+        )}
+        {props.classroomStateActive && (
+            props.classroomOwnerId ? (
+                <div className={classNames(
+                    styles.classroomBadge,
+                    props.classroomIsOwnedByMe ? styles.classroomBadgeOwned : styles.classroomBadgeLocked
+                )}>
+                    {props.classroomIsOwnedByMe ? '💚 Tuyo' : `🔒 ${props.classroomOwnerName}`}
+                </div>
+            ) : (
+                <div className={classNames(styles.classroomBadge, styles.classroomBadgeUnassigned)}>
+                    ❔ Libre
+                </div>
+            )
         )}
         {props.costumeURL ? (
             <div className={styles.spriteImageOuter}>
@@ -86,7 +101,8 @@ const SpriteSelectorItem = props => (
             </ContextMenu>
         ) : null}
     </ContextMenuTrigger>
-);
+    );
+};
 
 SpriteSelectorItem.propTypes = {
     className: PropTypes.string,
@@ -104,7 +120,11 @@ SpriteSelectorItem.propTypes = {
     onMouseLeave: PropTypes.func,
     preventContextMenu: PropTypes.bool,
     selected: PropTypes.bool.isRequired,
-    isDeleteConfirmationModalOpened: PropTypes.bool
+    isDeleteConfirmationModalOpened: PropTypes.bool,
+    classroomStateActive: PropTypes.bool,
+    classroomOwnerId: PropTypes.string,
+    classroomOwnerName: PropTypes.string,
+    classroomIsOwnedByMe: PropTypes.bool
 };
 
 export default SpriteSelectorItem;

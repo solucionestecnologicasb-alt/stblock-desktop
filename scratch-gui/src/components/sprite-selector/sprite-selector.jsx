@@ -42,6 +42,10 @@ const messages = defineMessages({
 
 const SpriteSelectorComponent = function (props) {
     const {
+        canAddSprite,
+        canDeleteSprite,
+        canRenameSprite,
+        canEditCurrent,
         editingTarget,
         hoveredTarget,
         intl,
@@ -67,6 +71,10 @@ const SpriteSelectorComponent = function (props) {
         spriteFileInput,
         sprites,
         stageSize,
+        classroomStateActive,
+        classroomAssignments,
+        classroomRoster,
+        classroomMyId,
         ...componentProps
     } = props;
     let selectedSprite = sprites[selectedId];
@@ -75,6 +83,13 @@ const SpriteSelectorComponent = function (props) {
         selectedSprite = {};
         spriteInfoDisabled = true;
     }
+    // Modo Aula: un recurso ajeno no es editable (bloquea nombre, posición,
+    // tamaño, visibilidad y dirección). Fuera de sesión canEditCurrent es true.
+    const editable = canEditCurrent !== false;
+    spriteInfoDisabled = spriteInfoDisabled || !editable;
+    const nameEditable = canRenameSprite !== false;
+    const canAdd = canAddSprite !== false;
+    const canDelete = canDeleteSprite !== false;
     return (
         <Box
             className={styles.spriteSelector}
@@ -85,6 +100,7 @@ const SpriteSelectorComponent = function (props) {
                 direction={selectedSprite.direction}
                 disabled={spriteInfoDisabled}
                 name={selectedSprite.name}
+                nameDisabled={!nameEditable}
                 rotationStyle={selectedSprite.rotationStyle}
                 size={selectedSprite.size}
                 stageSize={stageSize}
@@ -106,47 +122,57 @@ const SpriteSelectorComponent = function (props) {
                 items={Object.keys(sprites).map(id => sprites[id])}
                 raised={raised}
                 selectedId={selectedId}
-                onDeleteSprite={onDeleteSprite}
+                onDeleteSprite={canDelete ? onDeleteSprite : null}
                 onDrop={onDrop}
-                onDuplicateSprite={onDuplicateSprite}
+                onDuplicateSprite={canAdd ? onDuplicateSprite : null}
                 onExportSprite={onExportSprite}
                 onSelectSprite={onSelectSprite}
+                classroomStateActive={classroomStateActive}
+                classroomAssignments={classroomAssignments}
+                classroomRoster={classroomRoster}
+                classroomMyId={classroomMyId}
             />
-            <ActionMenu
-                className={styles.addButton}
-                img={spriteIcon}
-                moreButtons={[
-                    {
-                        title: intl.formatMessage(messages.addSpriteFromFile),
-                        img: fileUploadIcon,
-                        onClick: onFileUploadClick,
-                        fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .sprite2, .sprite3, .gif',
-                        fileChange: onSpriteUpload,
-                        fileInput: spriteFileInput,
-                        fileMultiple: true
-                    }, {
-                        title: intl.formatMessage(messages.addSpriteFromSurprise),
-                        img: surpriseIcon,
-                        onClick: onSurpriseSpriteClick // TODO need real function for this
-                    }, {
-                        title: intl.formatMessage(messages.addSpriteFromPaint),
-                        img: paintIcon,
-                        onClick: onPaintSpriteClick // TODO need real function for this
-                    }, {
-                        title: intl.formatMessage(messages.addSpriteFromLibrary),
-                        img: searchIcon,
-                        onClick: onNewSpriteClick
-                    }
-                ]}
-                title={intl.formatMessage(messages.addSpriteFromLibrary)}
-                tooltipPlace={isRtl(intl.locale) ? 'right' : 'left'}
-                onClick={onNewSpriteClick}
-            />
+            {canAdd ? (
+                <ActionMenu
+                    className={styles.addButton}
+                    img={spriteIcon}
+                    moreButtons={[
+                        {
+                            title: intl.formatMessage(messages.addSpriteFromFile),
+                            img: fileUploadIcon,
+                            onClick: onFileUploadClick,
+                            fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .sprite2, .sprite3, .gif',
+                            fileChange: onSpriteUpload,
+                            fileInput: spriteFileInput,
+                            fileMultiple: true
+                        }, {
+                            title: intl.formatMessage(messages.addSpriteFromSurprise),
+                            img: surpriseIcon,
+                            onClick: onSurpriseSpriteClick // TODO need real function for this
+                        }, {
+                            title: intl.formatMessage(messages.addSpriteFromPaint),
+                            img: paintIcon,
+                            onClick: onPaintSpriteClick // TODO need real function for this
+                        }, {
+                            title: intl.formatMessage(messages.addSpriteFromLibrary),
+                            img: searchIcon,
+                            onClick: onNewSpriteClick
+                        }
+                    ]}
+                    title={intl.formatMessage(messages.addSpriteFromLibrary)}
+                    tooltipPlace={isRtl(intl.locale) ? 'right' : 'left'}
+                    onClick={onNewSpriteClick}
+                />
+            ) : null}
         </Box>
     );
 };
 
 SpriteSelectorComponent.propTypes = {
+    canAddSprite: PropTypes.bool,
+    canDeleteSprite: PropTypes.bool,
+    canRenameSprite: PropTypes.bool,
+    canEditCurrent: PropTypes.bool,
     editingTarget: PropTypes.string,
     hoveredTarget: PropTypes.shape({
         hoveredSprite: PropTypes.string,
@@ -186,7 +212,11 @@ SpriteSelectorComponent.propTypes = {
             order: PropTypes.number.isRequired
         })
     }),
-    stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired
+    stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired,
+    classroomStateActive: PropTypes.bool,
+    classroomAssignments: PropTypes.object,
+    classroomRoster: PropTypes.array,
+    classroomMyId: PropTypes.string
 };
 
 export default injectIntl(SpriteSelectorComponent);

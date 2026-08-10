@@ -1,0 +1,276 @@
+/**
+ * STBlock - Modo Aula
+ * Panel de directorio deslizante (visible para todos los participantes).
+ */
+
+/* Overlay sutil para bloquear interacción de fondo */
+.classroom-roster-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(2px);
+    z-index: 900;
+    animation: classroomRosterFade 0.2s ease-out;
+}
+
+@keyframes classroomRosterFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Panel deslizante desde la derecha */
+.classroom-roster-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 360px;
+    max-width: 90vw;
+    background: #f0f4f8;
+    z-index: 901;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -8px 0 30px rgba(0, 0, 0, 0.2);
+    animation: classroomRosterSlideIn 0.3s ease-out;
+}
+
+@keyframes classroomRosterSlideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0.5;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.classroom-roster-header {
+    background: linear-gradient(135deg, #19663d 0%, #0d4a2a 100%);
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid #00b359;
+}
+
+.classroom-roster-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.classroom-roster-logo {
+    font-size: 24px;
+}
+
+.classroom-roster-title {
+    color: white;
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.classroom-roster-subtitle {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+    margin: 0;
+}
+
+.classroom-btn-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.classroom-btn-icon:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.classroom-roster-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.classroom-roster-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.classroom-roster-body::-webkit-scrollbar-track {
+    background: #e8f3ed;
+    border-radius: 4px;
+}
+
+.classroom-roster-body::-webkit-scrollbar-thumb {
+    background: #00b359;
+    border-radius: 4px;
+}
+
+.classroom-roster-body::-webkit-scrollbar-thumb:hover {
+    background: #19663d;
+}
+
+.classroom-roster-section {
+    background: white;
+    border-radius: 12px;
+    padding: 14px;
+    border: 1px solid #e8f3ed;
+}
+
+.classroom-roster-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #19663d;
+    margin: 0 0 10px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.classroom-roster-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 4px;
+    border-radius: 8px;
+}
+
+.classroom-roster-item + .classroom-roster-item {
+    border-top: 1px solid #f0f0f0;
+}
+
+.classroom-roster-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.15);
+}
+
+.classroom-roster-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #333;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.classroom-roster-role {
+    background: #e8f3ed;
+    color: #19663d;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: capitalize;
+    flex-shrink: 0;
+}
+
+.classroom-roster-role.servidor {
+    background: #19663d;
+    color: white;
+}
+
+.classroom-roster-role.supervisor {
+    background: #0ea5e9;
+    color: white;
+}
+
+.classroom-roster-role.cliente {
+    background: #e8f3ed;
+    color: #19663d;
+}
+
+.classroom-roster-empty {
+    text-align: center;
+    color: #999;
+    font-size: 12px;
+    padding: 16px;
+}
+
+/* Asignaciones (recurso → dueño) */
+.classroom-roster-assignment {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    font-size: 12px;
+    color: #555;
+}
+
+.classroom-roster-assignment + .classroom-roster-assignment {
+    border-top: 1px solid #f0f0f0;
+}
+
+.classroom-roster-assignment-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.classroom-roster-assignment-target {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+    color: #333;
+}
+
+.classroom-roster-assignment-arrow {
+    color: #00b359;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.classroom-roster-assignment-owner {
+    color: #19663d;
+    font-weight: 600;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+/* Configuración de sesión */
+.classroom-roster-config {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.classroom-roster-config-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: #666;
+}
+
+.classroom-roster-config-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.classroom-roster-config-value {
+    font-weight: 600;
+    color: #19663d;
+}

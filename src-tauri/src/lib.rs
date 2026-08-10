@@ -18,6 +18,10 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 mod arduino_cli;
 use arduino_cli::*;
 
+// Modo Aula: servidor relay WebSocket
+mod classroom_server;
+use classroom_server::*;
+
 // Global storage for open serial ports
 static SERIAL_PORTS: Lazy<Mutex<HashMap<String, Box<dyn SerialPort>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
@@ -310,6 +314,23 @@ async fn fetch_update_policy(url: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("La política de actualización no es JSON válido: {}", e))
 }
 
+// ── Modo Aula: relay WebSocket ──
+
+#[tauri::command]
+async fn classroom_start_server(port: u16) -> Result<String, String> {
+    start_classroom_server(port).await
+}
+
+#[tauri::command]
+async fn classroom_stop_server() -> Result<(), String> {
+    stop_classroom_server().await
+}
+
+#[tauri::command]
+async fn classroom_is_running() -> bool {
+    is_classroom_running().await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -335,7 +356,11 @@ pub fn run() {
             upload_arduino_sketch,
             upload_firmware,
             install_drivers,
-            fetch_update_policy
+            fetch_update_policy,
+            // Modo Aula
+            classroom_start_server,
+            classroom_stop_server,
+            classroom_is_running
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

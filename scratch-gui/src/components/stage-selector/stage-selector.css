@@ -117,3 +117,35 @@ $header-height: calc($stage-menu-height - 2px);
     90% { box-shadow: 0 0 10px #7fff1e; }
     100% { box-shadow: none; }
 }
+
+.classroom-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 8px;
+    font-weight: bold;
+    color: white;
+    z-index: 10;
+    line-height: 1;
+    pointer-events: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    white-space: nowrap;
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.classroom-badge-owned {
+    background-color: #10b981; /* Emerald/Green */
+}
+
+.classroom-badge-locked {
+    background-color: #f59e0b; /* Amber/Orange */
+}
+
+.classroom-badge-unassigned {
+    background-color: #6b7280; /* Gray */
+}
+

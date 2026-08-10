@@ -30,7 +30,11 @@ const SpriteList = function (props) {
         ordering,
         raised,
         selectedId,
-        items
+        items,
+        classroomStateActive,
+        classroomAssignments,
+        classroomRoster,
+        classroomMyId
     } = props;
 
     const isSpriteDrag = draggingType === DragConstants.SPRITE;
@@ -68,6 +72,20 @@ const SpriteList = function (props) {
                         DragConstants.BACKPACK_SOUND,
                         DragConstants.BACKPACK_CODE].includes(draggingType);
 
+                    const ownerId = classroomStateActive && classroomAssignments ? classroomAssignments[sprite.name] : null;
+                    let ownerName = null;
+                    let isOwnedByMe = false;
+
+                    if (ownerId) {
+                        isOwnedByMe = ownerId === classroomMyId;
+                        if (isOwnedByMe) {
+                            ownerName = 'Tuyo';
+                        } else {
+                            const client = (classroomRoster || []).find(c => c.id === ownerId);
+                            ownerName = client ? client.name : 'Profesor';
+                        }
+                    }
+
                     return (
                         <SortableAsset
                             className={classNames(styles.spriteWrapper, {
@@ -96,6 +114,10 @@ const SpriteList = function (props) {
                                 onExportButtonClick={onExportSprite}
                                 withDeleteConfirmation
                                 deleteConfirmationModalPosition={'right'}
+                                classroomStateActive={classroomStateActive}
+                                classroomOwnerId={ownerId}
+                                classroomOwnerName={ownerName}
+                                classroomIsOwnedByMe={isOwnedByMe}
                             />
                         </SortableAsset>
                     );
@@ -134,7 +156,11 @@ SpriteList.propTypes = {
     onSelectSprite: PropTypes.func,
     ordering: PropTypes.arrayOf(PropTypes.number),
     raised: PropTypes.bool,
-    selectedId: PropTypes.string
+    selectedId: PropTypes.string,
+    classroomStateActive: PropTypes.bool,
+    classroomAssignments: PropTypes.object,
+    classroomRoster: PropTypes.array,
+    classroomMyId: PropTypes.string
 };
 
 export default SortableHOC(SpriteList);

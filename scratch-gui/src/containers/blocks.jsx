@@ -117,7 +117,10 @@ class Blocks extends React.Component {
             'recalcWrapperWidth',
             'setBlocks',
             'setLocale',
-            'generateArduinoCode'
+            'generateArduinoCode',
+            'handleZoomIn',
+            'handleZoomOut',
+            'handleZoomReset'
         ]);
         this.ScratchBlocks.prompt = this.handlePromptStart;
         this.ScratchBlocks.statusButtonCallback = this.handleConnectionModalStart;
@@ -534,6 +537,11 @@ class Blocks extends React.Component {
             });
         }
 
+        // Aplicar el estado inicial de modo Python (bloques solo lectura + ocultar toolbox)
+        if (this.props.isPythonEditMode || this.props.workspaceReadOnly) {
+            this.handlePythonEditModeChange(this.props.isPythonEditMode);
+        }
+
         // Generate initial Arduino code after workspace is ready
         if (this.arduinoGenerator && this.props.onCodeGenerated) {
             setTimeout(() => {
@@ -559,6 +567,7 @@ class Blocks extends React.Component {
             this.state.prompt !== nextState.prompt ||
             this.props.isVisible !== nextProps.isVisible ||
             this.props.isPythonEditMode !== nextProps.isPythonEditMode ||
+            this.props.workspaceReadOnly !== nextProps.workspaceReadOnly ||
             this._renderedToolboxXML !== nextProps.toolboxXML ||
             this.props.extensionLibraryVisible !== nextProps.extensionLibraryVisible ||
             this.props.customProceduresVisible !== nextProps.customProceduresVisible ||
@@ -586,6 +595,12 @@ class Blocks extends React.Component {
         // Manejar cambio de modo Python Edit - ocultar/mostrar toolbox a nivel de Blockly
         if (this.props.isPythonEditMode !== prevProps.isPythonEditMode) {
             this.handlePythonEditModeChange(this.props.isPythonEditMode);
+        }
+
+        // Modo Aula: bloquear/desbloquear la edición de bloques al cambiar de recurso
+        // o de sesión (recurso ajeno = solo lectura, recurso propio = editable).
+        if (this.props.workspaceReadOnly !== prevProps.workspaceReadOnly) {
+            this.setWorkspaceReadOnly(this.props.workspaceReadOnly || this.props.isPythonEditMode);
         }
 
         // When trash blocks change, regenerate toolbox XML to include the trash category
@@ -618,6 +633,13 @@ class Blocks extends React.Component {
             if (this.props.stageSize !== prevProps.stageSize) {
                 // force workspace to redraw for the new stage size
                 window.dispatchEvent(new Event('resize'));
+                // Give CSS transition (0.2s ease-in-out) time to finish, then resize again
+                setTimeout(() => {
+                    window.dispatchEvent(new Event('resize'));
+                    if (this.workspace && typeof this.workspace.resize === 'function') {
+                        this.workspace.resize();
+                    }
+                }, 250);
             }
             return;
         }
@@ -677,6 +699,27 @@ class Blocks extends React.Component {
             if (this.toolboxHeader) {
                 this.toolboxHeader.style.width = '';
             }
+        }
+    }
+
+    handleZoomIn () {
+        if (this.workspace && this.workspace.zoomCenter) {
+            this.workspace.zoomCenter(1);
+        }
+    }
+    handleZoomOut () {
+        if (this.workspace && this.workspace.zoomCenter) {
+            this.workspace.zoomCenter(-1);
+        }
+    }
+    handleZoomReset () {
+        if (!this.workspace || !this.workspace.setScale) return;
+        const startScale = this.workspace.options &&
+            this.workspace.options.zoomOptions &&
+            this.workspace.options.zoomOptions.startScale;
+        this.workspace.setScale(startScale || this.ScratchBlocks.WorkspaceSvg.DEFAULT_SCALE);
+        if (this.workspace.scrollCenter) {
+            this.workspace.scrollCenter();
         }
     }
 
@@ -1162,6 +1205,9 @@ class Blocks extends React.Component {
             if (isPythonEditMode) {
                 // ENTRANDO a modo Python: ocultar toolbox y expandir workspace
 
+                // Cerrar cualquier editor de campo o menú contextual abierto
+                this.ScratchBlocks.hideChaff();
+
                 // Ocultar el flyout wrapper que creamos
                 if (this.flyoutWrapper) {
                     this.flyoutWrapper.style.display = 'none';
@@ -1205,6 +1251,9 @@ class Blocks extends React.Component {
                     }
                 }
 
+                // Bloquear la edición de bloques: los bloques pasan a ser solo visuales
+                this.setWorkspaceReadOnly(true);
+
             } else {
                 // SALIENDO de modo Python: mostrar toolbox y restaurar workspace
 
@@ -1245,6 +1294,10 @@ class Blocks extends React.Component {
                         injectionDiv.style.marginLeft = '';
                     }
                 }
+
+                // Restaurar la edición de bloques (Modo Aula puede mantenerla en
+                // solo lectura si el recurso actual no pertenece al participante).
+                this.setWorkspaceReadOnly(this.props.workspaceReadOnly);
             }
 
             // Forzar redimensionado del workspace
@@ -1259,6 +1312,49 @@ class Blocks extends React.Component {
 
         } catch (e) {
             console.warn('[Blocks] Error al cambiar modo Python:', e);
+        }
+    }
+    /**
+     * Activa/desactiva el modo de solo lectura del workspace de bloques.
+     * Cuando está activo, los bloques no se pueden arrastrar, editar, eliminar
+     * ni separar: son solo visuales. Se recargan los bloques desde el estado
+     * actual del workspace para que Blockly los cree con el readOnly correcto
+     * (vincula/desvincula los manejadores de mousedown de cada bloque).
+     * @param {boolean} readOnly true para bloquear la edición.
+     */
+    setWorkspaceReadOnly (readOnly) {
+        if (!this.workspace) return;
+        this.workspace.options.readOnly = readOnly;
+
+        // Desactivar puntero en el flyout para evitar arrastrar bloques de la librería
+        if (this.flyoutWrapper) {
+            this.flyoutWrapper.style.pointerEvents = readOnly ? 'none' : '';
+        }
+        // Desactivar puntero en el canvas de bloques y burbujas del workspace
+        // Esto permite mover/arrastrar el fondo (panning) pero bloquea cualquier interacción directa con los bloques
+        if (this.workspace.svgBlockCanvas_) {
+            this.workspace.svgBlockCanvas_.style.pointerEvents = readOnly ? 'none' : '';
+        }
+        if (this.workspace.svgBubbleCanvas_) {
+            this.workspace.svgBubbleCanvas_.style.pointerEvents = readOnly ? 'none' : '';
+        }
+
+        // Desactivar eventos de Blockly durante la recarga para que no se
+        // disparen listeners (papelera, regeneración Arduino/Python, undo)
+        // al recrear los bloques.
+        const eventsDisabled = this.ScratchBlocks.Events.isEnabled() === false;
+        if (!eventsDisabled) {
+            this.ScratchBlocks.Events.disable();
+        }
+        try {
+            const dom = this.ScratchBlocks.Xml.workspaceToDom(this.workspace);
+            this.ScratchBlocks.Xml.clearWorkspaceAndLoadFromXml(dom, this.workspace);
+        } catch (e) {
+            console.warn('[Blocks] Error al recargar bloques al cambiar readOnly:', e);
+        } finally {
+            if (!eventsDisabled) {
+                this.ScratchBlocks.Events.enable();
+            }
         }
     }
     handleCategorySelected (categoryId) {
@@ -1437,6 +1533,7 @@ class Blocks extends React.Component {
             onCodeGenerated,
             isPythonEditMode,
             selectedDevice,
+            workspaceReadOnly,
             ...props
         } = this.props;
         /* eslint-enable no-unused-vars */
@@ -1445,6 +1542,9 @@ class Blocks extends React.Component {
                 <DroppableBlocks
                     componentRef={this.setBlocks}
                     onDrop={this.handleDrop}
+                    onZoomIn={this.handleZoomIn}
+                    onZoomOut={this.handleZoomOut}
+                    onZoomReset={this.handleZoomReset}
                     {...props}
                 />
                 {this.toolboxHeader && this.workspace && this.ScratchBlocks ? ReactDOM.createPortal(
@@ -1498,6 +1598,7 @@ Blocks.propTypes = {
     isPythonEditMode: PropTypes.bool,
     isRtl: PropTypes.bool,
     isVisible: PropTypes.bool,
+    workspaceReadOnly: PropTypes.bool,
     locale: PropTypes.string.isRequired,
     messages: PropTypes.objectOf(PropTypes.string),
     onActivateColorPicker: PropTypes.func,

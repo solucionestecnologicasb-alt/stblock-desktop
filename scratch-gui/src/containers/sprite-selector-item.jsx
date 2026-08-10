@@ -168,6 +168,7 @@ class SpriteSelectorItem extends React.PureComponent {
                 onMouseEnter={this.handleMouseEnter}
                 onMouseLeave={this.handleMouseLeave}
                 isDeleteConfirmationModalOpened={this.state.isDeletePromptOpen}
+                id={id}
                 {...props}
             />
         </>

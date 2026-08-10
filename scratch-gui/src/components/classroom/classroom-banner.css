@@ -1,0 +1,189 @@
+/**
+ * STBlock - Modo Aula
+ * Banner de sesión activa (barra superior del editor).
+ *
+ * Muestra el estado de la sesión, el rol del usuario y accesos rápidos a la
+ * consola / directorio / salida.
+ */
+
+.classroom-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(135deg, #19663d 0%, #0d4a2a 100%);
+    border-bottom: 2px solid #00b359;
+    padding: 0 12px;
+    height: 44px;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    width: 100%;
+    overflow: hidden;
+    animation: classroomSlideDown 0.3s ease-out;
+}
+
+@keyframes classroomSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.classroom-banner-logo {
+    font-size: 20px;
+    flex-shrink: 0;
+    animation: classroomBounce 2.5s ease-in-out infinite;
+}
+
+@keyframes classroomBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
+.classroom-banner-session {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    min-width: 0;
+}
+
+.classroom-banner-name {
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.classroom-banner-meta {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.classroom-banner-divider {
+    width: 1px;
+    height: 22px;
+    background: rgba(255, 255, 255, 0.2);
+    flex-shrink: 0;
+}
+
+.classroom-banner-me {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.classroom-banner-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
+}
+
+.classroom-banner-myname {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.classroom-banner-role {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 10px;
+    text-transform: capitalize;
+    background: rgba(255, 255, 255, 0.12);
+    padding: 2px 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
+}
+
+.classroom-banner-spacer {
+    flex: 1;
+}
+
+.classroom-banner-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.12);
+    padding: 4px 12px;
+    border-radius: 20px;
+    flex-shrink: 0;
+    animation: classroomPulse 2s infinite;
+}
+
+@keyframes classroomPulse {
+    0% { box-shadow: 0 0 0 0 rgba(0, 179, 89, 0.5); }
+    70% { box-shadow: 0 0 0 8px rgba(0, 179, 89, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 179, 89, 0); }
+}
+
+.classroom-banner-status-live {
+    background: #00b359;
+    color: white;
+}
+
+.classroom-banner-status-waiting {
+    background: #d97706;
+    color: white;
+}
+
+.classroom-banner-btn {
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+    font-family: inherit;
+    flex-shrink: 0;
+}
+
+.classroom-banner-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.03);
+}
+
+.classroom-banner-btn-leave {
+    background: rgba(255, 100, 100, 0.2);
+}
+
+.classroom-banner-btn-leave:hover {
+    background: rgba(255, 100, 100, 0.4);
+}
+
+/* Responsive: ocultar detalles en pantallas pequeñas */
+@media (max-width: 700px) {
+    .classroom-banner-meta,
+    .classroom-banner-role {
+        display: none;
+    }
+
+    .classroom-banner-status {
+        display: none;
+    }
+
+    .classroom-banner-name {
+        max-width: 120px;
+    }
+}

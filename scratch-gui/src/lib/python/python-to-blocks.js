@@ -1270,6 +1270,18 @@ function isExemptEmptyBlock(blockText) {
 }
 
 /**
+ * ¿Es un bloque "por siempre"? ("while true:" / "por_siempre:")
+ * El bloque "por siempre" es un bloque en C que NO admite código debajo de él
+ * en el mismo nivel de indentación.
+ */
+function isForeverBlock(blockText) {
+    const text = blockText.trim();
+    if (/^por_siempre\s*:\s*$/.test(text)) return true;
+    const whileM = text.match(/^while\s+(.+)\s*:\s*$/);
+    return !!(whileM && /^true$/i.test(whileM[1].trim()));
+}
+
+/**
  * Valida código Python completo y retorna todos los errores
  */
 export function validatePythonCode(pythonCode) {
@@ -1316,7 +1328,14 @@ export function validatePythonCode(pythonCode) {
                 if (currentIndent <= lastBlockIndent) {
                     // 'def' vacío y "por siempre" vacío son válidos (bloques sin cuerpo)
                     // No marcar error si la línea pendiente es uno de esos
-                    if (!isExemptEmptyBlock(lastBlockText)) {
+                    if (currentIndent === lastBlockIndent && isForeverBlock(lastBlockText)) {
+                        // El bloque "por siempre" no admite código debajo de él.
+                        allErrors.push(new CodeError(
+                            ERROR_TYPES.INDENT_ERROR,
+                            `IndentationError: el bloque "por siempre" no admite código debajo de él. Indenta el código que debe ir dentro del "por siempre".`,
+                            lineNumber
+                        ));
+                    } else if (!isExemptEmptyBlock(lastBlockText)) {
                         allErrors.push(new CodeError(
                             ERROR_TYPES.INDENT_ERROR,
                             `IndentationError: se esperaba un bloque indentado después de la declaración en la línea ${lastBlockLine}: "${lastBlockText}"`,
@@ -2040,6 +2059,214 @@ function isConstantTrue(cond) {
 }
 
 /**
+ * Encuentra el operador binario con menor precedencia fuera de paréntesis.
+ * Retorna { index, op } o null si no se encuentra ninguno.
+ */
+function findSplitOperator(str) {
+    let depth = 0;
+    let inString = false;
+    let stringChar = null;
+    
+    // Buscar + y - primero (menor precedencia) de derecha a izquierda
+    for (let i = str.length - 1; i >= 0; i--) {
+        const char = str[i];
+        if ((char === '"' || char === "'") && (i === 0 || str[i - 1] !== '\\')) {
+            if (!inString) {
+                inString = true;
+                stringChar = char;
+            } else if (stringChar === char) {
+                inString = false;
+            }
+        }
+        if (inString) continue;
+        
+        if (char === ')') depth++;
+        else if (char === '(') depth--;
+        else if (depth === 0) {
+            if (char === '+' || char === '-') {
+                // Un menos (-) es binario si está precedido por un valor o cierre de paréntesis,
+                // no por otro operador ni al principio del string.
+                let isBinary = true;
+                if (char === '-') {
+                    const prevStr = str.slice(0, i).trim();
+                    if (prevStr === '' || /[+\-*/%(]$/.test(prevStr)) {
+                        isBinary = false;
+                    }
+                }
+                if (isBinary) {
+                    return { index: i, op: char };
+                }
+            }
+        }
+    }
+    
+    // Buscar *, /, % después (mayor precedencia) de derecha a izquierda
+    depth = 0;
+    inString = false;
+    for (let i = str.length - 1; i >= 0; i--) {
+        const char = str[i];
+        if ((char === '"' || char === "'") && (i === 0 || str[i - 1] !== '\\')) {
+            if (!inString) {
+                inString = true;
+                stringChar = char;
+            } else if (stringChar === char) {
+                inString = false;
+            }
+        }
+        if (inString) continue;
+        
+        if (char === ')') depth++;
+        else if (char === '(') depth--;
+        else if (depth === 0) {
+            if (char === '*' || char === '/' || char === '%') {
+                return { index: i, op: char };
+            }
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * Parsea recursivamente una expresión matemática/lógica en bloques Scratch
+ */
+function parseExpressionToBlock(exprStr, parentId, expectedType = 'text') {
+    let str = exprStr.trim();
+    
+    // Quitar paréntesis externos repetidamente si envuelven toda la expresión
+    while (str.startsWith('(') && str.endsWith(')')) {
+        let depth = 0;
+        let wrapsAll = true;
+        for (let i = 0; i < str.length - 1; i++) {
+            if (str[i] === '(') depth++;
+            else if (str[i] === ')') depth--;
+            if (depth === 0 && i > 0) {
+                wrapsAll = false;
+                break;
+            }
+        }
+        if (wrapsAll) {
+            str = str.slice(1, -1).trim();
+        } else {
+            break;
+        }
+    }
+    
+    const split = findSplitOperator(str);
+    if (split) {
+        const leftStr = str.slice(0, split.index).trim();
+        const rightStr = str.slice(split.index + 1).trim();
+        const op = split.op;
+        
+        let opcode;
+        if (op === '+') opcode = 'operator_add';
+        else if (op === '-') opcode = 'operator_subtract';
+        else if (op === '*') opcode = 'operator_multiply';
+        else if (op === '/') opcode = 'operator_divide';
+        else if (op === '%') opcode = 'operator_mod';
+        
+        const blockId = generateBlockId();
+        
+        // Los operandos de los bloques matemáticos siempre esperan números
+        const leftResult = parseExpressionToBlock(leftStr, blockId, 'number');
+        const rightResult = parseExpressionToBlock(rightStr, blockId, 'number');
+        
+        const block = {
+            id: blockId,
+            opcode,
+            inputs: {
+                NUM1: { name: 'NUM1', block: leftResult.blockId, shadow: leftResult.isShadow ? leftResult.blockId : null },
+                NUM2: { name: 'NUM2', block: rightResult.blockId, shadow: rightResult.isShadow ? rightResult.blockId : null }
+            },
+            fields: {},
+            next: null,
+            parent: parentId,
+            topLevel: false,
+            shadow: false
+        };
+        
+        const shadowBlocks = [];
+        shadowBlocks.push({ id: leftResult.blockId, block: leftResult.block });
+        shadowBlocks.push(...leftResult.shadowBlocks);
+        shadowBlocks.push({ id: rightResult.blockId, block: rightResult.block });
+        shadowBlocks.push(...rightResult.shadowBlocks);
+        
+        return {
+            blockId,
+            block,
+            shadowBlocks,
+            isShadow: false
+        };
+    }
+    
+    // 1. Literal numérico
+    if (!isNaN(parseFloat(str)) && isFinite(str)) {
+        const shadow = createShadowNumber(parseFloat(str), parentId);
+        return {
+            blockId: shadow.id,
+            block: shadow.block,
+            shadowBlocks: [],
+            isShadow: true
+        };
+    }
+    
+    // 2. Literal booleano
+    if (str === 'True' || str === 'true' || str === 'False' || str === 'false') {
+        const lit = createBooleanLiteral(str === 'True' || str === 'true', parentId);
+        return {
+            blockId: lit.blockId,
+            block: lit.block,
+            shadowBlocks: lit.shadowBlocks,
+            isShadow: false
+        };
+    }
+    
+    // 3. Literal string
+    if ((str.startsWith('"') && str.endsWith('"')) || (str.startsWith("'") && str.endsWith("'"))) {
+        const val = str.slice(1, -1);
+        const shadow = createShadowText(val, parentId);
+        return {
+            blockId: shadow.id,
+            block: shadow.block,
+            shadowBlocks: [],
+            isShadow: true
+        };
+    }
+    
+    // 4. Variables de Scratch (identificadores simples)
+    if (/^[a-zA-Z_áéíóúÁÉÍÓÚñÑ][a-zA-Z0-9_áéíóúÁÉÍÓÚñÑ]*$/.test(str)) {
+        const varBlockId = generateBlockId();
+        const block = {
+            id: varBlockId,
+            opcode: 'data_variable',
+            inputs: {},
+            fields: {
+                VARIABLE: { name: 'VARIABLE', value: str, id: str }
+            },
+            next: null,
+            parent: parentId,
+            shadow: false,
+            topLevel: false
+        };
+        return {
+            blockId: varBlockId,
+            block,
+            shadowBlocks: [],
+            isShadow: false
+        };
+    }
+    
+    // Fallback: bloque shadow según el tipo esperado
+    const shadow = expectedType === 'number' ? createShadowNumber(str, parentId) : createShadowText(str, parentId);
+    return {
+        blockId: shadow.id,
+        block: shadow.block,
+        shadowBlocks: [],
+        isShadow: true
+    };
+}
+
+/**
  * Parsea una expresión de condición y la convierte a un bloque booleano de Scratch
  * Soporta: sprite.tocando("x"), tecla_presionada("x"), comparaciones, negaciones y literales booleanos.
  */
@@ -2238,8 +2465,8 @@ function parseConditionToBlock(conditionStr, parentId) {
         else if (op === '==' || op === '!=') opcode = 'operator_equals';
         else return null;
 
-        const shadowLeft = createShadowText(left, blockId);
-        const shadowRight = createShadowText(right, blockId);
+        const leftResult = parseExpressionToBlock(left, blockId, 'number');
+        const rightResult = parseExpressionToBlock(right, blockId, 'number');
 
         const block = {
             blockId,
@@ -2247,8 +2474,8 @@ function parseConditionToBlock(conditionStr, parentId) {
                 id: blockId,
                 opcode,
                 inputs: {
-                    OPERAND1: { name: 'OPERAND1', block: shadowLeft.id, shadow: shadowLeft.id },
-                    OPERAND2: { name: 'OPERAND2', block: shadowRight.id, shadow: shadowRight.id }
+                    OPERAND1: { name: 'OPERAND1', block: leftResult.blockId, shadow: leftResult.isShadow ? leftResult.blockId : null },
+                    OPERAND2: { name: 'OPERAND2', block: rightResult.blockId, shadow: rightResult.isShadow ? rightResult.blockId : null }
                 },
                 fields: {},
                 next: null,
@@ -2256,8 +2483,16 @@ function parseConditionToBlock(conditionStr, parentId) {
                 topLevel: false,
                 shadow: false
             },
-            shadowBlocks: [shadowLeft, shadowRight]
+            shadowBlocks: []
         };
+
+        const childShadows = [];
+        childShadows.push({ id: leftResult.blockId, block: leftResult.block });
+        childShadows.push(...leftResult.shadowBlocks);
+        childShadows.push({ id: rightResult.blockId, block: rightResult.block });
+        childShadows.push(...rightResult.shadowBlocks);
+
+        block.shadowBlocks = childShadows;
 
         // Para !=, envolver en NOT
         if (op === '!=') {
@@ -2345,20 +2580,50 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
     // ===== MANEJO ESPECIAL DE VARIABLES =====
     if (opcode === 'data_setvariableto' && parsedCall.arguments.length >= 2) {
         const varName = parsedCall.arguments[0].value;
-        const varValue = parsedCall.arguments[1].value;
+        const varArg = parsedCall.arguments[1];
         fields.VARIABLE = { name: 'VARIABLE', value: varName, id: varName };
-        const shadow = createShadowText(varValue, blockId);
-        shadowBlocks.push(shadow);
-        inputs.VALUE = { name: 'VALUE', block: shadow.id, shadow: shadow.id };
+        if (varArg.type === 'variable') {
+            const parsedExpr = parseExpressionToBlock(String(varArg.value), blockId, 'text');
+            shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+            shadowBlocks.push(...parsedExpr.shadowBlocks);
+            inputs.VALUE = {
+                name: 'VALUE',
+                block: parsedExpr.blockId,
+                shadow: parsedExpr.isShadow ? parsedExpr.blockId : null
+            };
+        } else if (varArg.type === 'number') {
+            const shadow = createShadowNumber(varArg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs.VALUE = { name: 'VALUE', block: shadow.id, shadow: shadow.id };
+        } else {
+            const shadow = createShadowText(varArg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs.VALUE = { name: 'VALUE', block: shadow.id, shadow: shadow.id };
+        }
     }
 
     if (opcode === 'data_changevariableby' && parsedCall.arguments.length >= 2) {
         const varName = parsedCall.arguments[0].value;
-        const varValue = parsedCall.arguments[1].value;
+        const varArg = parsedCall.arguments[1];
         fields.VARIABLE = { name: 'VARIABLE', value: varName, id: varName };
-        const shadow = createShadowNumber(varValue, blockId);
-        shadowBlocks.push(shadow);
-        inputs.VALUE = { name: 'VALUE', block: shadow.id, shadow: shadow.id };
+        if (varArg.type === 'variable') {
+            const parsedExpr = parseExpressionToBlock(String(varArg.value), blockId, 'number');
+            shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+            shadowBlocks.push(...parsedExpr.shadowBlocks);
+            inputs.VALUE = {
+                name: 'VALUE',
+                block: parsedExpr.blockId,
+                shadow: parsedExpr.isShadow ? parsedExpr.blockId : null
+            };
+        } else if (varArg.type === 'number') {
+            const shadow = createShadowNumber(varArg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs.VALUE = { name: 'VALUE', block: shadow.id, shadow: shadow.id };
+        } else {
+            const shadow = createShadowText(varArg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs.VALUE = { name: 'VALUE', block: shadow.id, shadow: shadow.id };
+        }
     }
 
     if ((opcode === 'data_showvariable' || opcode === 'data_hidevariable') && parsedCall.arguments.length > 0) {
@@ -2368,18 +2633,45 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
     // ===== MANEJO ESPECIAL DE LISTAS =====
     if (opcode === 'data_addtolist' && parsedCall.arguments.length >= 2) {
         const listName = parsedCall.arguments[0].value;
-        const itemValue = parsedCall.arguments[1].value;
+        const itemArg = parsedCall.arguments[1];
         fields.LIST = { name: 'LIST', value: listName, id: listName };
-        const shadow = createShadowText(itemValue, blockId);
-        shadowBlocks.push(shadow);
-        inputs.ITEM = { name: 'ITEM', block: shadow.id, shadow: shadow.id };
+        if (itemArg.type === 'variable') {
+            const parsedExpr = parseExpressionToBlock(String(itemArg.value), blockId, 'text');
+            shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+            shadowBlocks.push(...parsedExpr.shadowBlocks);
+            inputs.ITEM = {
+                name: 'ITEM',
+                block: parsedExpr.blockId,
+                shadow: parsedExpr.isShadow ? parsedExpr.blockId : null
+            };
+        } else if (itemArg.type === 'number') {
+            const shadow = createShadowNumber(itemArg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs.ITEM = { name: 'ITEM', block: shadow.id, shadow: shadow.id };
+        } else {
+            const shadow = createShadowText(itemArg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs.ITEM = { name: 'ITEM', block: shadow.id, shadow: shadow.id };
+        }
     }
 
     if (opcode === 'data_deleteoflist' && parsedCall.arguments.length >= 2) {
         fields.LIST = { name: 'LIST', value: parsedCall.arguments[0].value, id: parsedCall.arguments[0].value };
-        const shadow = createShadowNumber(parsedCall.arguments[1].value, blockId);
-        shadowBlocks.push(shadow);
-        inputs.INDEX = { name: 'INDEX', block: shadow.id, shadow: shadow.id };
+        const indexArg = parsedCall.arguments[1];
+        if (indexArg.type === 'variable') {
+            const parsedExpr = parseExpressionToBlock(String(indexArg.value), blockId, 'number');
+            shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+            shadowBlocks.push(...parsedExpr.shadowBlocks);
+            inputs.INDEX = {
+                name: 'INDEX',
+                block: parsedExpr.blockId,
+                shadow: parsedExpr.isShadow ? parsedExpr.blockId : null
+            };
+        } else {
+            const shadow = createShadowNumber(indexArg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs.INDEX = { name: 'INDEX', block: shadow.id, shadow: shadow.id };
+        }
     }
 
     if (opcode === 'data_deletealloflist' && parsedCall.arguments.length >= 1) {
@@ -2388,20 +2680,84 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
 
     if (opcode === 'data_insertatlist' && parsedCall.arguments.length >= 3) {
         fields.LIST = { name: 'LIST', value: parsedCall.arguments[0].value, id: parsedCall.arguments[0].value };
-        const shadowIndex = createShadowNumber(parsedCall.arguments[1].value, blockId);
-        const shadowItem = createShadowText(parsedCall.arguments[2].value, blockId);
-        shadowBlocks.push(shadowIndex, shadowItem);
-        inputs.INDEX = { name: 'INDEX', block: shadowIndex.id, shadow: shadowIndex.id };
-        inputs.ITEM = { name: 'ITEM', block: shadowItem.id, shadow: shadowItem.id };
+        const indexArg = parsedCall.arguments[1];
+        const itemArg = parsedCall.arguments[2];
+        
+        let indexBlockId, indexShadowId;
+        if (indexArg.type === 'variable') {
+            const parsedExpr = parseExpressionToBlock(String(indexArg.value), blockId, 'number');
+            shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+            shadowBlocks.push(...parsedExpr.shadowBlocks);
+            indexBlockId = parsedExpr.blockId;
+            indexShadowId = parsedExpr.isShadow ? parsedExpr.blockId : null;
+        } else {
+            const shadowIndex = createShadowNumber(indexArg.value, blockId);
+            shadowBlocks.push(shadowIndex);
+            indexBlockId = shadowIndex.id;
+            indexShadowId = shadowIndex.id;
+        }
+        inputs.INDEX = { name: 'INDEX', block: indexBlockId, shadow: indexShadowId };
+        
+        let itemBlockId, itemShadowId;
+        if (itemArg.type === 'variable') {
+            const parsedExpr = parseExpressionToBlock(String(itemArg.value), blockId, 'text');
+            shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+            shadowBlocks.push(...parsedExpr.shadowBlocks);
+            itemBlockId = parsedExpr.blockId;
+            itemShadowId = parsedExpr.isShadow ? parsedExpr.blockId : null;
+        } else if (itemArg.type === 'number') {
+            const shadowItem = createShadowNumber(itemArg.value, blockId);
+            shadowBlocks.push(shadowItem);
+            itemBlockId = shadowItem.id;
+            itemShadowId = shadowItem.id;
+        } else {
+            const shadowItem = createShadowText(itemArg.value, blockId);
+            shadowBlocks.push(shadowItem);
+            itemBlockId = shadowItem.id;
+            itemShadowId = shadowItem.id;
+        }
+        inputs.ITEM = { name: 'ITEM', block: itemBlockId, shadow: itemShadowId };
     }
 
     if (opcode === 'data_replaceitemoflist' && parsedCall.arguments.length >= 3) {
         fields.LIST = { name: 'LIST', value: parsedCall.arguments[0].value, id: parsedCall.arguments[0].value };
-        const shadowIndex = createShadowNumber(parsedCall.arguments[1].value, blockId);
-        const shadowItem = createShadowText(parsedCall.arguments[2].value, blockId);
-        shadowBlocks.push(shadowIndex, shadowItem);
-        inputs.INDEX = { name: 'INDEX', block: shadowIndex.id, shadow: shadowIndex.id };
-        inputs.ITEM = { name: 'ITEM', block: shadowItem.id, shadow: shadowItem.id };
+        const indexArg = parsedCall.arguments[1];
+        const itemArg = parsedCall.arguments[2];
+        
+        let indexBlockId, indexShadowId;
+        if (indexArg.type === 'variable') {
+            const parsedExpr = parseExpressionToBlock(String(indexArg.value), blockId, 'number');
+            shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+            shadowBlocks.push(...parsedExpr.shadowBlocks);
+            indexBlockId = parsedExpr.blockId;
+            indexShadowId = parsedExpr.isShadow ? parsedExpr.blockId : null;
+        } else {
+            const shadowIndex = createShadowNumber(indexArg.value, blockId);
+            shadowBlocks.push(shadowIndex);
+            indexBlockId = shadowIndex.id;
+            indexShadowId = shadowIndex.id;
+        }
+        inputs.INDEX = { name: 'INDEX', block: indexBlockId, shadow: indexShadowId };
+        
+        let itemBlockId, itemShadowId;
+        if (itemArg.type === 'variable') {
+            const parsedExpr = parseExpressionToBlock(String(itemArg.value), blockId, 'text');
+            shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+            shadowBlocks.push(...parsedExpr.shadowBlocks);
+            itemBlockId = parsedExpr.blockId;
+            itemShadowId = parsedExpr.isShadow ? parsedExpr.blockId : null;
+        } else if (itemArg.type === 'number') {
+            const shadowItem = createShadowNumber(itemArg.value, blockId);
+            shadowBlocks.push(shadowItem);
+            itemBlockId = shadowItem.id;
+            itemShadowId = shadowItem.id;
+        } else {
+            const shadowItem = createShadowText(itemArg.value, blockId);
+            shadowBlocks.push(shadowItem);
+            itemBlockId = shadowItem.id;
+            itemShadowId = shadowItem.id;
+        }
+        inputs.ITEM = { name: 'ITEM', block: itemBlockId, shadow: itemShadowId };
     }
 
     if ((opcode === 'data_showlist' || opcode === 'data_hidelist') && parsedCall.arguments.length > 0) {

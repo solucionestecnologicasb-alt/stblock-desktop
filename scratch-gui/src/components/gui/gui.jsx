@@ -43,6 +43,25 @@ import {
 import {STBLOCK_SKETCHFORGE_URL} from '../../lib/sketchforge-url';
 
 import styles from './gui.css';
+
+import classroomController from '../../lib/classroom/classroom-controller';
+import {
+    ROLES,
+    SCOPES,
+    canAddTarget,
+    canDeleteTarget,
+    canRenameTarget,
+    canEditTarget
+} from '../../lib/classroom/classroom-access';
+import {
+    isClassroomSimulatorAvailable,
+    openClassroomSimulator
+} from '../../lib/classroom/classroom-simulator';
+import ClassroomSetupModal from '../classroom/classroom-setup-modal.jsx';
+import ClassroomConsole from '../classroom/classroom-console.jsx';
+import ClassroomRoster from '../classroom/classroom-roster.jsx';
+import ClassroomBanner from '../classroom/classroom-banner.jsx';
+import PythonKeyModal from '../python-panel/python-key-modal.jsx';
 import addExtensionIcon from './icon--extensions.svg';
 import aiIcon from './icon--ai.svg';
 import codeIcon from './icon--code.svg';
@@ -187,6 +206,78 @@ const EMPTY_DEVICE_PROJECT = {
         vm: '0.1.0',
         agent: ''
     }
+};
+
+const mergeClientProject = (serverJSONStr, clientJSONStr, assignedSpriteNames) => {
+    try {
+        const serverProject = JSON.parse(serverJSONStr);
+        const clientProject = JSON.parse(clientJSONStr);
+        if (!serverProject.targets || !clientProject.targets) {
+            return {projectJSON: serverJSONStr, newSprites: []};
+        }
+        const clientTargetsByName = {};
+        for (const target of clientProject.targets) {
+            clientTargetsByName[target.name] = target;
+        }
+        const serverNames = new Set(serverProject.targets.map(t => t.name));
+        const newSprites = [];
+        // Recursos creados por el cliente que no existen en el proyecto del
+        // servidor: se agregan tal cual (el cliente pasará a ser su dueño).
+        for (const target of clientProject.targets) {
+            if (!serverNames.has(target.name)) {
+                serverProject.targets.push(target);
+                newSprites.push(target.name);
+            }
+        }
+        // Bloques de los recursos asignados a este cliente se toman de su proyecto.
+        for (const serverTarget of serverProject.targets) {
+            const clientTarget = clientTargetsByName[serverTarget.name];
+            if (clientTarget && assignedSpriteNames.includes(serverTarget.name)) {
+                serverTarget.blocks = clientTarget.blocks;
+            }
+        }
+        return {projectJSON: JSON.stringify(serverProject), newSprites};
+    } catch (e) {
+        console.warn('[Classroom] Error al fusionar proyecto del cliente:', e);
+        return {projectJSON: serverJSONStr, newSprites: []};
+    }
+};
+
+// Convierte el mapa local de Python (indexado por ID de target, inestable entre
+// máquinas y cargas) a un mapa indexado por NOMBRE del recurso, que sí se
+// preserva en la serialización y coincide entre servidor y clientes.
+const pythonCodesByName = (vm, pythonById) => {
+    const result = {};
+    if (!vm || !vm.runtime || !pythonById) return result;
+    for (const target of vm.runtime.targets || []) {
+        if (pythonById[target.id] !== undefined) {
+            result[target.getName()] = pythonById[target.id];
+        }
+    }
+    return result;
+};
+
+const projectSignature = (projectJSON, pythonCodes) => {
+    let str = (typeof projectJSON === 'string' ? projectJSON : JSON.stringify(projectJSON));
+    try {
+        // Ignorar meta (agente/versión): difiere entre máquinas y al re-serializar
+        // el proyecto tras loadProject, lo que provocaba reenvíos en bucle porque
+        // la firma nunca coincidía con el JSON original recibido.
+        const parsed = JSON.parse(str);
+        if (parsed && typeof parsed === 'object' && parsed.meta) {
+            delete parsed.meta;
+            str = JSON.stringify(parsed);
+        }
+    } catch (e) {
+        // si no es JSON válido, usar la cadena tal cual
+    }
+    str += JSON.stringify(pythonCodes || {});
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return `${str.length}_${hash}`;
 };
 
 let isRendererSupported = null;
@@ -358,6 +449,77 @@ const GUIComponent = props => {
     const [updateInfo, setUpdateInfo] = useState(null);
     const [updateInstalling, setUpdateInstalling] = useState(false);
 
+    const [classroomSetupOpen, setClassroomSetupOpen] = useState(false);
+    const [classroomConsoleOpen, setClassroomConsoleOpen] = useState(false);
+    const [classroomRosterOpen, setClassroomRosterOpen] = useState(false);
+    const [classroomState, setClassroomState] = useState(() => classroomController.getState());
+    const classroomStateRef = useRef(classroomState);
+    const classroomApplyingRemoteRef = useRef(false);
+    const classroomDebounceRef = useRef(null);
+    const classroomApplyTimerRef = useRef(null);
+    const lastSnapshotSkipRef = useRef(null);
+    const lastAppliedRemoteSigRef = useRef(null);
+    const lastSentSigRef = useRef(null);
+    const remoteAppliedPythonRef = useRef(null);
+    const userHasInteractedRef = useRef(false);
+    // Última interacción REAL del usuario (edición de bloques/python, crear/borrar
+    // sprites). Se usa con una ventana de tiempo para el guard: los eventos de
+    // runtime (PROJECT_CHANGED, var_change) durante la ejecución de la clase no
+    // cuentan como interacción y no deben bloquear los broadcasts entrantes.
+    const lastRealInteractionRef = useRef(0);
+    const lastPythonFloodLogRef = useRef(0);
+
+    // Marca una interacción real del usuario. No cuenta cuando se está aplicando
+    // un proyecto remoto (loadProject dispara eventos de targets/bloques que no
+    // son del usuario). 'source' identifica qué la provocó (diagnóstico).
+    const lastInteractionSourceRef = useRef('none');
+    const markInteraction = useCallback((source) => {
+        if (classroomApplyingRemoteRef.current) return;
+        lastRealInteractionRef.current = Date.now();
+        lastInteractionSourceRef.current = source || '?';
+        userHasInteractedRef.current = true;
+    }, []);
+
+    const [pythonKeyLock, setPythonKeyLock] = useState(() => {
+        try {
+            return localStorage.getItem('stblock_python_key_lock');
+        } catch (e) {
+            return null;
+        }
+    });
+    const isPythonKeyLocked = pythonKeyLock !== null;
+    const [pythonKeyModalOpen, setPythonKeyModalOpen] = useState(false);
+    const [pythonKeyModalMode, setPythonKeyModalMode] = useState('set');
+
+    useEffect(() => {
+        try {
+            if (pythonKeyLock) {
+                localStorage.setItem('stblock_python_key_lock', pythonKeyLock);
+            } else {
+                localStorage.removeItem('stblock_python_key_lock');
+            }
+        } catch (e) {
+            console.warn('[GUI] Error saving pythonKeyLock:', e);
+        }
+    }, [pythonKeyLock]);
+
+    classroomStateRef.current = classroomState;
+
+    useEffect(() => {
+        const unsub = classroomController.subscribe(setClassroomState);
+        return () => unsub();
+    }, []);
+
+    // Al conectar la sesión, reiniciar la ventana de interacción para que los
+    // broadcasts entrantes (p. ej. sprites nuevos del servidor) no queden
+    // bloqueados por interacciones previas al ingreso.
+    useEffect(() => {
+        if (classroomState.connectionState === 'connected') {
+            lastRealInteractionRef.current = 0;
+            userHasInteractedRef.current = false;
+        }
+    }, [classroomState.connectionState]);
+
     // Python Panel state (for "Programacion" mode)
     // Cargar estado inicial desde localStorage
     const savedPythonState = useRef(loadPythonPanelState());
@@ -374,6 +536,12 @@ const GUIComponent = props => {
             return {};
         }
     });
+
+    const pythonCodePerTargetRef = useRef(pythonCodePerTarget);
+    useEffect(() => {
+        pythonCodePerTargetRef.current = pythonCodePerTarget;
+    }, [pythonCodePerTarget]);
+
     const [currentTargetId, setCurrentTargetId] = useState(null);
     const previousTargetIdRef = useRef(null);
 
@@ -387,7 +555,10 @@ const GUIComponent = props => {
             ...prev,
             [currentTargetId]: newCode
         }));
-    }, [currentTargetId]);
+        // Edición real del usuario en el panel Python: cuenta como interacción
+        // para el guard (evita que un broadcast pise lo que está escribiendo).
+        markInteraction('python-user');
+    }, [currentTargetId, markInteraction]);
 
     const pythonGenDebounceRef = useRef(null);
     const pythonPanelLockedRef = useRef(pythonPanelLocked);
@@ -472,6 +643,414 @@ const GUIComponent = props => {
         }
     }, [pythonCodePerTarget]);
 
+    const handleClassroomRemoteUpdate = useCallback(payload => {
+        if (!vm) return;
+        const {projectJSON, pythonCodes, sourceClientId} = payload;
+        if (!projectJSON) return;
+
+        const role = classroomStateRef.current.role;
+        const tNames = (vm.runtime && vm.runtime.targets) ? vm.runtime.targets.map(t => t.getName()).join(', ') : 'sin-VM';
+        console.log(`[Classroom DEBUG] handleRemoteUpdate ENTRADA. role=${role} sourceClientId=${sourceClientId} userHasInteracted=${userHasInteractedRef.current} applying=${classroomApplyingRemoteRef.current} projectJSONLen=${projectJSON.length} targetsLocales=[${tNames}]`);
+
+        // En el cliente, no sobrescribir mientras el usuario esté escribiendo AHORA
+        // MISMO (ventana de 2s desde la última interacción real). Los eventos de
+        // runtime (PROJECT_CHANGED/var_change durante class-run) no son interacción
+        // y NO bloquean los broadcasts. El snapshot inicial (sourceClientId null)
+        // SIEMPRE se aplica: es el proyecto del servidor al entrar.
+        if (role !== 'servidor' && sourceClientId &&
+            (Date.now() - lastRealInteractionRef.current < 2000)) {
+            console.log(`[Classroom DEBUG] handleRemoteUpdate BLOQUEADO por guard (fuente=${lastInteractionSourceRef.current}, hace ${Date.now() - lastRealInteractionRef.current}ms). sourceClientId=${sourceClientId}`);
+            return;
+        }
+
+        let finalProjectJSON = projectJSON;
+        let finalPythonCodes = pythonCodes || {};
+
+        if (role === 'servidor' && sourceClientId) {
+            const assignments = classroomStateRef.current.assignments || {};
+            const assignedSpriteNames = Object.keys(assignments).filter(
+                name => assignments[name] === sourceClientId
+            );
+            console.log(`[Classroom DEBUG] SERVIDOR recibió update del cliente ${sourceClientId}. asignados=[${assignedSpriteNames.join(', ')}] pythonKeys=[${Object.keys(pythonCodes || {}).join(', ')}]`);
+            try {
+                const serverProjectJSON = vm.toJSON();
+                const serverNames = JSON.parse(serverProjectJSON).targets.map(t => t.name);
+                const clientNames = JSON.parse(projectJSON).targets.map(t => t.name);
+                console.log(`[Classroom DEBUG] SERVIDOR merge: server=[${serverNames.join(', ')}] client=[${clientNames.join(', ')}]`);
+                const mergeResult = mergeClientProject(serverProjectJSON, projectJSON, assignedSpriteNames);
+                finalProjectJSON = mergeResult.projectJSON;
+                const mergedNames = JSON.parse(finalProjectJSON).targets.map(t => t.name);
+                console.log(`[Classroom DEBUG] SERVIDOR merge resultante=[${mergedNames.join(', ')}] newSprites=[${mergeResult.newSprites.join(', ')}]`);
+                // Los recursos que el cliente creó en su sesión (y que no existen
+                // en el proyecto del servidor) pasan a ser suyos, para que pueda
+                // seguir editándolos tras el broadcast.
+                for (const name of mergeResult.newSprites) {
+                    console.log('[Classroom] Auto-asignando recurso nuevo al cliente:', name);
+                    classroomController.assignResource(name, sourceClientId);
+                }
+            } catch (err) {
+                console.warn('[Classroom] Error serializando proyecto del servidor para fusionar:', err);
+            }
+            // Los códigos Python viajan indexados por NOMBRE (ver pythonCodesByName).
+            const mergedPython = pythonCodesByName(vm, pythonCodePerTargetRef.current);
+            for (const name of assignedSpriteNames) {
+                if (pythonCodes[name] !== undefined) {
+                    mergedPython[name] = pythonCodes[name];
+                }
+            }
+            finalPythonCodes = mergedPython;
+            // El servidor es la autoridad: difunde el proyecto FUSIONADO (no el
+            // crudo del cliente) para que todos los clientes vean el estado
+            // combinado. El controller ya no reenvía el payload crudo.
+            lastSentSigRef.current = projectSignature(finalProjectJSON, finalPythonCodes);
+            console.log(`[Classroom DEBUG] SERVIDOR difundiendo proyecto fusionado. targets=[${JSON.parse(finalProjectJSON).targets.map(t => t.name).join(', ')}] pythonKeys=[${Object.keys(finalPythonCodes).join(', ')}]`);
+            classroomController.sendProjectUpdate({projectJSON: finalProjectJSON, pythonCodes: finalPythonCodes});
+        } else {
+            console.log(`[Classroom DEBUG] handleRemoteUpdate aplicará proyecto (role=${role} sourceClientId=${sourceClientId}). targetsEntrantes=[${(JSON.parse(projectJSON).targets || []).map(t => t.name).join(', ')}]`);
+        }
+
+        if (classroomDebounceRef.current) {
+            clearTimeout(classroomDebounceRef.current);
+            classroomDebounceRef.current = null;
+        }
+        lastAppliedRemoteSigRef.current = projectSignature(finalProjectJSON, finalPythonCodes);
+        classroomApplyingRemoteRef.current = true;
+        userHasInteractedRef.current = false;
+        // Garantía: aunque loadProject tarde demasiado (p. ej. un disfraz del
+        // servidor que el cliente no puede descargar del CDN), liberar los refs
+        // para no bloquear el envío del cliente para siempre.
+        const releaseRefs = () => {
+            clearTimeout(classroomApplyTimerRef.current);
+            classroomApplyTimerRef.current = null;
+            classroomApplyingRemoteRef.current = false;
+            userHasInteractedRef.current = false;
+            // La carga remota no es interacción del usuario: reiniciar la ventana
+            // para que los broadcasts entrantes no queden bloqueados por eventos
+            // tardíos de la carga (targetsUpdate, var_create, etc.).
+            lastRealInteractionRef.current = 0;
+        };
+        clearTimeout(classroomApplyTimerRef.current);
+        classroomApplyTimerRef.current = setTimeout(releaseRefs, 8000);
+        const aplicandoNames = JSON.parse(finalProjectJSON).targets.map(t => t.name).join(', ');
+        console.log(`[Classroom DEBUG] APLICANDO loadProject. role=${role} targetsEntrantes=[${aplicandoNames}] localesActuales=[${tNames}]`);
+        try {
+            Promise.resolve(vm.loadProject(finalProjectJSON)).then(() => {
+                if (vm.runtime && vm.runtime.targets) {
+                    console.log('[Classroom DEBUG] Proyecto cargado. targets en VM:', vm.runtime.targets.map(t => `${t.getName()} (ID: ${t.id})`));
+                    const sprite = vm.runtime.targets.find(t => !t.isStage);
+                    if (sprite) {
+                        vm.setEditingTarget(sprite.id);
+                    } else if (vm.runtime.targets.length > 0) {
+                        vm.setEditingTarget(vm.runtime.targets[0].id);
+                    }
+                }
+                // Los códigos remotos llegan por NOMBRE; se convierten a los ids
+                // locales recién generados tras cargar el proyecto.
+                const pythonById = {};
+                for (const target of vm.runtime.targets || []) {
+                    if (finalPythonCodes[target.getName()] !== undefined) {
+                        pythonById[target.id] = finalPythonCodes[target.getName()];
+                    }
+                }
+                remoteAppliedPythonRef.current = pythonById;
+                setPythonCodePerTarget(pythonById);
+                // Fijar la firma de referencia a la serialización REAL del VM local.
+                // toJSON() regenera meta/ids/orden, por lo que nunca coincide con el
+                // JSON recibido; usar la serialización local evita el reenvío en bucle
+                // del polling (que comparaba contra el JSON remoto recibido).
+                lastAppliedRemoteSigRef.current = projectSignature(
+                    vm.toJSON(),
+                    pythonCodesByName(vm, pythonById)
+                );
+                console.log(`[Classroom DEBUG] loadProject COMPLETADO. targetsFinales=${vm.runtime.targets.length} baseline=${lastAppliedRemoteSigRef.current}`);
+                setTimeout(() => {
+                    classroomApplyingRemoteRef.current = false;
+                    userHasInteractedRef.current = false;
+                    lastRealInteractionRef.current = 0;
+                }, 300);
+                clearTimeout(classroomApplyTimerRef.current);
+                classroomApplyTimerRef.current = null;
+            })
+                .catch(e => {
+                    console.warn('[Classroom] Error aplicando proyecto remoto:', e);
+                    releaseRefs();
+                });
+        } catch (e) {
+            console.warn('[Classroom] Error aplicando proyecto remoto:', e);
+            releaseRefs();
+        }
+    }, [vm, setPythonCodePerTarget, markInteraction]);
+
+    useEffect(() => {
+        if (!vm) return;
+        classroomController.setConfig({
+            onRemoteProjectUpdate: handleClassroomRemoteUpdate,
+            // El controlador invoca onClientAccepted al aceptar una solicitud.
+            onClientAccepted: client => {
+                console.log('[Classroom] Cliente aceptado:', client && client.name);
+                try {
+                    const projectJSON = vm.toJSON();
+                    const pythonCodes = pythonCodesByName(vm, pythonCodePerTargetRef.current);
+                    classroomController.sendSnapshotToClient(client.id, {projectJSON, pythonCodes});
+                } catch (e) {
+                    console.warn('[Classroom] Error enviando snapshot inicial al cliente:', e);
+                }
+            },
+            onSessionClosed: () => {
+                setClassroomSetupOpen(false);
+                setClassroomConsoleOpen(false);
+                setClassroomRosterOpen(false);
+            },
+            onClassRun: () => {
+                userHasInteractedRef.current = false;
+                if (vm) {
+                    vm.stopAll();
+                    vm.greenFlag();
+                }
+            },
+            onClassStop: () => {
+                if (vm) {
+                    vm.stopAll();
+                }
+            }
+        });
+    }, [vm, handleClassroomRemoteUpdate]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        
+        let joinData = null;
+        try {
+            const saved = localStorage.getItem('stblock_classroom_sim_join');
+            if (saved) {
+                joinData = JSON.parse(saved);
+                localStorage.removeItem('stblock_classroom_sim_join');
+            }
+        } catch (e) {
+            console.warn('[Classroom] Error leyendo joinData de localStorage:', e);
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const isSimulatorClient = params.get('classroomClient') === '1' || joinData !== null;
+        
+        if (!isSimulatorClient) return;
+
+        const host = joinData ? joinData.host : (params.get('host') || '127.0.0.1');
+        const port = joinData ? (joinData.port || 8870) : parseInt(params.get('port') || '8870', 10);
+        const code = joinData ? joinData.code : params.get('code');
+        const name = joinData ? joinData.name : (params.get('name') || 'PC-2 (simulada)');
+
+        if (!code) {
+            console.warn('[Classroom] Simulador: falta el código de sesión.');
+            return;
+        }
+
+        setTimeout(() => {
+            console.log('[Classroom] Uniendo al simulador:', {host, port, code, name});
+            classroomController.joinSession({host, port, code, name});
+        }, 1000);
+    }, []);
+
+    const queueClassroomSnapshot = useCallback(() => {
+        // Diagnóstico: registrar cada gate que bloquee el envío, pero solo si el
+        // motivo cambia (evita inundar la consola con eventos repetidos).
+        const logSkip = reason => {
+            if (lastSnapshotSkipRef.current !== reason) {
+                lastSnapshotSkipRef.current = reason;
+                console.log(`[Classroom] snapshot SKIP: ${reason}`);
+            }
+        };
+        const role = classroomStateRef.current.role;
+        const tNames = vm && vm.runtime ? vm.runtime.targets.map(t => t.getName()).join(', ') : 'sin-VM';
+        if (classroomApplyingRemoteRef.current) {
+            logSkip('aplicando remoto');
+            console.log(`[Classroom DEBUG] queue: GATE aplicando remoto. role=${role} targets=[${tNames}]`);
+            return;
+        }
+        if (!classroomStateRef.current.active) {
+            logSkip('sesión inactiva');
+            return;
+        }
+        if (classroomStateRef.current.connectionState !== 'connected') {
+            logSkip(`estado ${classroomStateRef.current.connectionState}`);
+            return;
+        }
+        if (!vm) {
+            logSkip('sin VM');
+            return;
+        }
+        // No bloquear por vm.runtime.projectRunning: cuando el servidor ejecuta la
+        // clase, projectRunning queda true en todos los participantes y el bloqueo
+        // impediría sincronizar cualquier cambio (código de cliente, sprites nuevos,
+        // etc.) mientras la clase está "corriendo". El contenido de toJSON (bloques,
+        // disfraces, código Python) es estable durante la ejecución.
+        if (!userHasInteractedRef.current) {
+            logSkip('sin interacción del usuario');
+            console.log(`[Classroom DEBUG] queue: GATE sin interacción. role=${role} targets=[${tNames}]`);
+            return;
+        }
+        lastSnapshotSkipRef.current = null;
+
+        // NO reiniciar un envío ya programado: un aluvión de eventos (p. ej.
+        // regeneración automática de Python tras crear un sprite) no debe poder
+        // cancelar el snapshot pendiente. El primer evento dispara el envío a los
+        // 800ms con el estado acumulado; los eventos siguientes se descartan.
+        if (classroomDebounceRef.current) {
+            console.log(`[Classroom DEBUG] queue: IGNORADO (ya hay snapshot programado). role=${role} fuente=${lastInteractionSourceRef.current}`);
+            return;
+        }
+        console.log(`[Classroom DEBUG] queue: ENCOLANDO snapshot en 800ms. role=${role} targets=[${tNames}] interactuado=${userHasInteractedRef.current} fuente=${lastInteractionSourceRef.current}`);
+        classroomDebounceRef.current = setTimeout(() => {
+            classroomDebounceRef.current = null;
+            try {
+                const projectJSON = vm.toJSON();
+                const pythonCodes = pythonCodesByName(vm, pythonCodePerTargetRef.current);
+                const sig = projectSignature(projectJSON, pythonCodes);
+                console.log(`[Classroom DEBUG] queue: debounce cumplido. role=${role} targets=${vm.runtime.targets.length} sig=${sig} lastApplied=${lastAppliedRemoteSigRef.current} lastSent=${lastSentSigRef.current} igualApplied=${sig === lastAppliedRemoteSigRef.current} igualSent=${sig === lastSentSigRef.current}`);
+                if (sig === lastAppliedRemoteSigRef.current || sig === lastSentSigRef.current) {
+                    console.log('[Classroom] snapshot SKIP: sin cambios (firma idéntica)');
+                    userHasInteractedRef.current = false;
+                    return;
+                }
+                lastSentSigRef.current = sig;
+                console.log(`[Classroom] snapshot ENVIANDO (${vm.runtime.targets.length} targets)`);
+                classroomController.sendProjectUpdate({projectJSON, pythonCodes});
+                userHasInteractedRef.current = false;
+            } catch (e) {
+                console.warn('[Classroom] Error generando snapshot:', e);
+            }
+        }, 800);
+    }, [vm]);
+
+    useEffect(() => {
+        if (!vm || !vm.runtime) return;
+        // 'targetsUpdate' se emite en el VM tanto por cambios estructurales
+        // (crear/borrar/renombrar sprites, interacción real del usuario) como por
+        // MOVIMIENTO de sprites durante la ejecución (class-run), que se dispara a
+        // ~60fps y NO es interacción. Se filtra por cambio del conjunto de nombres.
+        let lastTargetNames = '';
+        const handleTargetsUpdate = () => {
+            const names = (vm.runtime.targets || []).map(t => t.getName()).join('|');
+            if (names === lastTargetNames) {
+                console.log(`[Classroom DEBUG] targetsUpdate sin cambio estructural (movimiento class-run, ignorado). role=${classroomStateRef.current.role}`);
+                return;
+            }
+            lastTargetNames = names;
+            console.log(`[Classroom DEBUG] targetsUpdate estructural. role=${classroomStateRef.current.role} targets=[${names.split('|').join(', ')}]`);
+            markInteraction('targetsUpdate');
+            queueClassroomSnapshot();
+        };
+        // PROJECT_CHANGED (runtime) es demasiado ruidoso: también se dispara por
+        // cambios de variables durante la ejecución (class-run). No es interacción
+        // del usuario y no debe encolar envíos; los cambios reales los capturan
+        // targetsUpdate y el changeListener del workspace.
+        let lastProjectChangedLog = 0;
+        const handleProjectChanged = () => {
+            const now = Date.now();
+            if (now - lastProjectChangedLog > 5000) {
+                lastProjectChangedLog = now;
+                console.log(`[Classroom DEBUG] PROJECT_CHANGED (runtime) ignorado para envío. role=${classroomStateRef.current.role}`);
+            }
+        };
+        // El workspace de Blockly dispara eventos por edición de bloques del
+        // usuario Y por cambios de variables durante la ejecución (var_change).
+        // Solo los eventos estructurales de bloques cuentan como interacción.
+        let lastNoiseLog = 0;
+        const handleBlocksChange = (event) => {
+            const et = event && event.type;
+            // SOLO ediciones estructurales de bloques cuentan como interacción real.
+            // Los eventos var_* (var_create/var_rename/var_change/var_delete) se
+            // disparan constantemente al recrear el modelo de variables del workspace
+            // tras cargar el proyecto (y durante class-run): NO son del usuario.
+            const blockEditTypes = ['create', 'block_create', 'add', 'block_add', 'move', 'block_move',
+                'delete', 'block_delete', 'remove', 'block_remove', 'change', 'block_change'];
+            const isUserEdit = blockEditTypes.indexOf(et) !== -1;
+            if (!isUserEdit) {
+                const now = Date.now();
+                if (now - lastNoiseLog > 5000) {
+                    lastNoiseLog = now;
+                    console.log(`[Classroom DEBUG] changeListener(bloques) tipo=${et} (ruido, ignorado)`);
+                }
+                return;
+            }
+            console.log(`[Classroom DEBUG] changeListener(bloques) tipo=${et} → interacción real`);
+            markInteraction(`bloque:${et}`);
+            queueClassroomSnapshot();
+        };
+        vm.runtime.on('PROJECT_CHANGED', handleProjectChanged);
+        vm.on('targetsUpdate', handleTargetsUpdate);
+
+        let workspace = workspaceHandle?.workspace;
+        if (workspace) {
+            workspace.addChangeListener(handleBlocksChange);
+        }
+        return () => {
+            vm.runtime.removeListener('PROJECT_CHANGED', handleProjectChanged);
+            vm.removeListener('targetsUpdate', handleTargetsUpdate);
+            if (workspace) {
+                workspace.removeChangeListener(handleBlocksChange);
+            }
+        };
+    }, [vm, workspaceHandle, queueClassroomSnapshot, markInteraction]);
+
+    // Red de seguridad: sincronización por sondeo. Aunque ningún listener de
+    // eventos dispare (workspace, targetsUpdate...), si la firma del proyecto
+    // cambió desde el último envío se difunde igualmente. Garantiza que el
+    // servidor y los clientes vean los cambios en unos segundos.
+    useEffect(() => {
+        if (!vm) return;
+        const interval = setInterval(() => {
+            if (classroomApplyingRemoteRef.current) {
+                console.log('[Classroom DEBUG] poll: GATE aplicando remoto');
+                return;
+            }
+            // Durante class-run el toJSON cambia por variables/posiciones de la
+            // ejecución; sondear reenviaría en bucle. Los cambios reales (bloques,
+            // sprites) se envían por la cola de eventos, que sí sigue activa.
+            if (classroomStateRef.current.classRunning) {
+                console.log('[Classroom DEBUG] poll: GATE class-running (sin sondeo)');
+                return;
+            }
+            if (!classroomStateRef.current.active) return;
+            if (classroomStateRef.current.connectionState !== 'connected') return;
+            try {
+                const projectJSON = vm.toJSON();
+                const pythonCodes = pythonCodesByName(vm, pythonCodePerTargetRef.current);
+                const sig = projectSignature(projectJSON, pythonCodes);
+                const targets = (vm.runtime.targets || []).map(t => t.getName()).join(', ');
+                console.log(`[Classroom DEBUG] poll: role=${classroomStateRef.current.role} sig=${sig} lastSent=${lastSentSigRef.current} lastApplied=${lastAppliedRemoteSigRef.current} igualSent=${sig === lastSentSigRef.current} igualApplied=${sig === lastAppliedRemoteSigRef.current} targets=[${targets}]`);
+                if (sig === lastSentSigRef.current || sig === lastAppliedRemoteSigRef.current) {
+                    return;
+                }
+                lastSentSigRef.current = sig;
+                console.log(`[Classroom] poll ENVIANDO (${vm.runtime.targets.length} targets)`);
+                classroomController.sendProjectUpdate({projectJSON, pythonCodes});
+                userHasInteractedRef.current = false;
+            } catch (e) {
+                // ignore: reintenta en el siguiente tick
+            }
+        }, 3000);
+        return () => clearInterval(interval);
+    }, [vm]);
+
+    useEffect(() => {
+        // El cambio de pythonCodePerTarget puede venir de:
+        //  - Aplicación remota (setPythonCodePerTarget(pythonById)): la referencia
+        //    coincide con remoteAppliedPythonRef → ignorar.
+        //  - Edición real del usuario: la marca setPythonCode (python-user).
+        //  - Regeneración automática desde bloques (línea 601): no es interacción.
+        // Aquí SOLO se encola el envío; NO se marca interacción para que el ruido
+        // de regeneración automática no bloquee los broadcasts entrantes.
+        if (pythonCodePerTarget !== remoteAppliedPythonRef.current) {
+            const now = Date.now();
+            if (now - lastPythonFloodLogRef.current > 3000) {
+                lastPythonFloodLogRef.current = now;
+                console.log(`[Classroom DEBUG] python effect: cambio no-remoto. keys=[${Object.keys(pythonCodePerTarget).join(', ')}] remoteApplied=${remoteAppliedPythonRef.current ? 'set' : 'null'}`);
+            }
+            queueClassroomSnapshot();
+        }
+    }, [pythonCodePerTarget, queueClassroomSnapshot]);
+
     // Guardar estado del panel Python cuando cambie
     useEffect(() => {
         savePythonPanelState({
@@ -481,8 +1060,138 @@ const GUIComponent = props => {
         });
     }, [pythonPanelOpen, pythonPanelLocked]);
 
+    // Forzar el modo Python cuando el candado con clave está activo:
+    // panel abierto y sin bloqueo de edición (bloques solo de lectura).
+    useEffect(() => {
+        if (isPythonKeyLocked) {
+            setPythonPanelOpen(true);
+            setPythonPanelLocked(false);
+        }
+    }, [isPythonKeyLocked]);
+
+    // Handlers del candado con clave
+    const handleRequestKeyLock = useCallback(() => {
+        setPythonKeyModalMode('set');
+        setPythonKeyModalOpen(true);
+    }, []);
+
+    const handleRequestKeyUnlock = useCallback(() => {
+        setPythonKeyModalMode('enter');
+        setPythonKeyModalOpen(true);
+    }, []);
+
+    const handleSetKeyLock = useCallback(key => {
+        setPythonKeyLock(key);
+        setPythonKeyModalOpen(false);
+    }, []);
+
+    const handleTryUnlock = useCallback(enteredKey => {
+        if (pythonKeyLock && enteredKey === pythonKeyLock) {
+            setPythonKeyLock(null);
+            setPythonKeyModalOpen(false);
+            return true;
+        }
+        return false;
+    }, [pythonKeyLock]);
+
+    const [classroomTargets, setClassroomTargets] = useState([]);
+
+    // Sincronizar la lista de recursos vivos (personajes/fondos) con el VM.
+    // Se usan los targets reales (tienen .id/.isStage/.getName()) y se
+    // actualiza al crear/borrar sprites o cargar proyecto.
+    //
+    // IMPORTANTE sobre los eventos:
+    //  - 'targetsUpdate' se emite en el *VM* (no en runtime) al cargar proyecto
+    //    y al crear/borrar/renombrar sprites (virtual-machine.js emitTargetsUpdate).
+    //  - 'PROJECT_LOADED' se emite en el runtime cuando termina de cargarse un proyecto.
+    //  - 'PROJECT_CHANGED' se emite en el runtime al modificar el proyecto.
+    useEffect(() => {
+        if (!vm || !vm.runtime) return;
+        const syncTargets = () => {
+            // Excluir clones: solo se pueden asignar personajes/fondos originales.
+            const originalTargets = (vm.runtime.targets || []).filter(
+                t => !Object.prototype.hasOwnProperty.call(t, 'isOriginal') || t.isOriginal
+            );
+            setClassroomTargets([...originalTargets]);
+        };
+        syncTargets();
+        vm.on('targetsUpdate', syncTargets);
+        vm.runtime.on('PROJECT_LOADED', syncTargets);
+        vm.runtime.on('PROJECT_CHANGED', syncTargets);
+        return () => {
+            vm.removeListener('targetsUpdate', syncTargets);
+            vm.runtime.removeListener('PROJECT_LOADED', syncTargets);
+            vm.runtime.removeListener('PROJECT_CHANGED', syncTargets);
+        };
+    }, [vm]);
+
+    const classroomRole = classroomState.active ? classroomState.role : null;
+    const classroomScope = classroomState.active && classroomState.config ? classroomState.config.scope : null;
+    const classroomAssignments = classroomState.active ? (classroomState.assignments || {}) : {};
+    const classroomMyId = classroomState.active ? classroomState.clientId : null;
+    // Un cliente de Modo Aula solo trabaja en Programación; Electrónica,
+    // Diseño 3D y Evaluación quedan bloqueadas.
+    const classroomLockedModes = classroomRole === ROLES.CLIENTE ? ['device', 'diseno', 'evaluacion'] : [];
+
+    // Defensa: si un cliente quedara en un modo no permitido (p. ej. por un
+    // proyecto restaurado), volverlo a Programación.
+    useEffect(() => {
+        if (classroomRole === ROLES.CLIENTE && deviceMode !== 'game') {
+            onSetDeviceMode('game');
+        }
+    }, [classroomRole, deviceMode, onSetDeviceMode]);
+
+    const classroomCanAdd = canAddTarget(classroomRole);
+    const classroomCanDelete = canDeleteTarget(classroomRole);
+    const classroomCanRename = canRenameTarget(classroomRole);
+    // Los permisos se evalúan por NOMBRE del recurso: el id del target se
+    // regenera al cargar el proyecto (sb3.deserialize crea ids nuevos), mientras
+    // que el nombre se preserva y coincide entre servidor y clientes.
+    const classroomEditingTargetName = (() => {
+        if (!vm || !vm.runtime || !currentTargetId) return null;
+        const t = vm.runtime.getTargetById(currentTargetId);
+        return t ? t.getName() : null;
+    })();
+    const classroomCanEditCurrent = canEditTarget(
+        classroomRole, classroomAssignments, classroomEditingTargetName, classroomMyId
+    );
+
+    const classroomCanEditTargetId = useCallback(targetId => {
+        if (!vm || !vm.runtime) return false;
+        const t = vm.runtime.getTargetById(targetId);
+        if (!t) return true;
+        return canEditTarget(classroomRole, classroomAssignments, t.getName(), classroomMyId);
+    }, [classroomRole, classroomAssignments, classroomMyId, vm]);
+
+    const classroomReadOnlyBlocks = classroomState.active && !classroomCanEditCurrent;
+
+    const classroomForcePython = classroomState.active && classroomScope === SCOPES.PYTHON;
+    const classroomForceBlocks = classroomState.active && classroomScope === SCOPES.BLOQUES;
+
+    const classroomCanSave = !classroomState.active || classroomState.role === ROLES.SERVIDOR;
+
+    const effectivePanelOpen = classroomForceBlocks ?
+        false :
+        (isPythonKeyLocked || pythonPanelOpen || classroomForcePython);
+
+    const effectivePanelLocked = (isPythonKeyLocked || classroomForcePython) ?
+        true :
+        (classroomForceBlocks ? false : pythonPanelLocked);
+
+    const pythonPanelIsLocked = effectivePanelLocked || classroomReadOnlyBlocks;
+
+    const getAssignedResourceNames = useCallback(() => {
+        if (!vm || !vm.runtime) return [];
+        // Las claves de asignación son nombres de recurso; solo mostrar los que
+        // existen en el proyecto cargado.
+        const existingNames = new Set((vm.runtime.targets || []).map(t => t.getName()));
+        return Object.keys(classroomAssignments).filter(
+            name => classroomAssignments[name] === classroomMyId && existingNames.has(name)
+        );
+    }, [classroomAssignments, classroomMyId, vm]);
+
     // Calcular si estamos en modo edición Python (toolbox oculto)
-    const isPythonEditMode = !pythonPanelLocked && pythonPanelOpen && deviceMode !== 'device';
+    const isPythonEditMode = effectivePanelOpen && !effectivePanelLocked && deviceMode !== 'device';
 
     // Modo activo del asistente de IA según el contexto actual de la app.
     const aiActiveMode = deviceMode === 'device' ? 'device'
@@ -564,7 +1273,11 @@ const GUIComponent = props => {
                 try {
                     const result = generatePythonCodeWithMap(workspace);
                     if (vm && vm.runtime) vm.runtime.blockLineMap = result.blockLineMap;
-                    setPythonCode(result.code);
+                    // Regeneración automática desde bloques: NO marca interacción
+                    // (el listener de bloques del aula ya marca las ediciones reales).
+                    if (currentTargetId) {
+                        setPythonCodePerTarget(prev => ({...prev, [currentTargetId]: result.code}));
+                    }
                 } catch (e) {
                     console.warn('[GUI] Error generando código Python:', e);
                 }
@@ -579,10 +1292,11 @@ const GUIComponent = props => {
             setTimeout(() => {
                 try {
                     // Solo regenerar si está bloqueado
-                    if (pythonPanelLockedRef.current) {
+                    if (pythonPanelLockedRef.current && currentTargetId) {
                         const result = generatePythonCodeWithMap(workspace);
                         if (vm && vm.runtime) vm.runtime.blockLineMap = result.blockLineMap;
-                        setPythonCode(result.code);
+                        // Regeneración automática: NO marca interacción.
+                        setPythonCodePerTarget(prev => ({...prev, [currentTargetId]: result.code}));
                     }
                 } catch (e) {
                     console.warn('[GUI] Error generando código Python inicial:', e);
@@ -955,6 +1669,28 @@ const GUIComponent = props => {
     const performDeviceSwitch = useCallback((device) => {
         const profile = getDeviceProfile(device);
 
+        // Modo Aula: seleccionar una tarjeta solo habilita sus bloques en
+        // Programación; no cambia a Electrónica ni reemplaza el proyecto.
+        if (classroomStateRef.current.active) {
+            deviceSwitchInProgress.current = true;
+            try {
+                if (profile) {
+                    onSelectDeviceModeDevice(profile);
+                    vm.setDeviceProfile(profile, profile.defaultProgramMode);
+                } else {
+                    onSelectDeviceModeDevice(null);
+                    vm.setDeviceProfile(null, null);
+                }
+                vm.requestCodeUpdate();
+            } catch (e) {
+                console.warn('[Classroom] Error seleccionando tarjeta:', e);
+            } finally {
+                deviceSwitchInProgress.current = false;
+            }
+            onRequestCloseDeviceLibrary();
+            return;
+        }
+
         if (!profile) {
             saveCurrentDeviceProject();
             deviceSwitchInProgress.current = true;
@@ -1051,6 +1787,13 @@ const GUIComponent = props => {
 
         // If selecting the same device already active, do nothing
         if (deviceModeDevice && deviceModeDevice.deviceId === profile.deviceId) {
+            return;
+        }
+
+        // Modo Aula: la selección solo habilita bloques de la tarjeta; no
+        // reemplaza el workspace, así que no hace falta confirmación.
+        if (classroomStateRef.current.active) {
+            performDeviceSwitch(device);
             return;
         }
 
@@ -1393,6 +2136,32 @@ const GUIComponent = props => {
     const handleVelxioStateChange = useCallback(state => {
         if (state) onSetCircuitData(state);
     }, [onSetCircuitData]);
+
+    const handleOpenClassroom = useCallback(() => {
+        const s = classroomStateRef.current;
+        if (s.active) {
+            if (s.role === ROLES.SERVIDOR) {
+                setClassroomConsoleOpen(true);
+            } else {
+                setClassroomRosterOpen(true);
+            }
+        } else {
+            setClassroomSetupOpen(true);
+        }
+    }, []);
+
+    const handleOpenClassroomSimulator = useCallback(() => {
+        const s = classroomStateRef.current;
+        if (!s.active || s.role !== ROLES.SERVIDOR) return;
+        if (!isClassroomSimulatorAvailable()) {
+            console.warn('[Classroom] Simulador no disponible (requiere Tauri).');
+            return;
+        }
+        const port = (s.config && s.config.port) ? s.config.port : 8870;
+        if (openClassroomSimulator({port, code: s.code})) {
+            console.log('[Classroom] Ventana simulada abierta (PC-2).');
+        }
+    }, []);
 
     // Restaurar circuito cuando circuitData cambia (despues de cargar .flynt)
     useEffect(() => {
@@ -2078,8 +2847,18 @@ const GUIComponent = props => {
                 id="gui.gui.costumesTab"
             />
         );
-        return TABS_CONFIG.map((t, i) => i === 1 ? {...t, label: costsmesLabel} : t);
-    }, [targetIsStage]);
+        const mapped = TABS_CONFIG.map((t, i) => i === 1 ? {...t, label: costsmesLabel} : t);
+        if (classroomReadOnlyBlocks) {
+            return mapped.filter(t => t.id === 'code');
+        }
+        return mapped;
+    }, [targetIsStage, classroomReadOnlyBlocks]);
+
+    useEffect(() => {
+        if (classroomReadOnlyBlocks && activeTabIndex !== 0) {
+            onActivateTab(0);
+        }
+    }, [classroomReadOnlyBlocks, activeTabIndex, onActivateTab]);
 
     // Pre-rendered panels — always mounted, visibility toggled via CSS
     const codePanel = useMemo(() => (
@@ -2090,6 +2869,7 @@ const GUIComponent = props => {
                 grow={1}
                 isVisible={blocksTabVisible}
                 isPythonEditMode={isPythonEditMode}
+                workspaceReadOnly={classroomReadOnlyBlocks}
                 onWorkspaceReady={setWorkspaceHandle}
                 onCodeGenerated={handleCodeGenerated}
                 options={{
@@ -2100,7 +2880,7 @@ const GUIComponent = props => {
                 vm={vm}
             />
         </Box>
-    ), [blocksId, theme, canUseCloud, blocksTabVisible, isPythonEditMode, vm, basePath, stageSize, handleCodeGenerated]);
+    ), [blocksId, theme, canUseCloud, blocksTabVisible, isPythonEditMode, classroomReadOnlyBlocks, vm, basePath, stageSize, handleCodeGenerated]);
 
     const costumePanel = useMemo(() => <CostumeTab vm={vm} />, [vm]);
     const soundPanel = useMemo(() => <SoundTab vm={vm} />, [vm]);
@@ -2178,6 +2958,15 @@ const GUIComponent = props => {
                         <TargetPane
                             stageSize={stageSize}
                             vm={vm}
+                            classroomCanAddSprite={classroomCanAdd}
+                            classroomCanDeleteSprite={classroomCanDelete}
+                            classroomCanRenameSprite={classroomCanRename}
+                            classroomCanEditCurrent={classroomCanEditCurrent}
+                            classroomCanEditTargetId={classroomCanEditTargetId}
+                            classroomStateActive={classroomState.active}
+                            classroomAssignments={classroomAssignments}
+                            classroomRoster={classroomState.roster || []}
+                            classroomMyId={classroomMyId}
                         />
                     </Box>
                 </Box>
@@ -2238,11 +3027,14 @@ const GUIComponent = props => {
                         )}
                         {/* Python Panel - only visible in Programacion mode (deviceMode === 'game') */}
                         <PythonPanel
-                            isOpen={pythonPanelOpen}
+                            isOpen={effectivePanelOpen}
                             pythonCode={pythonCode}
-                            isLocked={pythonPanelLocked}
+                            isLocked={effectivePanelLocked}
+                            isKeyLocked={isPythonKeyLocked}
                             onToggleOpen={() => setPythonPanelOpen(!pythonPanelOpen)}
                             onToggleLock={() => setPythonPanelLocked(!pythonPanelLocked)}
+                            onRequestKeyLock={handleRequestKeyLock}
+                            onRequestKeyUnlock={handleRequestKeyUnlock}
                             onCodeChange={setPythonCode}
                             onCopyCode={() => {}}
                             onSyncToBlocks={(code) => syncPythonToWorkspace(vm, code)}
@@ -2364,6 +3156,22 @@ const GUIComponent = props => {
             dir={isRtl ? 'rtl' : 'ltr'}
             {...componentProps}
         >
+            {classroomState.active && classroomState.role === ROLES.CLIENTE && classroomReadOnlyBlocks && (
+                <div className={styles.classroomReadOnlyBanner}>
+                    <span className={styles.classroomReadOnlyBannerIcon}>🔒</span>
+                    <span className={styles.classroomReadOnlyBannerText}>
+                        <strong>
+                            <FormattedMessage
+                                defaultMessage="Modo Lectura: No tienes permiso para editar este elemento. Tu elemento asignado es: {resources}"
+                                id="gui.gui.classroomReadOnly"
+                                values={{
+                                    resources: getAssignedResourceNames().join(', ') || 'Ninguno'
+                                }}
+                            />
+                        </strong>
+                    </span>
+                </div>
+            )}
             {telemetryModalVisible ? (
                 <TelemetryModal
                     isRtl={isRtl}
@@ -2429,6 +3237,27 @@ const GUIComponent = props => {
             />
             {uploadProgressModal}
             {stblockLinkPromptModal}
+            <PythonKeyModal
+                isOpen={pythonKeyModalOpen}
+                mode={pythonKeyModalMode}
+                onCancel={() => setPythonKeyModalOpen(false)}
+                onSetKey={handleSetKeyLock}
+                onTryUnlock={handleTryUnlock}
+            />
+            <ClassroomSetupModal
+                isOpen={classroomSetupOpen}
+                onClose={() => setClassroomSetupOpen(false)}
+            />
+            <ClassroomConsole
+                isOpen={classroomConsoleOpen}
+                onClose={() => setClassroomConsoleOpen(false)}
+                targets={classroomTargets}
+            />
+            <ClassroomRoster
+                isOpen={classroomRosterOpen}
+                onClose={() => setClassroomRosterOpen(false)}
+                targets={classroomTargets}
+            />
             {stbBoardPinoutVisible ? (
                 <StbBoardPinoutModal
                     onClose={() => setStbBoardPinoutVisible(false)}
@@ -2441,6 +3270,12 @@ const GUIComponent = props => {
                 onInstall={handleInstallUpdate}
                 onRetry={() => runUpdateCheck({manual: true})}
             />
+            <ClassroomBanner
+                onOpenConsole={() => setClassroomConsoleOpen(true)}
+                onOpenRoster={() => setClassroomRosterOpen(true)}
+                onOpenSimulator={handleOpenClassroomSimulator}
+                onLeave={() => classroomController.leave()}
+            />
             <MenuBar
                 authorId={authorId}
                 authorThumbnailUrl={authorThumbnailUrl}
@@ -2450,14 +3285,18 @@ const GUIComponent = props => {
                 canCreateCopy={canCreateCopy}
                 canCreateNew={canCreateNew}
                 canEditTitle={canEditTitle}
-                canManageFiles={canManageFiles}
+                canManageFiles={canManageFiles && classroomCanSave}
                 canRemix={canRemix}
-                canSave={canSave}
+                canSave={canSave && classroomCanSave}
                 canShare={canShare}
                 className={styles.menuBarPosition}
                 enableCommunity={enableCommunity}
                 isShared={isShared}
                 isTotallyNormal={isTotallyNormal}
+                modeToggleDisabled={isPythonKeyLocked || classroomForcePython || classroomForceBlocks}
+                lockedModes={classroomLockedModes}
+                classroomActive={classroomState.active}
+                onOpenClassroom={handleOpenClassroom}
                 showComingSoon={showComingSoon}
                 onClickAbout={onClickAbout}
                 onProjectTelemetryEvent={onProjectTelemetryEvent}

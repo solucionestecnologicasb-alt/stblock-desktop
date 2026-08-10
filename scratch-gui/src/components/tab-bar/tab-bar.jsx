@@ -22,6 +22,7 @@ const TabBar = ({
     onDragToSplitPanel,
     rtl
 }) => {
+    const activeTabOrder = tabOrder.filter(idx => idx < tabs.length);
     const cachedPair = useRef(null);
     const [, rerender] = useState(0);
     const tabListRef = useRef(null);
@@ -122,7 +123,7 @@ const TabBar = ({
         var posEl = target ? target.closest('[data-tab-pos]') : null;
         if (posEl && insertIdx != null) {
             if (onTabReorder) {
-                var order = tabOrder.filter(function (i) { return i !== d.panelIdx; });
+                var order = activeTabOrder.filter(function (i) { return i !== d.panelIdx; });
                 order.splice(insertIdx, 0, d.panelIdx);
                 onTabReorder(order);
             }
@@ -144,7 +145,7 @@ const TabBar = ({
                 }
             }
         }
-    }, [insertIdx, tabOrder, onTabReorder, onSetSecondaryTab, onActivateTab, activeTabIndex, onDragToSplitPanel]);
+    }, [insertIdx, activeTabOrder, onTabReorder, onSetSecondaryTab, onActivateTab, activeTabIndex, onDragToSplitPanel]);
 
     useEffect(function () {
         return function () {
@@ -217,7 +218,7 @@ const TabBar = ({
         return rects;
     }
 
-    var orderedPanels = tabOrder.map(function (panelIdx, visPos) {
+    var orderedPanels = activeTabOrder.map(function (panelIdx, visPos) {
         return {
             panelIdx: panelIdx,
             visPos: visPos,
@@ -287,7 +288,7 @@ const TabBar = ({
         );
     } else {
         var splitIndices = [pA, pB].sort(function (a, b) { return a - b; });
-        var otherIndices = tabOrder.filter(function (i) { return !splitIndices.includes(i); });
+        var otherIndices = activeTabOrder.filter(function (i) { return !splitIndices.includes(i); });
         var isActiveInSplit = activeTabIndex === pA || activeTabIndex === pB;
         tabListContent = (
             <React.Fragment>
@@ -322,11 +323,11 @@ const TabBar = ({
                 </div>
                 {otherIndices.map(function (panelIdx) {
                     var tab = tabs[panelIdx];
-                    var orderedPos = tabOrder.indexOf(panelIdx);
+                    var orderedPos = activeTabOrder.indexOf(panelIdx);
                     var isOtherSelected = !isActiveInSplit && panelIdx === activeTabIndex;
                     return renderTab(panelIdx, orderedPos, tab, isOtherSelected, isOtherSelected ? null : styles.dimmed);
                 })}
-                {insertIdx === tabOrder.length && <div className={styles.insertIndicator} />}
+                {insertIdx === activeTabOrder.length && <div className={styles.insertIndicator} />}
             </React.Fragment>
         );
     }

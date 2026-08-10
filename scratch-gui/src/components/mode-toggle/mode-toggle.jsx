@@ -3,16 +3,20 @@ import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import styles from './mode-toggle.css';
 
-const ModeToggle = ({mode, onModeChange, disabled}) => (
+const ModeToggle = ({mode, onModeChange, disabled, lockedModes, classroomActive, onOpenClassroom, showClassroom}) => {
+    // Un modo puede quedar bloqueado globalmente (disabled) o por rol
+    // (lockedModes, p. ej. cliente de Modo Aula no puede usar Electrónica).
+    const isLocked = m => disabled || ((lockedModes || []).includes(m));
+    return (
     <div className={styles.modeToggleContainer}>
         <div className={styles.modeToggle}>
             <button
                 className={classNames(styles.modeButton, {
                     [styles.active]: mode === 'game',
-                    [styles.disabled]: disabled
+                    [styles.disabled]: isLocked('game')
                 })}
-                onClick={() => !disabled && onModeChange('game')}
-                disabled={disabled}
+                onClick={() => !isLocked('game') && onModeChange('game')}
+                disabled={isLocked('game')}
             >
                 <svg className={styles.modeIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     {/* Icono de bloques/codigo */}
@@ -26,10 +30,10 @@ const ModeToggle = ({mode, onModeChange, disabled}) => (
             <button
                 className={classNames(styles.modeButton, {
                     [styles.active]: mode === 'device',
-                    [styles.disabled]: disabled
+                    [styles.disabled]: isLocked('device')
                 })}
-                onClick={() => !disabled && onModeChange('device')}
-                disabled={disabled}
+                onClick={() => !isLocked('device') && onModeChange('device')}
+                disabled={isLocked('device')}
             >
                 <svg className={styles.modeIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     {/* Icono de electronica/circuito */}
@@ -42,10 +46,10 @@ const ModeToggle = ({mode, onModeChange, disabled}) => (
             <button
                 className={classNames(styles.modeButton, {
                     [styles.active]: mode === 'diseno',
-                    [styles.disabled]: disabled
+                    [styles.disabled]: isLocked('diseno')
                 })}
-                onClick={() => !disabled && onModeChange('diseno')}
-                disabled={disabled}
+                onClick={() => !isLocked('diseno') && onModeChange('diseno')}
+                disabled={isLocked('diseno')}
             >
                 <svg className={styles.modeIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     {/* Icono de diseño 3D / cubo */}
@@ -57,10 +61,10 @@ const ModeToggle = ({mode, onModeChange, disabled}) => (
             <button
                 className={classNames(styles.modeButton, {
                     [styles.active]: mode === 'evaluacion',
-                    [styles.disabled]: disabled
+                    [styles.disabled]: isLocked('evaluacion')
                 })}
-                onClick={() => !disabled && onModeChange('evaluacion')}
-                disabled={disabled}
+                onClick={() => !isLocked('evaluacion') && onModeChange('evaluacion')}
+                disabled={isLocked('evaluacion')}
             >
                 <svg className={styles.modeIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     {/* Icono de evaluacion / gorro de graduacion */}
@@ -70,18 +74,43 @@ const ModeToggle = ({mode, onModeChange, disabled}) => (
                 </svg>
                 <span className={styles.modeLabel}>Evaluacion</span>
             </button>
+            {showClassroom && (
+                <button
+                    className={classNames(styles.modeButton, {
+                        [styles.active]: classroomActive,
+                        [styles.disabled]: disabled
+                    })}
+                    onClick={() => !disabled && onOpenClassroom && onOpenClassroom()}
+                    disabled={disabled}
+                >
+                    <svg className={styles.modeIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        {/* Icono de modo aula / escuela */}
+                        <path d="M4 19v-9l8-6 8 6v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+                        <path d="M9 22V12h6v10" />
+                        <path d="M12 2v2" />
+                    </svg>
+                    <span className={styles.modeLabel}>{classroomActive ? 'En Clase' : 'Modo Aula'}</span>
+                </button>
+            )}
         </div>
     </div>
-);
+    );
+};
 
 ModeToggle.propTypes = {
     mode: PropTypes.oneOf(['game', 'device', 'diseno', 'evaluacion']).isRequired,
     onModeChange: PropTypes.func.isRequired,
-    disabled: PropTypes.bool
+    disabled: PropTypes.bool,
+    lockedModes: PropTypes.arrayOf(PropTypes.oneOf(['game', 'device', 'diseno', 'evaluacion'])),
+    classroomActive: PropTypes.bool,
+    onOpenClassroom: PropTypes.func,
+    showClassroom: PropTypes.bool
 };
 
 ModeToggle.defaultProps = {
-    disabled: false
+    disabled: false,
+    lockedModes: [],
+    showClassroom: false
 };
 
 export default ModeToggle;

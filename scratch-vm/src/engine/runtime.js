@@ -15,6 +15,7 @@ const deviceManifests = require('../devices/device-manifests');
 if (typeof window !== 'undefined') {
     window.deviceManifests = deviceManifests;
 }
+const {filterLiveDeviceCategories} = require('../devices/live-blocks');
 const Thread = require('./thread');
 const log = require('../util/log');
 const maybeFormatMessage = require('../util/maybe-format-message');
@@ -1807,10 +1808,16 @@ class Runtime extends EventEmitter {
      * @property {string} xml - the XML text for this category, starting with `<category>` and ending with `</category>`
      */
     getBlocksXML (target) {
+        // En modo Programación (fuera de Electrónica), la paleta del dispositivo
+        // solo muestra los bloques utilizables en modo en vivo (Firmata/Python).
+        // En modo Electrónica (subida C++) se muestran todos los bloques del manifest.
+        const deviceBlockInfo = this._hardwareModeActive ?
+            this._deviceBlockInfo :
+            filterLiveDeviceCategories(this._deviceBlockInfo);
         const blockInfo = this._hardwareModeActive ?
-            this._deviceBlockInfo.concat(this._blockInfo.filter(category =>
+            deviceBlockInfo.concat(this._blockInfo.filter(category =>
                 category.id === 'myBlocks')) :
-            this._blockInfo.concat(this._deviceBlockInfo);
+            this._blockInfo.concat(deviceBlockInfo);
         return blockInfo.map(categoryInfo => {
             const {name, color1, color2} = categoryInfo;
             // Filter out blocks that aren't supposed to be shown on this target, as determined by the block info's

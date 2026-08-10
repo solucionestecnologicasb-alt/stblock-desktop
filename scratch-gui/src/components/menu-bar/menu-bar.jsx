@@ -387,6 +387,16 @@ class MenuBar extends React.Component {
         return `${filenameTitle.substring(0, 100)}.flynt`;
     }
     handleDeviceModeChange (newMode) {
+        // Si el candado con clave está activo, no se puede salir del modo
+        // Programación (el modo solo Python queda bloqueado).
+        if (this.props.modeToggleDisabled) {
+            return;
+        }
+        // Modo Aula: un cliente no puede entrar a modos bloqueados para su rol
+        // (Electrónica, Diseño 3D, Evaluación).
+        if (this.props.lockedModes && this.props.lockedModes.includes(newMode)) {
+            return;
+        }
         if (window.stblockActiveEvaluation && window.stblockActiveEvaluation.running && newMode !== 'evaluacion') {
             const rule = window.stblockActiveEvaluation.reglaSalida;
             if (rule === 'bloqueo') {
@@ -500,6 +510,11 @@ class MenuBar extends React.Component {
                         <ModeToggle
                             mode={this.props.deviceMode}
                             onModeChange={this.handleDeviceModeChange}
+                            disabled={this.props.modeToggleDisabled}
+                            lockedModes={this.props.lockedModes}
+                            classroomActive={this.props.classroomActive}
+                            onOpenClassroom={this.props.onOpenClassroom}
+                            showClassroom={hasTauriRuntime()}
                         />
                         <SettingsMenu
                             canChangeLanguage={this.props.canChangeLanguage}
@@ -591,6 +606,7 @@ class MenuBar extends React.Component {
                                 }
                             </span>
                         </div>
+                        {/* El botón de Modo Aula ha sido movido al selector de modo (ModeToggle) */}
                         {this.props.deviceModeSelectedDevice && this.props.deviceModeSelectedDevice.deviceId === 'stbBoardV2' && (
                             <div
                                 className={classNames(styles.menuBarItem, styles.hoverable)}
@@ -743,6 +759,8 @@ MenuBar.propTypes = {
     mode2020: PropTypes.bool,
     modeMenuOpen: PropTypes.bool,
     modeNow: PropTypes.bool,
+    modeToggleDisabled: PropTypes.bool,
+    lockedModes: PropTypes.arrayOf(PropTypes.oneOf(['game', 'device', 'diseno', 'evaluacion'])),
     onClickAbout: PropTypes.oneOfType([
         PropTypes.func, // button mode: call this callback when the About button is clicked
         PropTypes.arrayOf( // menu mode: list of items in the About menu
@@ -780,7 +798,9 @@ MenuBar.propTypes = {
     projectTitle: PropTypes.string,
     settingsMenuOpen: PropTypes.bool,
     username: PropTypes.string,
-    vm: PropTypes.instanceOf(VM).isRequired
+    vm: PropTypes.instanceOf(VM).isRequired,
+    classroomActive: PropTypes.bool,
+    onOpenClassroom: PropTypes.func
 };
 
 

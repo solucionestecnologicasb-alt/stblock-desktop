@@ -56,6 +56,11 @@ const StageSelector = props => {
         onNewBackdropClick,
         onSurpriseBackdropClick,
         onEmptyBackdropClick,
+        canAddBackdrop,
+        classroomStateActive,
+        classroomOwnerId,
+        classroomOwnerName,
+        classroomIsOwnedByMe,
         ...componentProps
     } = props;
     return (
@@ -71,6 +76,20 @@ const StageSelector = props => {
             onMouseLeave={onMouseLeave}
             {...componentProps}
         >
+            {props.classroomStateActive && (
+                props.classroomOwnerId ? (
+                    <div className={classNames(
+                        styles.classroomBadge,
+                        props.classroomIsOwnedByMe ? styles.classroomBadgeOwned : styles.classroomBadgeLocked
+                    )}>
+                        {props.classroomIsOwnedByMe ? '💚 Tuyo' : `🔒 ${props.classroomOwnerName}`}
+                    </div>
+                ) : (
+                    <div className={classNames(styles.classroomBadge, styles.classroomBadgeUnassigned)}>
+                        ❔ Libre
+                    </div>
+                )
+            )}
             <div className={styles.header}>
                 <div className={styles.headerTitle}>
                     <FormattedMessage
@@ -94,37 +113,38 @@ const StageSelector = props => {
                 />
             </div>
             <div className={styles.count}>{backdropCount}</div>
-            <ActionMenu
-                className={styles.addButton}
-                img={backdropIcon}
-                moreButtons={[
-                    {
-                        title: intl.formatMessage(messages.addBackdropFromFile),
-                        img: fileUploadIcon,
-                        onClick: onBackdropFileUploadClick,
-                        fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .gif',
-                        fileChange: onBackdropFileUpload,
-                        fileInput: fileInputRef,
-                        fileMultiple: true
-                    }, {
-                        title: intl.formatMessage(messages.addBackdropFromSurprise),
-                        img: surpriseIcon,
-                        onClick: onSurpriseBackdropClick
-
-                    }, {
-                        title: intl.formatMessage(messages.addBackdropFromPaint),
-                        img: paintIcon,
-                        onClick: onEmptyBackdropClick
-                    }, {
-                        title: intl.formatMessage(messages.addBackdropFromLibrary),
-                        img: searchIcon,
-                        onClick: onNewBackdropClick
-                    }
-                ]}
-                title={intl.formatMessage(messages.addBackdropFromLibrary)}
-                tooltipPlace={isRtl(intl.locale) ? 'right' : 'left'}
-                onClick={onNewBackdropClick}
-            />
+            {canAddBackdrop !== false ? (
+                <ActionMenu
+                    className={styles.addButton}
+                    img={backdropIcon}
+                    moreButtons={[
+                        {
+                            title: intl.formatMessage(messages.addBackdropFromFile),
+                            img: fileUploadIcon,
+                            onClick: onBackdropFileUploadClick,
+                            fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .gif',
+                            fileChange: onBackdropFileUpload,
+                            fileInput: fileInputRef,
+                            fileMultiple: true
+                        }, {
+                            title: intl.formatMessage(messages.addBackdropFromSurprise),
+                            img: surpriseIcon,
+                            onClick: onSurpriseBackdropClick
+                        }, {
+                            title: intl.formatMessage(messages.addBackdropFromPaint),
+                            img: paintIcon,
+                            onClick: onEmptyBackdropClick
+                        }, {
+                            title: intl.formatMessage(messages.addBackdropFromLibrary),
+                            img: searchIcon,
+                            onClick: onNewBackdropClick
+                        }
+                    ]}
+                    title={intl.formatMessage(messages.addBackdropFromLibrary)}
+                    tooltipPlace={isRtl(intl.locale) ? 'right' : 'left'}
+                    onClick={onNewBackdropClick}
+                />
+            ) : null}
         </Box>
     );
 };
@@ -146,7 +166,12 @@ StageSelector.propTypes = {
     raised: PropTypes.bool.isRequired,
     receivedBlocks: PropTypes.bool.isRequired,
     selected: PropTypes.bool.isRequired,
-    url: PropTypes.string
+    url: PropTypes.string,
+    canAddBackdrop: PropTypes.bool,
+    classroomStateActive: PropTypes.bool,
+    classroomOwnerId: PropTypes.string,
+    classroomOwnerName: PropTypes.string,
+    classroomIsOwnedByMe: PropTypes.bool
 };
 
 export default injectIntl(StageSelector);

@@ -17,6 +17,10 @@ import styles from './target-pane.css';
  * @returns {React.Component} rendered component
  */
 const TargetPane = ({
+    classroomCanAddSprite,
+    classroomCanDeleteSprite,
+    classroomCanRenameSprite,
+    classroomCanEditCurrent,
     editingTarget,
     fileInputRef,
     hoveredTarget,
@@ -45,6 +49,10 @@ const TargetPane = ({
     stageSize,
     sprites,
     vm,
+    classroomStateActive,
+    classroomAssignments,
+    classroomRoster,
+    classroomMyId,
     ...componentProps
 }) => (
     <div
@@ -53,6 +61,10 @@ const TargetPane = ({
     >
 
         <SpriteSelectorComponent
+            canAddSprite={classroomCanAddSprite}
+            canDeleteSprite={classroomCanDeleteSprite}
+            canRenameSprite={classroomCanRenameSprite}
+            canEditCurrent={classroomCanEditCurrent}
             editingTarget={editingTarget}
             hoveredTarget={hoveredTarget}
             raised={raiseSprites}
@@ -77,6 +89,10 @@ const TargetPane = ({
             onSelectSprite={onSelectSprite}
             onSpriteUpload={onSpriteUpload}
             onSurpriseSpriteClick={onSurpriseSpriteClick}
+            classroomStateActive={classroomStateActive}
+            classroomAssignments={classroomAssignments}
+            classroomRoster={classroomRoster}
+            classroomMyId={classroomMyId}
         />
         <div className={styles.stageSelectorWrapper}>
             {stage.id && <StageSelector
@@ -88,6 +104,15 @@ const TargetPane = ({
                 id={stage.id}
                 selected={stage.id === editingTarget}
                 onSelect={onSelectSprite}
+                canAddBackdrop={classroomCanAddSprite}
+                classroomStateActive={classroomStateActive}
+                classroomOwnerId={classroomStateActive ? classroomAssignments[stage.name] : null}
+                classroomOwnerName={classroomStateActive && classroomAssignments[stage.name] ? (
+                    classroomAssignments[stage.name] === classroomMyId ? 'Tuyo' : (
+                        (classroomRoster || []).find(c => c.id === classroomAssignments[stage.name])?.name || 'Profesor'
+                    )
+                ) : null}
+                classroomIsOwnedByMe={classroomStateActive ? classroomAssignments[stage.name] === classroomMyId : false}
             />}
             <div>
                 {spriteLibraryVisible ? (
@@ -126,6 +151,10 @@ const spriteShape = PropTypes.shape({
 });
 
 TargetPane.propTypes = {
+    classroomCanAddSprite: PropTypes.bool,
+    classroomCanDeleteSprite: PropTypes.bool,
+    classroomCanRenameSprite: PropTypes.bool,
+    classroomCanEditCurrent: PropTypes.bool,
     editingTarget: PropTypes.string,
     extensionLibraryVisible: PropTypes.bool,
     fileInputRef: PropTypes.func,
@@ -158,7 +187,11 @@ TargetPane.propTypes = {
     sprites: PropTypes.objectOf(spriteShape),
     stage: spriteShape,
     stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired,
-    vm: PropTypes.instanceOf(VM)
+    vm: PropTypes.instanceOf(VM),
+    classroomStateActive: PropTypes.bool,
+    classroomAssignments: PropTypes.object,
+    classroomRoster: PropTypes.array,
+    classroomMyId: PropTypes.string
 };
 
 export default TargetPane;

@@ -46,6 +46,7 @@ class SpriteInfo extends React.Component {
         return (
             this.props.rotationStyle !== nextProps.rotationStyle ||
             this.props.disabled !== nextProps.disabled ||
+            this.props.nameDisabled !== nextProps.nameDisabled ||
             this.props.name !== nextProps.name ||
             this.props.stageSize !== nextProps.stageSize ||
             this.props.visible !== nextProps.visible ||
@@ -85,6 +86,7 @@ class SpriteInfo extends React.Component {
 
         const labelAbove = isWideLocale(this.props.intl.locale);
 
+        const nameDisabled = this.props.disabled || this.props.nameDisabled;
         const spriteNameInput = (
             <BufferedInput
                 className={classNames(
@@ -93,11 +95,11 @@ class SpriteInfo extends React.Component {
                         [styles.columnInput]: labelAbove
                     }
                 )}
-                disabled={this.props.disabled}
+                disabled={nameDisabled}
                 placeholder={this.props.intl.formatMessage(messages.spritePlaceholder)}
                 tabIndex="0"
                 type="text"
-                value={this.props.disabled ? '' : this.props.name}
+                value={nameDisabled ? '' : this.props.name}
                 onSubmit={this.props.onChangeName}
             />
         );
@@ -240,6 +242,7 @@ SpriteInfo.propTypes = {
         PropTypes.number
     ]),
     disabled: PropTypes.bool,
+    nameDisabled: PropTypes.bool,
     intl: intlShape,
     name: PropTypes.string,
     onChangeDirection: PropTypes.func,
