@@ -1,0 +1,291 @@
+### arduino_advanced_controlBreak
+  args0: 
+### arduino_advanced_controlCase
+  args0: input:VAL
+  shadows: VAL=math_number
+### arduino_advanced_controlDefault
+  args0: 
+### arduino_advanced_controlSwitch
+  args0: input:VAL
+  shadows: VAL=math_number
+### arduino_advanced_getMicros
+  args0: 
+### arduino_advanced_pro_serialFlush
+  args0: 
+### arduino_advanced_pro_serialReadStringUntil
+  args0: input:CHAR
+  shadows: CHAR=text
+### arduino_arrays_arrayClear
+  args0: input:NAME
+  shadows: NAME=text
+### arduino_arrays_arrayContains
+  args0: input:NAME | input:VALUE
+  shadows: NAME=text | VALUE=text
+### arduino_arrays_arrayDeclare
+  args0: input:NAME | field:TYPE{int=int,float=float,String=String,bool=bool,char=char} | input:SIZE
+  shadows: NAME=text | SIZE=math_number
+### arduino_arrays_arrayDeclareWithValues
+  args0: input:NAME | field:TYPE{int=int,float=float,String=String,bool=bool,char=char} | input:VALUES
+  shadows: NAME=text | VALUES=text
+### arduino_arrays_arrayGet
+  args0: input:NAME | input:INDEX
+  shadows: NAME=text | INDEX=math_number
+### arduino_arrays_arrayIndexOf
+  args0: input:VALUE | input:NAME
+  shadows: VALUE=text | NAME=text
+### arduino_arrays_arrayInsert
+  args0: input:VALUE | input:NAME | input:INDEX
+  shadows: VALUE=text | NAME=text | INDEX=math_number
+### arduino_arrays_arrayLength
+  args0: input:NAME
+  shadows: NAME=text
+### arduino_arrays_arrayPop
+  args0: input:NAME
+  shadows: NAME=text
+### arduino_arrays_arrayPush
+  args0: input:VALUE | input:NAME
+  shadows: VALUE=text | NAME=text
+### arduino_arrays_arrayRemove
+  args0: input:NAME | input:INDEX
+  shadows: NAME=text | INDEX=math_number
+### arduino_arrays_arrayReverse
+  args0: input:NAME
+  shadows: NAME=text
+### arduino_arrays_arraySet
+  args0: input:NAME | input:INDEX | input:VALUE
+  shadows: NAME=text | INDEX=math_number | VALUE=text
+### arduino_comm_i2cAvailable
+  args0: 
+### arduino_comm_i2cBegin
+  args0: 
+### arduino_comm_i2cBeginTransmission
+  args0: input:ADDR
+  shadows: ADDR=text
+### arduino_comm_i2cEndTransmission
+  args0: 
+### arduino_comm_i2cRead
+  args0: 
+### arduino_comm_i2cRequestFrom
+  args0: input:COUNT | input:ADDR
+  shadows: COUNT=math_number | ADDR=text
+### arduino_comm_i2cScan
+  args0: 
+### arduino_comm_i2cSetClock
+  args0: field:SPEED{100 kHz (estándar)=100000,400 kHz (rápido)=400000}
+### arduino_comm_i2cWriteByte
+  args0: input:DATA
+  shadows: DATA=math_number
+### arduino_comm_i2cWriteString
+  args0: input:TEXT
+  shadows: TEXT=text
+### arduino_comm_spiBegin
+  args0: 
+### arduino_comm_spiBeginTransaction
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_comm_spiEnd
+  args0: 
+### arduino_comm_spiEndTransaction
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_comm_spiSettings
+  args0: input:SPEED | field:ORDER{MSB primero (MSBFIRST)=MSBFIRST,LSB primero (LSBFIRST)=LSBFIRST} | field:MODE{Modo 0 (CPOL=0, CPHA=0)=SPI_MODE0,Modo 1 (CPOL=0, CPHA=1)=SPI_MODE1,Modo 2 (CPOL=1, CPHA=0)=SPI_MODE2,Modo 3 (CPOL=1, CPHA=1)=SPI_MODE3}
+  shadows: SPEED=math_number
+### arduino_comm_spiTransfer
+  args0: input:DATA
+  shadows: DATA=math_number
+### arduino_comm_spiTransferArray
+  args0: input:NAME | input:SIZE
+  shadows: NAME=text | SIZE=math_number
+### arduino_data_bitwiseNot
+  args0: input:A
+  shadows: A=math_number
+### arduino_data_bitwiseOp
+  args0: field:OP{AND (&)=&,OR (|)=|,XOR (^)=^,NOT (~)=~,desplazar izquierda (<<)=<<,desplazar derecha (>>)=>>} | input:A | input:B
+  shadows: A=math_number | B=math_number
+### arduino_data_dataConstrain
+  args0: input:DATA | input:ARG0 | input:ARG1
+  shadows: DATA=math_number | ARG0=math_number | ARG1=math_number
+### arduino_data_dataConvert
+  args0: input:DATA | field:TYPE{entero=INTEGER,decimal=DECIMAL,texto=STRING}
+  shadows: DATA=text
+### arduino_data_dataConvertASCIICharacter
+  args0: input:DATA
+  shadows: DATA=math_number
+### arduino_data_dataConvertASCIINumber
+  args0: input:DATA
+  shadows: DATA=text
+### arduino_data_dataMap
+  args0: input:DATA | input:ARG0 | input:ARG1 | input:ARG2 | input:ARG3
+  shadows: DATA=math_number | ARG0=math_number | ARG1=math_number | ARG2=math_number | ARG3=math_number
+### arduino_math_mathAbs
+  args0: input:NUM
+  shadows: NUM=math_number
+### arduino_math_mathArrayAverage
+  args0: input:NAME
+  shadows: NAME=text
+### arduino_math_mathArrayMax
+  args0: input:NAME
+  shadows: NAME=text
+### arduino_math_mathArrayMin
+  args0: input:NAME
+  shadows: NAME=text
+### arduino_math_mathArraySort
+  args0: input:NAME | field:ORDER{ascendente=ASC,descendente=DESC}
+  shadows: NAME=text
+### arduino_math_mathArraySum
+  args0: input:NAME
+  shadows: NAME=text
+### arduino_math_mathPow
+  args0: input:BASE | input:EXP
+  shadows: BASE=math_number | EXP=math_number
+### arduino_math_mathRandom
+  args0: input:MIN | input:MAX
+  shadows: MIN=math_number | MAX=math_number
+### arduino_math_mathRandomSeed
+  args0: input:SEED
+  shadows: SEED=math_number
+### arduino_math_mathRandomSeedAnalog
+  args0: field:PIN{A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_math_mathRound
+  args0: field:MODE{redondear=round,hacia arriba (ceil)=ceil,hacia abajo (floor)=floor} | input:NUM
+  shadows: NUM=math_number
+### arduino_math_mathRoundDecimals
+  args0: input:NUM | input:DECIMALS
+  shadows: NUM=math_number | DECIMALS=math_number
+### arduino_math_mathSqrt
+  args0: input:NUM
+  shadows: NUM=math_number
+### arduino_pin_attachServo
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15} | input:MIN_US | input:MAX_US
+  shadows: MIN_US=math_number | MAX_US=math_number
+### arduino_pin_centerServo
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_pin_detachServo
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_pin_isServoAttached
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_pin_moveServoSmooth
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15} | input:OUT | input:TIME
+  shadows: OUT=math_half_angle | TIME=math_number
+### arduino_pin_readAnalogPin
+  args0: field:PIN{A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_pin_readDigitalPin
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_pin_readServoAngle
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_pin_readServoPulse
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_pin_setContinuousServoSpeed
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15} | input:OUT
+  shadows: OUT=math_number
+### arduino_pin_setDigitalOutput
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15} | input:LEVEL
+  shadows: LEVEL=arduino_pin_menu_level
+### arduino_pin_setPinMode
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15} | field:MODE{entrada=INPUT,salida=OUTPUT,entrada-pullup=INPUT_PULLUP}
+### arduino_pin_setPwmOutput
+  args0: field:PIN{2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,44=44,45=45,46=46} | input:OUT
+  shadows: OUT=math_uint8_number
+### arduino_pin_setServoOutput
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15} | input:OUT
+  shadows: OUT=math_half_angle
+### arduino_pin_setServoPulseOutput
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15} | input:OUT
+  shadows: OUT=math_number
+### arduino_pin_stopContinuousServo
+  args0: field:PIN{0=0,1=1,2=2,3=3,4=4,5=5,6=6,7=7,8=8,9=9,10=10,11=11,12=12,13=13,14=14,15=15,16=16,17=17,18=18,19=19,20=20,21=21,22=22,23=23,24=24,25=25,26=26,27=27,28=28,29=29,30=30,31=31,32=32,33=33,34=34,35=35,36=36,37=37,38=38,39=39,40=40,41=41,42=42,43=43,44=44,45=45,46=46,47=47,48=48,49=49,50=50,51=51,52=52,53=53,A0=A0,A1=A1,A2=A2,A3=A3,A4=A4,A5=A5,A6=A6,A7=A7,A8=A8,A9=A9,A10=A10,A11=A11,A12=A12,A13=A13,A14=A14,A15=A15}
+### arduino_serial_multiSerialAvailable
+  args0: field:NO{0=0,1=1,2=2,3=3}
+### arduino_serial_multiSerialBegin
+  args0: field:NO{0=0,1=1,2=2,3=3} | field:VALUE{4800=4800,9600=9600,19200=19200,38400=38400,57600=57600,76800=76800,115200=115200}
+### arduino_serial_multiSerialPrint
+  args0: field:NO{0=0,1=1,2=2,3=3} | input:VALUE | field:EOL{con salto=warp,sin salto=noWarp}
+  shadows: VALUE=text
+### arduino_serial_multiSerialReadAByte
+  args0: field:NO{0=0,1=1,2=2,3=3}
+### arduino_serial_serialAvailable
+  args0: 
+### arduino_serial_serialBegin
+  args0: field:VALUE{4800=4800,9600=9600,19200=19200,38400=38400,57600=57600,76800=76800,115200=115200}
+### arduino_serial_serialPrint
+  args0: input:VALUE | field:EOL{con salto=warp,sin salto=noWarp}
+  shadows: VALUE=text
+### arduino_serial_serialReadAByte
+  args0: 
+### arduino_stbv2puertos_desconectarServoPuerto
+  args0: field:PORT{puerto 2=2,puerto 3=3,puerto 4=4,puerto 5=5,puerto 7=7,puerto 8=8,puerto 9=9,puerto 10=10}
+### arduino_stbv2puertos_moverServoPuerto
+  args0: field:PORT{puerto 2=2,puerto 3=3,puerto 4=4,puerto 5=5,puerto 7=7,puerto 8=8,puerto 9=9,puerto 10=10} | input:ANGLE
+  shadows: ANGLE=math_number
+### arduino_stbv2puertos_moverServoPuertoPorPulsos
+  args0: field:PORT{puerto 2=2,puerto 3=3,puerto 4=4,puerto 5=5,puerto 7=7,puerto 8=8,puerto 9=9,puerto 10=10} | input:PULSE
+  shadows: PULSE=math_number
+### arduino_stbv2puertos_moverServoPuertoSuavemente
+  args0: field:PORT{puerto 2=2,puerto 3=3,puerto 4=4,puerto 5=5,puerto 7=7,puerto 8=8,puerto 9=9,puerto 10=10} | input:ANGLE | input:TIME
+  shadows: ANGLE=math_number | TIME=math_number
+### arduino_structs_structArrayCreate
+  args0: input:ARRNAME | input:STRUCTNAME | input:SIZE
+  shadows: ARRNAME=text | STRUCTNAME=text | SIZE=math_number
+### arduino_structs_structArrayGet
+  args0: input:ARRNAME | input:[INDEX | input:FIELD
+  shadows: ARRNAME=text | FIELD=text
+### arduino_structs_structArraySet
+  args0: input:ARRNAME | input:[INDEX | input:FIELD | input:VALUE
+  shadows: ARRNAME=text | FIELD=text | VALUE=text
+### arduino_structs_structCreate
+  args0: input:VARNAME | input:STRUCTNAME
+  shadows: VARNAME=text | STRUCTNAME=text
+### arduino_structs_structDefine
+  args0: input:NAME | input:FIELDS
+  shadows: NAME=text | FIELDS=text
+### arduino_structs_structGet
+  args0: input:VARNAME | input:FIELD
+  shadows: VARNAME=text | FIELD=text
+### arduino_structs_structSet
+  args0: input:VARNAME | input:FIELD | input:VALUE
+  shadows: VARNAME=text | FIELD=text | VALUE=text
+### arduino_text_textCase
+  args0: input:TEXT | field:CASE{mayúsculas=upper,minúsculas=lower}
+  shadows: TEXT=text
+### arduino_text_textCharAt
+  args0: input:POS | input:TEXT
+  shadows: POS=math_number | TEXT=text
+### arduino_text_textEndsWith
+  args0: input:TEXT | input:SUFFIX
+  shadows: TEXT=text | SUFFIX=text
+### arduino_text_textFromAscii
+  args0: input:CODE
+  shadows: CODE=math_number
+### arduino_text_textIndexOf
+  args0: input:SEARCH | input:TEXT
+  shadows: SEARCH=text | TEXT=text
+### arduino_text_textLength
+  args0: input:TEXT
+  shadows: TEXT=text
+### arduino_text_textRepeat
+  args0: input:TEXT | input:COUNT
+  shadows: TEXT=text | COUNT=math_number
+### arduino_text_textReplace
+  args0: input:TEXT | input:OLD | input:NEW
+  shadows: TEXT=text | OLD=text | NEW=text
+### arduino_text_textStartsWith
+  args0: input:TEXT | input:PREFIX
+  shadows: TEXT=text | PREFIX=text
+### arduino_text_textSubstring
+  args0: input:TEXT | input:START | input:END
+  shadows: TEXT=text | START=math_number | END=math_number
+### arduino_text_textToAscii
+  args0: input:CHAR
+  shadows: CHAR=text
+### arduino_text_textTrim
+  args0: input:TEXT
+  shadows: TEXT=text
+### microbit_pin_readAnalogPin
+  args0: field:PIN{P0=0,P1=1,P2=2,P3=3,P4=4,P10=10}
+### microbit_pin_readDigitalPin
+  args0: field:PIN{P0=0,P1=1,P2=2,P3=3,P4=4,P5=5,P6=6,P7=7,P8=8,P9=9,P10=10,P11=11,P12=12,P13=13,P14=14,P15=15,P16=16}
+### microbit_pin_setDigitalOutput
+  args0: field:PIN{P0=0,P1=1,P2=2,P3=3,P4=4,P5=5,P6=6,P7=7,P8=8,P9=9,P10=10,P11=11,P12=12,P13=13,P14=14,P15=15,P16=16} | input:LEVEL
+  shadows: LEVEL=microbit_pin_menu_level
+### microbit_pin_setPwmOutput
+  args0: field:PIN{P0=0,P1=1,P2=2,P3=3,P4=4,P5=5,P6=6,P7=7,P8=8,P9=9,P10=10,P11=11,P12=12,P13=13,P14=14,P15=15,P16=16} | input:OUT
+  shadows: OUT=math_uint10_number

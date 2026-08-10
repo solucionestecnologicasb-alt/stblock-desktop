@@ -139,7 +139,7 @@ try {
         pnpm exec tauri dev
     } else {
         Write-Host "  Modo: RELEASE"
-        pnpm exec tauri build --bundles nsis --bundles msi
+        pnpm exec tauri build --bundles nsis
     }
     if ($LASTEXITCODE -ne 0) { Write-Fail "Error en compilacion Tauri" }
 } finally {

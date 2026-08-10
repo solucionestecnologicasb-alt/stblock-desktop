@@ -1593,6 +1593,1056 @@ if calcular_distancia() < 50:
             { name: 'Retroceso desde', python: 'sprite.retroceso_desde(objetivo, fuerza)', description: 'Empuja al sprite lejos de un objetivo', example: 'if sprite.tocando("enemigo"):\n    sprite.retroceso_desde("enemigo", 15)', params: [{ name: 'objetivo', type: 'texto', desc: 'Origen del golpe' }, { name: 'fuerza', type: 'numero', desc: 'Fuerza del retroceso' }] },
             { name: 'Revivir', python: 'sprite.revivir(salud)', description: 'Revive al sprite con salud', example: 'if sprite.esta_muerto():\n    esperar(2)\n    sprite.revivir(100)', params: [{ name: 'salud', type: 'numero', desc: 'Salud al revivir' }] }
         ]
+    },
+    placa: {
+        name: 'Placa',
+        icon: '🔌',
+        color: '#FF6B35',
+        description: 'Controla la placa conectada (Arduino, STBoard V2 o micro:bit) desde Python',
+        blocks: [
+            {
+                name: 'Al iniciar la placa',
+                python: '@cuando_placa_inicie\ndef al_iniciar_placa():',
+                description: 'Ejecuta el código cuando la placa se conecta e inicia',
+                example: `@cuando_placa_inicie
+def al_iniciar_placa():
+    placa.modo(13, "salida")
+    placa.escribir_digital(13, "alto")`,
+                params: []
+            }
+        ]
+    },
+    placa_pines: {
+        name: 'Pines',
+        icon: '📟',
+        color: '#FFAB19',
+        description: 'Configura y usa los pines digitales y analógicos de la placa',
+        blocks: [
+            {
+                name: 'Configurar modo de pin',
+                python: 'placa.modo(pin, "salida")',
+                description: 'Configura un pin como entrada, salida o entrada con resistencia pull-up',
+                example: `placa.modo(13, "salida")          # Pin 13 como salida
+placa.modo(2, "entrada")           # Pin 2 como entrada
+placa.modo(2, "entrada_pullup")    # Entrada con pull-up`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Número del pin (ej. 13)' },
+                    { name: 'modo', type: 'texto', desc: '"entrada", "salida" o "entrada_pullup" (también INPUT, OUTPUT, INPUT_PULLUP)' }
+                ]
+            },
+            {
+                name: 'Escribir salida digital',
+                python: 'placa.escribir_digital(pin, "alto")',
+                description: 'Pone un pin en nivel alto (5V) o bajo (0V)',
+                example: `placa.escribir_digital(13, "alto")  # Enciende el LED
+placa.escribir_digital(13, "bajo")   # Apaga el LED`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Número del pin' },
+                    { name: 'nivel', type: 'texto', desc: '"alto" o "bajo" (también HIGH o LOW)' }
+                ]
+            },
+            {
+                name: 'Escribir analógico (PWM)',
+                python: 'placa.escribir_analogico(pin, valor)',
+                description: 'Escribe un valor PWM (0-255) para controlar brillo, motores, etc.',
+                example: `placa.escribir_analogico(9, 128)  # 50% de brillo
+placa.escribir_analogico(9, 255)  # Máximo`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin PWM (ej. 3, 5, 6, 9, 10, 11)' },
+                    { name: 'valor', type: 'número', desc: 'Valor de 0 a 255' }
+                ]
+            },
+            {
+                name: 'Leer pin digital',
+                python: 'placa.leer_digital(pin)',
+                description: 'Lee un pin digital y devuelve 1 (alto) o 0 (bajo)',
+                example: `if placa.leer_digital(2) == 1:
+    placa.escribir_digital(13, "alto")`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Número del pin' }
+                ]
+            },
+            {
+                name: 'Leer pin analógico',
+                python: 'placa.leer_analogico("A0")',
+                description: 'Lee un pin analógico y devuelve un valor de 0 a 1023',
+                example: `valor = placa.leer_analogico("A0")
+if valor > 512:
+    placa.escribir_digital(13, "alto")`,
+                params: [
+                    { name: 'pin', type: 'texto', desc: 'Pin analógico (ej. "A0", "A1")' }
+                ]
+            }
+        ]
+    },
+    placa_servos: {
+        name: 'Servos',
+        icon: '🦾',
+        color: '#FF8C1A',
+        description: 'Controla servomotores conectados a la placa',
+        blocks: [
+            {
+                name: 'Conectar servo',
+                python: 'placa.conectar_servo(pin, min_us, max_us)',
+                description: 'Prepara un pin para usar un servo (puedes ajustar el rango de pulso)',
+                example: `placa.conectar_servo(9)              # Valores por defecto
+placa.conectar_servo(9, 500, 2400)  # Rango estándar`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' },
+                    { name: 'min_us', type: 'número', desc: 'Pulso mínimo en microsegundos (500)' },
+                    { name: 'max_us', type: 'número', desc: 'Pulso máximo en microsegundos (2400)' }
+                ]
+            },
+            {
+                name: 'Escribir ángulo',
+                python: 'placa.escribir_servo(pin, angulo)',
+                description: 'Mueve el servo a un ángulo (0-180)',
+                example: `placa.escribir_servo(9, 90)   # Posición central
+placa.escribir_servo(9, 180)  # Giro máximo`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' },
+                    { name: 'angulo', type: 'número', desc: 'Ángulo de 0 a 180' }
+                ]
+            },
+            {
+                name: 'Escribir pulso',
+                python: 'placa.escribir_servo_pulso(pin, pulso)',
+                description: 'Mueve el servo con un pulso en microsegundos (500-2400)',
+                example: `placa.escribir_servo_pulso(9, 1500)  # Centro`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' },
+                    { name: 'pulso', type: 'número', desc: 'Pulso en microsegundos' }
+                ]
+            },
+            {
+                name: 'Velocidad servo continuo',
+                python: 'placa.velocidad_servo_continuo(pin, velocidad)',
+                description: 'Controla la velocidad y sentido de un servo de rotación continua',
+                example: `placa.velocidad_servo_continuo(9, 90)  # Gira en un sentido
+placa.velocidad_servo_continuo(9, 0)   # Se detiene`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' },
+                    { name: 'velocidad', type: 'número', desc: 'Velocidad de 0 a 180' }
+                ]
+            },
+            {
+                name: 'Centrar servo',
+                python: 'placa.centrar_servo(pin)',
+                description: 'Lleva el servo a su posición central (90°)',
+                example: `placa.centrar_servo(9)`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' }
+                ]
+            },
+            {
+                name: 'Detener servo continuo',
+                python: 'placa.detener_servo_continuo(pin)',
+                description: 'Detiene un servo de rotación continua',
+                example: `placa.detener_servo_continuo(9)`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' }
+                ]
+            },
+            {
+                name: 'Mover suave',
+                python: 'placa.mover_servo_suave(pin, angulo, tiempo)',
+                description: 'Mueve el servo suavemente a un ángulo en un tiempo dado',
+                example: `placa.mover_servo_suave(9, 180, 2)  # En 2 segundos`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' },
+                    { name: 'angulo', type: 'número', desc: 'Ángulo final' },
+                    { name: 'tiempo', type: 'número', desc: 'Duración en segundos' }
+                ]
+            },
+            {
+                name: 'Desconectar servo',
+                python: 'placa.desconectar_servo(pin)',
+                description: 'Libera el pin del servo',
+                example: `placa.desconectar_servo(9)`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' }
+                ]
+            },
+            {
+                name: 'Servo conectado',
+                python: 'placa.servo_conectado(pin)',
+                description: 'Devuelve True si hay un servo conectado en el pin',
+                example: `if placa.servo_conectado(9):
+    placa.escribir_servo(9, 45)`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' }
+                ]
+            },
+            {
+                name: 'Leer ángulo',
+                python: 'placa.leer_angulo_servo(pin)',
+                description: 'Devuelve el ángulo actual del servo',
+                example: `angulo = placa.leer_angulo_servo(9)`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' }
+                ]
+            },
+            {
+                name: 'Leer pulso',
+                python: 'placa.leer_pulso_servo(pin)',
+                description: 'Devuelve el pulso actual del servo en microsegundos',
+                example: `pulso = placa.leer_pulso_servo(9)`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin del servo' }
+                ]
+            }
+        ]
+    },
+    placa_serial: {
+        name: 'Serial',
+        icon: '📡',
+        color: '#5CB1D6',
+        description: 'Comunicación por puerto serie para enviar y recibir datos',
+        blocks: [
+            {
+                name: 'Iniciar serial',
+                python: 'placa.serial_iniciar(baudaje)',
+                description: 'Inicia la comunicación serial con una velocidad (baudios)',
+                example: `placa.serial_iniciar(9600)`,
+                params: [
+                    { name: 'baudaje', type: 'número', desc: 'Velocidad en baudios (9600, 115200...)' }
+                ]
+            },
+            {
+                name: 'Enviar datos',
+                python: 'placa.serial_enviar(datos, con_salto)',
+                description: 'Envía datos por serial; por defecto añade salto de línea',
+                example: `placa.serial_enviar("Hola")         # Con salto de línea
+placa.serial_enviar("Hola", False)  # Sin salto de línea`,
+                params: [
+                    { name: 'datos', type: 'cualquiera', desc: 'Datos a enviar' },
+                    { name: 'con_salto', type: 'booleano', desc: 'True añade salto de línea (por defecto)' }
+                ]
+            },
+            {
+                name: 'Enviar línea',
+                python: 'placa.serial_enviar_linea(datos)',
+                description: 'Envía datos con salto de línea al final',
+                example: `placa.serial_enviar_linea(lectura)`,
+                params: [
+                    { name: 'datos', type: 'cualquiera', desc: 'Datos a enviar' }
+                ]
+            },
+            {
+                name: 'Datos disponibles',
+                python: 'placa.serial_disponible()',
+                description: 'Devuelve cuántos bytes hay disponibles para leer',
+                example: `if placa.serial_disponible() > 0:
+    dato = placa.serial_leer()`,
+                params: []
+            },
+            {
+                name: 'Leer byte',
+                python: 'placa.serial_leer()',
+                description: 'Lee un byte (0-255) del buffer serial',
+                example: `dato = placa.serial_leer()`,
+                params: []
+            },
+            {
+                name: 'Leer hasta',
+                python: 'placa.serial_leer_hasta(terminador)',
+                description: 'Lee caracteres hasta encontrar el terminador',
+                example: `mensaje = placa.serial_leer_hasta("\\n")`,
+                params: [
+                    { name: 'terminador', type: 'texto', desc: 'Carácter que detiene la lectura (ej. "\\n")' }
+                ]
+            },
+            {
+                name: 'Vaciar buffer',
+                python: 'placa.serial_vaciar()',
+                description: 'Limpia el buffer de datos seriales',
+                example: `placa.serial_vaciar()`,
+                params: []
+            }
+        ]
+    },
+    placa_puertos: {
+        name: 'Puertos STB',
+        icon: '🔧',
+        color: '#9966FF',
+        description: 'Servos conectados a los puertos de la STBoard V2',
+        blocks: [
+            {
+                name: 'Mover servo de puerto',
+                python: 'placa.mover_servo_puerto(puerto, angulo)',
+                description: 'Mueve el servo del puerto al ángulo indicado',
+                example: `placa.mover_servo_puerto(1, 90)`,
+                params: [
+                    { name: 'puerto', type: 'número', desc: 'Número del puerto (1-4)' },
+                    { name: 'angulo', type: 'número', desc: 'Ángulo de 0 a 180' }
+                ]
+            },
+            {
+                name: 'Mover por pulsos',
+                python: 'placa.mover_servo_puerto_pulsos(puerto, pulso)',
+                description: 'Mueve el servo del puerto con un pulso en microsegundos',
+                example: `placa.mover_servo_puerto_pulsos(1, 1500)`,
+                params: [
+                    { name: 'puerto', type: 'número', desc: 'Número del puerto' },
+                    { name: 'pulso', type: 'número', desc: 'Pulso en microsegundos' }
+                ]
+            },
+            {
+                name: 'Desconectar servo de puerto',
+                python: 'placa.desconectar_servo_puerto(puerto)',
+                description: 'Libera el puerto',
+                example: `placa.desconectar_servo_puerto(1)`,
+                params: [
+                    { name: 'puerto', type: 'número', desc: 'Número del puerto' }
+                ]
+            },
+            {
+                name: 'Mover suave',
+                python: 'placa.mover_servo_puerto_suave(puerto, angulo, tiempo)',
+                description: 'Mueve el servo del puerto suavemente en un tiempo',
+                example: `placa.mover_servo_puerto_suave(1, 180, 2)`,
+                params: [
+                    { name: 'puerto', type: 'número', desc: 'Número del puerto' },
+                    { name: 'angulo', type: 'número', desc: 'Ángulo final' },
+                    { name: 'tiempo', type: 'número', desc: 'Duración en segundos' }
+                ]
+            }
+        ]
+    },
+    placa_i2c_spi: {
+        name: 'I2C / SPI',
+        icon: '🔗',
+        color: '#59C059',
+        description: 'Comunicación con dispositivos I2C y SPI (la ejecución en vivo depende del periférico conectado)',
+        blocks: [
+            {
+                name: 'Iniciar I2C',
+                python: 'placa.i2c_iniciar()',
+                description: 'Inicia el bus I2C',
+                example: `placa.i2c_iniciar()`,
+                params: []
+            },
+            {
+                name: 'Velocidad I2C',
+                python: 'placa.i2c_velocidad(velocidad)',
+                description: 'Ajusta la velocidad del bus I2C',
+                example: `placa.i2c_velocidad(100000)  # 100 kHz`,
+                params: [
+                    { name: 'velocidad', type: 'número', desc: 'Velocidad en Hz (100000 o 400000)' }
+                ]
+            },
+            {
+                name: 'Iniciar transmisión',
+                python: 'placa.i2c_iniciar_transmision(direccion)',
+                description: 'Comienza una transmisión hacia un dispositivo',
+                example: `placa.i2c_iniciar_transmision(0x27)`,
+                params: [
+                    { name: 'direccion', type: 'número', desc: 'Dirección I2C del dispositivo (0x27, 0x3C...)' }
+                ]
+            },
+            {
+                name: 'Enviar byte',
+                python: 'placa.i2c_enviar_byte(dato)',
+                description: 'Envía un byte al dispositivo',
+                example: `placa.i2c_enviar_byte(65)`,
+                params: [
+                    { name: 'dato', type: 'número', desc: 'Byte a enviar (0-255)' }
+                ]
+            },
+            {
+                name: 'Enviar texto',
+                python: 'placa.i2c_enviar_texto(texto)',
+                description: 'Envía una cadena de texto al dispositivo',
+                example: `placa.i2c_enviar_texto("Hola")`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto a enviar' }
+                ]
+            },
+            {
+                name: 'Finalizar transmisión',
+                python: 'placa.i2c_finalizar_transmision()',
+                description: 'Termina la transmisión actual',
+                example: `placa.i2c_finalizar_transmision()`,
+                params: []
+            },
+            {
+                name: 'Solicitar datos',
+                python: 'placa.i2c_solicitar(cantidad, direccion)',
+                description: 'Solicita una cantidad de bytes a un dispositivo',
+                example: `placa.i2c_solicitar(6, 0x27)  # Pide 6 bytes al dispositivo`,
+                params: [
+                    { name: 'cantidad', type: 'número', desc: 'Número de bytes a solicitar' },
+                    { name: 'direccion', type: 'número', desc: 'Dirección I2C del dispositivo' }
+                ]
+            },
+            {
+                name: 'Datos disponibles',
+                python: 'placa.i2c_disponible()',
+                description: 'Devuelve cuántos bytes hay disponibles para leer',
+                example: `if placa.i2c_disponible() > 0:
+    dato = placa.i2c_leer()`,
+                params: []
+            },
+            {
+                name: 'Leer byte',
+                python: 'placa.i2c_leer()',
+                description: 'Lee un byte del bus I2C',
+                example: `dato = placa.i2c_leer()`,
+                params: []
+            },
+            {
+                name: 'Escanear bus',
+                python: 'placa.i2c_escanear()',
+                description: 'Busca los dispositivos conectados al bus I2C',
+                example: `direcciones = placa.i2c_escanear()`,
+                params: []
+            },
+            {
+                name: 'Iniciar SPI',
+                python: 'placa.spi_iniciar()',
+                description: 'Inicia el bus SPI',
+                example: `placa.spi_iniciar()`,
+                params: []
+            },
+            {
+                name: 'Configurar SPI',
+                python: 'placa.spi_configurar(velocidad, orden, modo)',
+                description: 'Configura velocidad, orden de bits y modo SPI',
+                example: `placa.spi_configurar(4000000, "MSBFIRST", "SPI_MODE0")`,
+                params: [
+                    { name: 'velocidad', type: 'número', desc: 'Frecuencia en Hz' },
+                    { name: 'orden', type: 'texto', desc: '"MSBFIRST" o "LSBFIRST"' },
+                    { name: 'modo', type: 'texto', desc: '"SPI_MODE0", "SPI_MODE1", "SPI_MODE2" o "SPI_MODE3"' }
+                ]
+            },
+            {
+                name: 'Iniciar transacción',
+                python: 'placa.spi_iniciar_transaccion(pin)',
+                description: 'Inicia una transacción seleccionando el pin CS',
+                example: `placa.spi_iniciar_transaccion(10)  # Pin CS 10`,
+                params: [
+                    { name: 'pin', type: 'número', desc: 'Pin de selección (CS)' }
+                ]
+            },
+            {
+                name: 'Transferir byte',
+                python: 'placa.spi_transferir(dato)',
+                description: 'Transfiere un byte y devuelve el byte recibido',
+                example: `dato = placa.spi_transferir(0x55)`,
+                params: [
+                    { name: 'dato', type: 'número', desc: 'Byte a enviar (0-255)' }
+                ]
+            },
+            {
+                name: 'Transferir lista',
+                python: 'placa.spi_transferir_lista(nombre, tamaño)',
+                description: 'Transfiere los datos de un array por SPI',
+                example: `placa.spi_transferir_lista("datos", 4)`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array declarado' },
+                    { name: 'tamaño', type: 'número', desc: 'Cantidad de elementos a transferir' }
+                ]
+            },
+            {
+                name: 'Finalizar transacción',
+                python: 'placa.spi_finalizar_transaccion()',
+                description: 'Termina la transacción SPI actual',
+                example: `placa.spi_finalizar_transaccion()`,
+                params: []
+            },
+            {
+                name: 'Finalizar SPI',
+                python: 'placa.spi_finalizar()',
+                description: 'Detiene el bus SPI',
+                example: `placa.spi_finalizar()`,
+                params: []
+            }
+        ]
+    },
+    placa_datos: {
+        name: 'Datos',
+        icon: '🧮',
+        color: '#FF8C1A',
+        description: 'Conversiones y operaciones con datos (igual que los bloques de Arduino)',
+        blocks: [
+            {
+                name: 'Mapear',
+                python: 'placa.mapear(valor, min_ent, max_ent, min_sal, max_sal)',
+                description: 'Re-mapea un valor de un rango a otro (equivalente a map de Arduino)',
+                example: `x = placa.mapear(50, 0, 100, 0, 255)  # 127.5`,
+                params: [
+                    { name: 'valor', type: 'número', desc: 'Valor a convertir' },
+                    { name: 'min_ent', type: 'número', desc: 'Mínimo del rango de entrada' },
+                    { name: 'max_ent', type: 'número', desc: 'Máximo del rango de entrada' },
+                    { name: 'min_sal', type: 'número', desc: 'Mínimo del rango de salida' },
+                    { name: 'max_sal', type: 'número', desc: 'Máximo del rango de salida' }
+                ]
+            },
+            {
+                name: 'Limitar',
+                python: 'placa.limitar(valor, minimo, maximo)',
+                description: 'Limita un valor entre un mínimo y un máximo (clamp)',
+                example: `x = placa.limitar(300, 0, 255)  # 255`,
+                params: [
+                    { name: 'valor', type: 'número', desc: 'Valor a limitar' },
+                    { name: 'minimo', type: 'número', desc: 'Mínimo permitido' },
+                    { name: 'maximo', type: 'número', desc: 'Máximo permitido' }
+                ]
+            },
+            {
+                name: 'Convertir',
+                python: 'placa.convertir(tipo, valor)',
+                description: 'Convierte un valor según el tipo (entero / decimal / texto)',
+                example: `n = placa.convertir("entero", "42")   # 42
+f = placa.convertir("decimal", 3)    # 3.0
+t = placa.convertir("texto", 42)     # "42"`,
+                params: [
+                    { name: 'tipo', type: 'texto', desc: '"entero", "decimal" o "texto" (también INTEGER, DECIMAL, STRING)' },
+                    { name: 'valor', type: 'cualquiera', desc: 'Valor a convertir' }
+                ]
+            },
+            {
+                name: 'Carácter ASCII',
+                python: 'placa.caracter_ascii(numero)',
+                description: 'Devuelve el carácter ASCII correspondiente a un número',
+                example: `letra = placa.caracter_ascii(65)  # "A"`,
+                params: [
+                    { name: 'numero', type: 'número', desc: 'Código ASCII (0-255)' }
+                ]
+            },
+            {
+                name: 'Número ASCII',
+                python: 'placa.ascii_numero(caracter)',
+                description: 'Devuelve el número ASCII de un carácter',
+                example: `n = placa.ascii_numero("A")  # 65`,
+                params: [
+                    { name: 'caracter', type: 'texto', desc: 'Carácter a convertir' }
+                ]
+            },
+            {
+                name: 'Operación de bits',
+                python: 'placa.operacion_bits(op, a, b)',
+                description: 'Realiza una operación bit a bit (y, o, xor, no, desplazamientos)',
+                example: `placa.operacion_bits("y", 12, 10)                   # 8 (AND)
+placa.operacion_bits("o", 12, 10)                   # 14 (OR)
+placa.operacion_bits("xor", 12, 10)                 # 6
+placa.operacion_bits("desplazar_izquierda", 1, 4)   # 16`,
+                params: [
+                    { name: 'op', type: 'texto', desc: '"y", "o", "xor", "no", "desplazar_izquierda" o "desplazar_derecha"' },
+                    { name: 'a', type: 'número', desc: 'Primer operando' },
+                    { name: 'b', type: 'número', desc: 'Segundo operando' }
+                ]
+            },
+            {
+                name: 'NOT bits',
+                python: 'placa.no_bits(a)',
+                description: 'Invierte todos los bits de un número',
+                example: `placa.no_bits(12)  # -13`,
+                params: [
+                    { name: 'a', type: 'número', desc: 'Número a invertir' }
+                ]
+            }
+        ]
+    },
+    placa_matematicas: {
+        name: 'Matemáticas',
+        icon: '📐',
+        color: '#4C97FF',
+        description: 'Funciones matemáticas y estadísticas de arrays',
+        blocks: [
+            {
+                name: 'Potencia',
+                python: 'placa.potencia(base, exponente)',
+                description: 'Eleva una base a un exponente',
+                example: `placa.potencia(2, 8)  # 256.0`,
+                params: [
+                    { name: 'base', type: 'número', desc: 'Base' },
+                    { name: 'exponente', type: 'número', desc: 'Exponente' }
+                ]
+            },
+            {
+                name: 'Raíz cuadrada',
+                python: 'placa.raiz_cuadrada(numero)',
+                description: 'Calcula la raíz cuadrada de un número',
+                example: `placa.raiz_cuadrada(16)  # 4.0`,
+                params: [
+                    { name: 'numero', type: 'número', desc: 'Número (no negativo)' }
+                ]
+            },
+            {
+                name: 'Valor absoluto',
+                python: 'placa.valor_absoluto(numero)',
+                description: 'Devuelve el valor absoluto de un número',
+                example: `placa.valor_absoluto(-5)  # 5.0`,
+                params: [
+                    { name: 'numero', type: 'número', desc: 'Número' }
+                ]
+            },
+            {
+                name: 'Redondear',
+                python: 'placa.redondear(numero, modo)',
+                description: 'Redondea un número (normal, hacia arriba o hacia abajo)',
+                example: `placa.redondear(3.7)                     # 4
+placa.redondear(3.2, "redondear_arriba")  # 4 (ceil)
+placa.redondear(3.9, "redondear_abajo")   # 3 (floor)`,
+                params: [
+                    { name: 'numero', type: 'número', desc: 'Número a redondear' },
+                    { name: 'modo', type: 'texto', desc: '"redondear", "redondear_arriba" o "redondear_abajo" (round, ceil, floor)' }
+                ]
+            },
+            {
+                name: 'Redondear decimales',
+                python: 'placa.redondear_decimales(numero, decimales)',
+                description: 'Redondea un número a un número fijo de decimales',
+                example: `placa.redondear_decimales(19.567, 2)  # 19.57`,
+                params: [
+                    { name: 'numero', type: 'número', desc: 'Número a redondear' },
+                    { name: 'decimales', type: 'número', desc: 'Cantidad de decimales' }
+                ]
+            },
+            {
+                name: 'Aleatorio en rango',
+                python: 'placa.aleatorio_rango(minimo, maximo)',
+                description: 'Genera un número entero aleatorio entre dos valores',
+                example: `dado = placa.aleatorio_rango(1, 6)`,
+                params: [
+                    { name: 'minimo', type: 'número', desc: 'Valor mínimo' },
+                    { name: 'maximo', type: 'número', desc: 'Valor máximo' }
+                ]
+            },
+            {
+                name: 'Semilla aleatoria',
+                python: 'placa.semilla_aleatoria(semilla)',
+                description: 'Fija la semilla del generador aleatorio',
+                example: `placa.semilla_aleatoria(42)
+print(placa.aleatorio_rango(1, 100))`,
+                params: [
+                    { name: 'semilla', type: 'número', desc: 'Semilla' }
+                ]
+            },
+            {
+                name: 'Semilla aleatoria analógica',
+                python: 'placa.semilla_aleatoria_analogica(pin)',
+                description: 'Usa el ruido de un pin analógico como semilla',
+                example: `placa.semilla_aleatoria_analogica("A0")`,
+                params: [
+                    { name: 'pin', type: 'texto', desc: 'Pin analógico (ej. "A0")' }
+                ]
+            },
+            {
+                name: 'Microsegundos',
+                python: 'placa.micros()',
+                description: 'Devuelve los microsegundos transcurridos desde el inicio',
+                example: `t = placa.micros()`,
+                params: []
+            },
+            {
+                name: 'Suma de array',
+                python: 'placa.suma_array(nombre)',
+                description: 'Suma todos los elementos de un array',
+                example: `total = placa.suma_array("nums")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' }
+                ]
+            },
+            {
+                name: 'Promedio de array',
+                python: 'placa.promedio_array(nombre)',
+                description: 'Calcula el promedio de los elementos de un array',
+                example: `media = placa.promedio_array("nums")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' }
+                ]
+            },
+            {
+                name: 'Máximo de array',
+                python: 'placa.maximo_array(nombre)',
+                description: 'Devuelve el valor máximo de un array',
+                example: `m = placa.maximo_array("nums")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' }
+                ]
+            },
+            {
+                name: 'Mínimo de array',
+                python: 'placa.minimo_array(nombre)',
+                description: 'Devuelve el valor mínimo de un array',
+                example: `m = placa.minimo_array("nums")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' }
+                ]
+            },
+            {
+                name: 'Ordenar array',
+                python: 'placa.ordenar_array(nombre, orden)',
+                description: 'Ordena los elementos de un array',
+                example: `placa.ordenar_array("nums", "ascendente")
+placa.ordenar_array("nums", "descendente")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'orden', type: 'texto', desc: '"ascendente" o "descendente" (ASC, DESC)' }
+                ]
+            }
+        ]
+    },
+    placa_texto: {
+        name: 'Texto',
+        icon: '🔤',
+        color: '#FF661A',
+        description: 'Operaciones con texto (¡importante! los índices empiezan en 0, igual que en Arduino)',
+        blocks: [
+            {
+                name: 'Longitud',
+                python: 'placa.texto_longitud(texto)',
+                description: 'Cuenta cuántos caracteres tiene un texto',
+                example: `n = placa.texto_longitud("hola")  # 4`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto a medir' }
+                ]
+            },
+            {
+                name: 'Carácter en posición',
+                python: 'placa.texto_caracter(texto, posicion)',
+                description: 'Devuelve el carácter en la posición (empieza en 0, igual que Arduino)',
+                example: `placa.texto_caracter("hola", 0)  # "h"
+placa.texto_caracter("hola", 3)  # "a"`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto' },
+                    { name: 'posicion', type: 'número', desc: 'Posición (0 = primer carácter)' }
+                ]
+            },
+            {
+                name: 'Subcadena',
+                python: 'placa.texto_subcadena(texto, inicio, fin)',
+                description: 'Devuelve una parte del texto desde inicio hasta fin (inicio en 0, fin no incluido)',
+                example: `placa.texto_subcadena("hola mundo", 0, 4)   # "hola"
+placa.texto_subcadena("hola mundo", 5, 10)  # "mundo"`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto' },
+                    { name: 'inicio', type: 'número', desc: 'Posición de inicio (0 = primero)' },
+                    { name: 'fin', type: 'número', desc: 'Posición final (no incluida)' }
+                ]
+            },
+            {
+                name: 'Cambiar mayúsculas/minúsculas',
+                python: 'placa.texto_caso(texto, caso)',
+                description: 'Convierte el texto a mayúsculas o minúsculas',
+                example: `placa.texto_caso("hola", "mayusculas")    # "HOLA"
+placa.texto_caso("HOLA", "minusculas")   # "hola"`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto' },
+                    { name: 'caso', type: 'texto', desc: '"mayusculas" o "minusculas" (upper, lower)' }
+                ]
+            },
+            {
+                name: 'Recortar',
+                python: 'placa.texto_recortar(texto)',
+                description: 'Elimina los espacios al inicio y al final del texto',
+                example: `placa.texto_recortar("  hola  ")  # "hola"`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto' }
+                ]
+            },
+            {
+                name: 'Empieza con',
+                python: 'placa.texto_empieza_con(texto, prefijo)',
+                description: 'Devuelve True si el texto empieza con el prefijo',
+                example: `if placa.texto_empieza_con("hola", "ho"):
+    print("Empieza")`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto' },
+                    { name: 'prefijo', type: 'texto', desc: 'Prefijo a comprobar' }
+                ]
+            },
+            {
+                name: 'Termina con',
+                python: 'placa.texto_termina_con(texto, sufijo)',
+                description: 'Devuelve True si el texto termina con el sufijo',
+                example: `if placa.texto_termina_con("hola", "la"):
+    print("Termina")`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto' },
+                    { name: 'sufijo', type: 'texto', desc: 'Sufijo a comprobar' }
+                ]
+            },
+            {
+                name: 'Índice de',
+                python: 'placa.texto_indice_de(texto, busqueda)',
+                description: 'Busca un texto dentro de otro y devuelve su posición (empieza en 0; -1 si no existe)',
+                example: `placa.texto_indice_de("hola", "l")  # 2
+placa.texto_indice_de("hola", "z")  # -1 si no está`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto donde buscar' },
+                    { name: 'busqueda', type: 'texto', desc: 'Texto a buscar' }
+                ]
+            },
+            {
+                name: 'Reemplazar',
+                python: 'placa.texto_reemplazar(texto, viejo, nuevo)',
+                description: 'Reemplaza todas las ocurrencias de un texto por otro',
+                example: `placa.texto_reemplazar("hola", "o", "0")  # "h0la"`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto original' },
+                    { name: 'viejo', type: 'texto', desc: 'Texto a reemplazar' },
+                    { name: 'nuevo', type: 'texto', desc: 'Texto nuevo' }
+                ]
+            },
+            {
+                name: 'Repetir',
+                python: 'placa.texto_repetir(texto, veces)',
+                description: 'Repite un texto un número de veces',
+                example: `placa.texto_repetir("ab", 3)  # "ababab"`,
+                params: [
+                    { name: 'texto', type: 'texto', desc: 'Texto' },
+                    { name: 'veces', type: 'número', desc: 'Número de repeticiones' }
+                ]
+            },
+            {
+                name: 'A ASCII',
+                python: 'placa.texto_a_ascii(caracter)',
+                description: 'Devuelve el código ASCII del primer carácter',
+                example: `placa.texto_a_ascii("A")  # 65`,
+                params: [
+                    { name: 'caracter', type: 'texto', desc: 'Carácter' }
+                ]
+            },
+            {
+                name: 'De ASCII',
+                python: 'placa.texto_de_ascii(codigo)',
+                description: 'Devuelve el carácter correspondiente a un código ASCII',
+                example: `placa.texto_de_ascii(65)  # "A"`,
+                params: [
+                    { name: 'codigo', type: 'número', desc: 'Código ASCII (0-255)' }
+                ]
+            }
+        ]
+    },
+    placa_arrays: {
+        name: 'Arrays',
+        icon: '🗃️',
+        color: '#FF6680',
+        description: 'Arreglos de datos con índices desde 0',
+        blocks: [
+            {
+                name: 'Declarar array',
+                python: 'placa.array_declarar(nombre, tipo, tamaño)',
+                description: 'Crea un array de un tamaño fijo (elementos en 0)',
+                example: `placa.array_declarar("datos", "int", 5)
+placa.array_poner("datos", 0, 7)`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'tipo', type: 'texto', desc: '"int", "decimal" o "texto"' },
+                    { name: 'tamaño', type: 'número', desc: 'Número de elementos' }
+                ]
+            },
+            {
+                name: 'Declarar con valores',
+                python: 'placa.array_declarar_con_valores(nombre, tipo, valores)',
+                description: 'Crea un array con los valores indicados',
+                example: `placa.array_declarar_con_valores("nums", "int", "1,2,3,4")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'tipo', type: 'texto', desc: '"int", "decimal" o "texto"' },
+                    { name: 'valores', type: 'texto', desc: 'Valores separados por comas' }
+                ]
+            },
+            {
+                name: 'Obtener elemento',
+                python: 'placa.array_obtener(nombre, indice)',
+                description: 'Devuelve el elemento en la posición (empieza en 0)',
+                example: `placa.array_declarar("datos", "int", 5)
+placa.array_poner("datos", 0, 7)
+print(placa.array_obtener("datos", 0))  # 7`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'indice', type: 'número', desc: 'Posición (0 = primer elemento)' }
+                ]
+            },
+            {
+                name: 'Poner elemento',
+                python: 'placa.array_poner(nombre, indice, valor)',
+                description: 'Guarda un valor en la posición indicada',
+                example: `placa.array_poner("datos", 0, 7)`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'indice', type: 'número', desc: 'Posición (0 = primer elemento)' },
+                    { name: 'valor', type: 'cualquiera', desc: 'Valor a guardar' }
+                ]
+            },
+            {
+                name: 'Longitud',
+                python: 'placa.array_longitud(nombre)',
+                description: 'Devuelve el número de elementos del array',
+                example: `n = placa.array_longitud("datos")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' }
+                ]
+            },
+            {
+                name: 'Agregar al final',
+                python: 'placa.array_agregar(nombre, valor)',
+                description: 'Añade un elemento al final del array',
+                example: `placa.array_agregar("nums", 5)`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'valor', type: 'cualquiera', desc: 'Valor a agregar' }
+                ]
+            },
+            {
+                name: 'Quitar último',
+                python: 'placa.array_quitar_ultimo(nombre)',
+                description: 'Elimina y devuelve el último elemento',
+                example: `ultimo = placa.array_quitar_ultimo("nums")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' }
+                ]
+            },
+            {
+                name: 'Insertar',
+                python: 'placa.array_insertar(nombre, indice, valor)',
+                description: 'Inserta un valor en una posición (desplaza los demás)',
+                example: `placa.array_insertar("nums", 0, 9)  # Inserta al inicio`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'indice', type: 'número', desc: 'Posición donde insertar' },
+                    { name: 'valor', type: 'cualquiera', desc: 'Valor a insertar' }
+                ]
+            },
+            {
+                name: 'Eliminar',
+                python: 'placa.array_eliminar(nombre, indice)',
+                description: 'Elimina el elemento de una posición',
+                example: `placa.array_eliminar("nums", 1)`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'indice', type: 'número', desc: 'Posición a eliminar' }
+                ]
+            },
+            {
+                name: 'Índice de',
+                python: 'placa.array_indice_de(nombre, valor)',
+                description: 'Busca un valor y devuelve su posición (empieza en 0; -1 si no está)',
+                example: `pos = placa.array_indice_de("nums", 3)  # 2
+if pos == -1:
+    print("No está")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'valor', type: 'cualquiera', desc: 'Valor a buscar' }
+                ]
+            },
+            {
+                name: 'Contiene',
+                python: 'placa.array_contiene(nombre, valor)',
+                description: 'Devuelve True si el array contiene el valor',
+                example: `if placa.array_contiene("nums", 3):
+    print("Está")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'valor', type: 'cualquiera', desc: 'Valor a comprobar' }
+                ]
+            },
+            {
+                name: 'Limpiar',
+                python: 'placa.array_limpiar(nombre)',
+                description: 'Elimina todos los elementos del array',
+                example: `placa.array_limpiar("nums")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' }
+                ]
+            },
+            {
+                name: 'Invertir',
+                python: 'placa.array_invertir(nombre)',
+                description: 'Invierte el orden de los elementos',
+                example: `placa.array_invertir("nums")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del array' }
+                ]
+            }
+        ]
+    },
+    placa_structs: {
+        name: 'Structs',
+        icon: '🏗️',
+        color: '#9966FF',
+        description: 'Estructuras de datos con varios campos',
+        blocks: [
+            {
+                name: 'Definir struct',
+                python: 'placa.struct_definir(nombre, campos)',
+                description: 'Define un tipo de estructura con sus campos',
+                example: `placa.struct_definir("Persona", "nombre,edad")`,
+                params: [
+                    { name: 'nombre', type: 'texto', desc: 'Nombre del tipo de struct' },
+                    { name: 'campos', type: 'texto', desc: 'Nombres de los campos separados por comas' }
+                ]
+            },
+            {
+                name: 'Crear variable',
+                python: 'placa.struct_crear(nombre_variable, nombre_struct)',
+                description: 'Crea una variable del tipo de struct definido',
+                example: `placa.struct_crear("p", "Persona")`,
+                params: [
+                    { name: 'nombre_variable', type: 'texto', desc: 'Nombre de la variable' },
+                    { name: 'nombre_struct', type: 'texto', desc: 'Tipo de struct' }
+                ]
+            },
+            {
+                name: 'Poner campo',
+                python: 'placa.struct_poner(nombre_variable, campo, valor)',
+                description: 'Guarda un valor en un campo de la estructura',
+                example: `placa.struct_poner("p", "nombre", "Ana")`,
+                params: [
+                    { name: 'nombre_variable', type: 'texto', desc: 'Nombre de la variable' },
+                    { name: 'campo', type: 'texto', desc: 'Campo a modificar' },
+                    { name: 'valor', type: 'cualquiera', desc: 'Valor a guardar' }
+                ]
+            },
+            {
+                name: 'Obtener campo',
+                python: 'placa.struct_obtener(nombre_variable, campo)',
+                description: 'Devuelve el valor de un campo de la estructura',
+                example: `print(placa.struct_obtener("p", "nombre"))  # "Ana"`,
+                params: [
+                    { name: 'nombre_variable', type: 'texto', desc: 'Nombre de la variable' },
+                    { name: 'campo', type: 'texto', desc: 'Campo a leer' }
+                ]
+            },
+            {
+                name: 'Crear array de structs',
+                python: 'placa.struct_array_crear(nombre_array, nombre_struct, tamaño)',
+                description: 'Crea un array de estructuras',
+                example: `placa.struct_array_crear("gente", "Persona", 3)`,
+                params: [
+                    { name: 'nombre_array', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'nombre_struct', type: 'texto', desc: 'Tipo de struct' },
+                    { name: 'tamaño', type: 'número', desc: 'Número de elementos' }
+                ]
+            },
+            {
+                name: 'Poner en array',
+                python: 'placa.struct_array_poner(nombre_array, indice, campo, valor)',
+                description: 'Guarda un valor en un campo del elemento indicado',
+                example: `placa.struct_array_poner("gente", 1, "edad", 30)`,
+                params: [
+                    { name: 'nombre_array', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'indice', type: 'número', desc: 'Posición (0 = primero)' },
+                    { name: 'campo', type: 'texto', desc: 'Campo a modificar' },
+                    { name: 'valor', type: 'cualquiera', desc: 'Valor a guardar' }
+                ]
+            },
+            {
+                name: 'Obtener de array',
+                python: 'placa.struct_array_obtener(nombre_array, indice, campo)',
+                description: 'Devuelve el valor de un campo del elemento indicado',
+                example: `print(placa.struct_array_obtener("gente", 1, "edad"))  # 30`,
+                params: [
+                    { name: 'nombre_array', type: 'texto', desc: 'Nombre del array' },
+                    { name: 'indice', type: 'número', desc: 'Posición (0 = primero)' },
+                    { name: 'campo', type: 'texto', desc: 'Campo a leer' }
+                ]
+            }
+        ]
     }
 };
 

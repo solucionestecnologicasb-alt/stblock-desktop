@@ -8,6 +8,19 @@ function isTauriBundled() {
     window.location.hostname === 'tauri.localhost'
   );
 }
-export const STBLOCK_SKETCHFORGE_URL = isTauriBundled()
-  ? './sketchforge/?theme=light'        // exe nativo (static export empaquetado)
+
+function isLocalDev() {
+  if (typeof window === 'undefined') return false;
+  // Si estamos en el puerto de desarrollo de scratch-gui (8601) o en el puerto del Next dev server (3000)
+  return (
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1'
+  ) && (
+    window.location.port === '8601' || 
+    window.location.port === '3000'
+  );
+}
+
+export const STBLOCK_SKETCHFORGE_URL = (isTauriBundled() || !isLocalDev())
+  ? './sketchforge/?theme=light'        // exe nativo o despliegue web de producción (WordPress)
   : 'http://localhost:3000/?theme=light'; // dev (Next dev server)

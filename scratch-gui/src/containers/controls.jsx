@@ -35,7 +35,20 @@ class Controls extends React.Component {
                 if (!this.props.isStarted) {
                     this.props.vm.start();
                 }
-                
+
+                // En modo edición Python, la bandera verde ejecuta el código Python
+                // (controla la placa en tiempo real) en lugar de ejecutar los bloques.
+                if (this.props.isPythonEditMode && this.props.pythonExecutor) {
+                    this.props.pythonExecutor.stop();
+                    this.props.pythonExecutor.execute(
+                        this.props.pythonCode || '',
+                        output => console.log('[STBlock] Python output:', output),
+                        error => console.warn('[STBlock] Python error:', error),
+                        result => console.log('[STBlock] Python finalizado:', result)
+                    );
+                    return;
+                }
+
                 if (classroomState.active && classroomState.role === 'cliente') {
                     const vm = this.props.vm;
                     vm.runtime.stopAll();
@@ -98,6 +111,9 @@ class Controls extends React.Component {
             isStarted, // eslint-disable-line no-unused-vars
             projectRunning,
             turbo,
+            isPythonEditMode, // eslint-disable-line no-unused-vars
+            pythonExecutor, // eslint-disable-line no-unused-vars
+            pythonCode, // eslint-disable-line no-unused-vars
             debugArmed, // eslint-disable-line no-unused-vars
             debugActive, // eslint-disable-line no-unused-vars
             debugSpeed, // eslint-disable-line no-unused-vars
@@ -126,6 +142,9 @@ class Controls extends React.Component {
 Controls.propTypes = {
     isStarted: PropTypes.bool.isRequired,
     projectRunning: PropTypes.bool.isRequired,
+    isPythonEditMode: PropTypes.bool,
+    pythonExecutor: PropTypes.object,
+    pythonCode: PropTypes.string,
     turbo: PropTypes.bool.isRequired,
     vm: PropTypes.instanceOf(VM),
     debugArmed: PropTypes.bool,

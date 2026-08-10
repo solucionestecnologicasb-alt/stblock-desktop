@@ -14,9 +14,12 @@ import styles from './stage-wrapper.css';
 const StageWrapperComponent = function (props) {
     const {
         isFullScreen,
+        isPythonEditMode,
         isRtl,
         isRendererSupported,
         loading,
+        pythonExecutor,
+        pythonCode,
         stageSize,
         vm
     } = props;
@@ -31,6 +34,9 @@ const StageWrapperComponent = function (props) {
         >
             <Box className={styles.stageMenuWrapper}>
                 <StageHeader
+                    isPythonEditMode={isPythonEditMode}
+                    pythonExecutor={pythonExecutor}
+                    pythonCode={pythonCode}
                     stageSize={stageSize}
                     vm={vm}
                 />
@@ -54,9 +60,12 @@ const StageWrapperComponent = function (props) {
 
 StageWrapperComponent.propTypes = {
     isFullScreen: PropTypes.bool,
+    isPythonEditMode: PropTypes.bool,
     isRendererSupported: PropTypes.bool.isRequired,
     isRtl: PropTypes.bool.isRequired,
     loading: PropTypes.bool,
+    pythonExecutor: PropTypes.object,
+    pythonCode: PropTypes.string,
     stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired,
     vm: PropTypes.instanceOf(VM).isRequired
 };

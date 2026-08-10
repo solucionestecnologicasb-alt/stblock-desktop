@@ -5,6 +5,11 @@
  * Los bloques estan organizados por categoria para facilitar mantenimiento.
  */
 
+import {
+    formatPin,
+    menuLabel
+} from './device-menu-mappings.js';
+
 // Funcion auxiliar para indentar codigo
 const indent = (code, level = 1) => {
     if (!code) return '';
@@ -1008,7 +1013,345 @@ export const BLOCK_TO_PYTHON = {
         // Sanitizar el nombre del parametro para que coincida con la definicion
         const name = args.VALUE || 'condicion';
         return name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
-    }
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // DISPOSITIVO (bloques en vivo: Arduino / STBoard V2 / micro:bit)
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── Hats de dispositivo ────────────────────────────────────────
+    'arduino_whenArduinoBegin': () =>
+        `@cuando_placa_inicie\ndef al_iniciar_placa():`,
+
+    'microbit_whenmicrobitbegin': () =>
+        `@cuando_placa_inicie\ndef al_iniciar_placa():`,
+
+    // ── Pines ──────────────────────────────────────────────────────
+    'arduino_pin_setPinMode': (args) =>
+        `placa.modo(${formatPin(args.PIN, args, 'PIN')}, "${menuLabel('mode', args.MODE)}")`,
+
+    'arduino_pin_setDigitalOutput': (args) =>
+        `placa.escribir_digital(${formatPin(args.PIN, args, 'PIN')}, "${menuLabel('level', args.LEVEL)}")`,
+
+    'arduino_pin_setPwmOutput': (args) =>
+        `placa.escribir_analogico(${formatPin(args.PIN, args, 'PIN')}, ${formatNumberOrExpr(args.OUT, args, 'OUT')})`,
+
+    'arduino_pin_readDigitalPin': (args) =>
+        `placa.leer_digital(${formatPin(args.PIN, args, 'PIN')})`,
+
+    'arduino_pin_readAnalogPin': (args) =>
+        `placa.leer_analogico(${formatPin(args.PIN, args, 'PIN')})`,
+
+    // micro:bit (alias de los 4 métodos de pines)
+    'microbit_pin_setDigitalOutput': (args) =>
+        `placa.escribir_digital(${formatPin(args.PIN, args, 'PIN')}, "${menuLabel('level', args.LEVEL)}")`,
+
+    'microbit_pin_setPwmOutput': (args) =>
+        `placa.escribir_analogico(${formatPin(args.PIN, args, 'PIN')}, ${formatNumberOrExpr(args.OUT, args, 'OUT')})`,
+
+    'microbit_pin_readDigitalPin': (args) =>
+        `placa.leer_digital(${formatPin(args.PIN, args, 'PIN')})`,
+
+    'microbit_pin_readAnalogPin': (args) =>
+        `placa.leer_analogico(${formatPin(args.PIN, args, 'PIN')})`,
+
+    // ── Servos ─────────────────────────────────────────────────────
+    'arduino_pin_attachServo': (args) =>
+        `placa.conectar_servo(${formatPin(args.PIN, args, 'PIN')}, ${formatNumberOrExpr(args.MIN_US, args, 'MIN_US')}, ${formatNumberOrExpr(args.MAX_US, args, 'MAX_US')})`,
+
+    'arduino_pin_detachServo': (args) =>
+        `placa.desconectar_servo(${formatPin(args.PIN, args, 'PIN')})`,
+
+    'arduino_pin_setServoOutput': (args) =>
+        `placa.escribir_servo(${formatPin(args.PIN, args, 'PIN')}, ${formatNumberOrExpr(args.OUT, args, 'OUT')})`,
+
+    'arduino_pin_setServoPulseOutput': (args) =>
+        `placa.escribir_servo_pulso(${formatPin(args.PIN, args, 'PIN')}, ${formatNumberOrExpr(args.OUT, args, 'OUT')})`,
+
+    'arduino_pin_setContinuousServoSpeed': (args) =>
+        `placa.velocidad_servo_continuo(${formatPin(args.PIN, args, 'PIN')}, ${formatNumberOrExpr(args.SPEED, args, 'SPEED')})`,
+
+    'arduino_pin_centerServo': (args) =>
+        `placa.centrar_servo(${formatPin(args.PIN, args, 'PIN')})`,
+
+    'arduino_pin_stopContinuousServo': (args) =>
+        `placa.detener_servo_continuo(${formatPin(args.PIN, args, 'PIN')})`,
+
+    'arduino_pin_moveServoSmooth': (args) =>
+        `placa.mover_servo_suave(${formatPin(args.PIN, args, 'PIN')}, ${formatNumberOrExpr(args.OUT, args, 'OUT')}, ${formatNumberOrExpr(args.TIME, args, 'TIME')})`,
+
+    'arduino_pin_isServoAttached': (args) =>
+        `placa.servo_conectado(${formatPin(args.PIN, args, 'PIN')})`,
+
+    'arduino_pin_readServoAngle': (args) =>
+        `placa.leer_angulo_servo(${formatPin(args.PIN, args, 'PIN')})`,
+
+    'arduino_pin_readServoPulse': (args) =>
+        `placa.leer_pulso_servo(${formatPin(args.PIN, args, 'PIN')})`,
+
+    // ── Serial ─────────────────────────────────────────────────────
+    'arduino_serial_serialBegin': (args) =>
+        `placa.serial_iniciar(${formatNumberOrExpr(args.VALUE, args, 'VALUE')})`,
+
+    'arduino_serial_serialPrint': (args) =>
+        `placa.serial_enviar(${formatValue(args.VALUE !== undefined ? args.VALUE : args.TEXTO, args, args.VALUE !== undefined ? 'VALUE' : 'TEXTO')}, ${args.EOL === 'noWarp' ? 'False' : 'True'})`,
+
+    'arduino_serial_serialPrintln': (args) =>
+        `placa.serial_enviar_linea(${formatValue(args.TEXTO, args, 'TEXTO')})`,
+
+    'arduino_serial_serialAvailable': () =>
+        `placa.serial_disponible()`,
+
+    'arduino_serial_serialReadAByte': () =>
+        `placa.serial_leer()`,
+
+    'arduino_advanced_pro_serialReadStringUntil': (args) =>
+        `placa.serial_leer_hasta(${formatValue(args.CHAR, args, 'CHAR')})`,
+
+    'arduino_advanced_pro_serialFlush': () =>
+        `placa.serial_vaciar()`,
+
+    'arduino_advanced_getMicros': () =>
+        `placa.micros()`,
+
+    // Mega / STBoard V2 (multiSerial)
+    'arduino_serial_multiSerialBegin': (args) =>
+        `placa.serial_iniciar(${formatNumberOrExpr(args.VALUE, args, 'VALUE')})`,
+
+    'arduino_serial_multiSerialPrint': (args) =>
+        `placa.serial_enviar(${formatValue(args.VALUE, args, 'VALUE')}, ${args.EOL === 'noWarp' ? 'False' : 'True'})`,
+
+    'arduino_serial_multiSerialAvailable': () =>
+        `placa.serial_disponible()`,
+
+    'arduino_serial_multiSerialReadAByte': () =>
+        `placa.serial_leer()`,
+
+    // ── STBoard V2: Puertos ────────────────────────────────────────
+    'arduino_stbv2puertos_moverServoPuerto': (args) =>
+        `placa.mover_servo_puerto(${formatPin(args.PORT, args, 'PORT')}, ${formatNumberOrExpr(args.ANGLE, args, 'ANGLE')})`,
+
+    'arduino_stbv2puertos_moverServoPuertoPorPulsos': (args) =>
+        `placa.mover_servo_puerto_pulsos(${formatPin(args.PORT, args, 'PORT')}, ${formatNumberOrExpr(args.PULSE, args, 'PULSE')})`,
+
+    'arduino_stbv2puertos_desconectarServoPuerto': (args) =>
+        `placa.desconectar_servo_puerto(${formatPin(args.PORT, args, 'PORT')})`,
+
+    'arduino_stbv2puertos_moverServoPuertoSuavemente': (args) =>
+        `placa.mover_servo_puerto_suave(${formatPin(args.PORT, args, 'PORT')}, ${formatNumberOrExpr(args.ANGLE, args, 'ANGLE')}, ${formatNumberOrExpr(args.TIME, args, 'TIME')})`,
+
+    // ── Comunicación I2C/SPI ───────────────────────────────────────
+    'arduino_comm_i2cBegin': () =>
+        `placa.i2c_iniciar()`,
+
+    'arduino_comm_i2cSetClock': (args) =>
+        `placa.i2c_velocidad(${formatNumberOrExpr(args.SPEED, args, 'SPEED')})`,
+
+    'arduino_comm_i2cBeginTransmission': (args) =>
+        `placa.i2c_iniciar_transmision(${formatNumberOrExpr(args.ADDR, args, 'ADDR')})`,
+
+    'arduino_comm_i2cWriteByte': (args) =>
+        `placa.i2c_enviar_byte(${formatValue(args.DATA, args, 'DATA')})`,
+
+    'arduino_comm_i2cWriteString': (args) =>
+        `placa.i2c_enviar_texto(${formatValue(args.TEXT, args, 'TEXT')})`,
+
+    'arduino_comm_i2cEndTransmission': () =>
+        `placa.i2c_finalizar_transmision()`,
+
+    'arduino_comm_i2cRequestFrom': (args) =>
+        `placa.i2c_solicitar(${formatNumberOrExpr(args.COUNT, args, 'COUNT')}, ${formatNumberOrExpr(args.ADDR, args, 'ADDR')})`,
+
+    'arduino_comm_i2cAvailable': () =>
+        `placa.i2c_disponible()`,
+
+    'arduino_comm_i2cRead': () =>
+        `placa.i2c_leer()`,
+
+    'arduino_comm_i2cScan': () =>
+        `placa.i2c_escanear()`,
+
+    'arduino_comm_spiBegin': () =>
+        `placa.spi_iniciar()`,
+
+    'arduino_comm_spiSettings': (args) =>
+        `placa.spi_configurar(${formatNumberOrExpr(args.SPEED, args, 'SPEED')}, "${menuLabel('spiOrder', args.ORDER)}", "${menuLabel('spiMode', args.MODE)}")`,
+
+    'arduino_comm_spiBeginTransaction': (args) =>
+        `placa.spi_iniciar_transaccion(${formatPin(args.PIN, args, 'PIN')})`,
+
+    'arduino_comm_spiTransfer': (args) =>
+        `placa.spi_transferir(${formatValue(args.DATA, args, 'DATA')})`,
+
+    'arduino_comm_spiTransferArray': (args) =>
+        `placa.spi_transferir_lista(${formatValue(args.NAME, args, 'NAME')}, ${formatNumberOrExpr(args.SIZE, args, 'SIZE')})`,
+
+    'arduino_comm_spiEndTransaction': () =>
+        `placa.spi_finalizar_transaccion()`,
+
+    'arduino_comm_spiEnd': () =>
+        `placa.spi_finalizar()`,
+
+    // ── Datos (lógica pura) ────────────────────────────────────────
+    'arduino_data_dataMap': (args) =>
+        `placa.mapear(${formatNumberOrExpr(args.DATA, args, 'DATA')}, ${formatNumberOrExpr(args.ARG0, args, 'ARG0')}, ${formatNumberOrExpr(args.ARG1, args, 'ARG1')}, ${formatNumberOrExpr(args.ARG2, args, 'ARG2')}, ${formatNumberOrExpr(args.ARG3, args, 'ARG3')})`,
+
+    'arduino_data_dataConstrain': (args) =>
+        `placa.limitar(${formatNumberOrExpr(args.DATA, args, 'DATA')}, ${formatNumberOrExpr(args.ARG0, args, 'ARG0')}, ${formatNumberOrExpr(args.ARG1, args, 'ARG1')})`,
+
+    'arduino_data_dataConvert': (args) =>
+        `placa.convertir("${menuLabel('dataType', args.TYPE)}", ${formatValue(args.DATA, args, 'DATA')})`,
+
+    'arduino_data_dataConvertASCIICharacter': (args) =>
+        `placa.caracter_ascii(${formatNumberOrExpr(args.DATA, args, 'DATA')})`,
+
+    'arduino_data_dataConvertASCIINumber': (args) =>
+        `placa.ascii_numero(${formatValue(args.DATA, args, 'DATA')})`,
+
+    'arduino_data_bitwiseOp': (args) =>
+        `placa.operacion_bits("${menuLabel('bitwiseOp', args.OP)}", ${formatNumberOrExpr(args.A, args, 'A')}, ${formatNumberOrExpr(args.B, args, 'B')})`,
+
+    'arduino_data_bitwiseNot': (args) =>
+        `placa.no_bits(${formatNumberOrExpr(args.A, args, 'A')})`,
+
+    // ── Matemáticas ────────────────────────────────────────────────
+    'arduino_math_mathPow': (args) =>
+        `placa.potencia(${formatNumberOrExpr(args.BASE, args, 'BASE')}, ${formatNumberOrExpr(args.EXP, args, 'EXP')})`,
+
+    'arduino_math_mathSqrt': (args) =>
+        `placa.raiz_cuadrada(${formatNumberOrExpr(args.NUM, args, 'NUM')})`,
+
+    'arduino_math_mathAbs': (args) =>
+        `placa.valor_absoluto(${formatNumberOrExpr(args.NUM, args, 'NUM')})`,
+
+    'arduino_math_mathRound': (args) =>
+        `placa.redondear(${formatNumberOrExpr(args.NUM, args, 'NUM')}, "${menuLabel('roundMode', args.MODE)}")`,
+
+    'arduino_math_mathRoundDecimals': (args) =>
+        `placa.redondear_decimales(${formatNumberOrExpr(args.NUM, args, 'NUM')}, ${formatNumberOrExpr(args.DECIMALS, args, 'DECIMALS')})`,
+
+    'arduino_math_mathRandom': (args) =>
+        `placa.aleatorio_rango(${formatNumberOrExpr(args.MIN, args, 'MIN')}, ${formatNumberOrExpr(args.MAX, args, 'MAX')})`,
+
+    'arduino_math_mathRandomSeed': (args) =>
+        `placa.semilla_aleatoria(${formatNumberOrExpr(args.SEED, args, 'SEED')})`,
+
+    'arduino_math_mathRandomSeedAnalog': (args) =>
+        `placa.semilla_aleatoria_analogica(${formatPin(args.PIN, args, 'PIN')})`,
+
+    'arduino_math_mathArraySum': (args) =>
+        `placa.suma_array(${formatValue(args.NAME, args, 'NAME')})`,
+
+    'arduino_math_mathArrayAverage': (args) =>
+        `placa.promedio_array(${formatValue(args.NAME, args, 'NAME')})`,
+
+    'arduino_math_mathArrayMax': (args) =>
+        `placa.maximo_array(${formatValue(args.NAME, args, 'NAME')})`,
+
+    'arduino_math_mathArrayMin': (args) =>
+        `placa.minimo_array(${formatValue(args.NAME, args, 'NAME')})`,
+
+    'arduino_math_mathArraySort': (args) =>
+        `placa.ordenar_array(${formatValue(args.NAME, args, 'NAME')}, "${menuLabel('sortOrder', args.ORDER)}")`,
+
+    // ── Texto ──────────────────────────────────────────────────────
+    'arduino_text_textLength': (args) =>
+        `placa.texto_longitud(${formatValue(args.TEXT, args, 'TEXT')})`,
+
+    'arduino_text_textCharAt': (args) =>
+        `placa.texto_caracter(${formatValue(args.TEXT, args, 'TEXT')}, ${formatNumberOrExpr(args.POS, args, 'POS')})`,
+
+    'arduino_text_textSubstring': (args) =>
+        `placa.texto_subcadena(${formatValue(args.TEXT, args, 'TEXT')}, ${formatNumberOrExpr(args.START, args, 'START')}, ${formatNumberOrExpr(args.END, args, 'END')})`,
+
+    'arduino_text_textCase': (args) =>
+        `placa.texto_caso(${formatValue(args.TEXT, args, 'TEXT')}, "${menuLabel('textCase', args.CASE)}")`,
+
+    'arduino_text_textTrim': (args) =>
+        `placa.texto_recortar(${formatValue(args.TEXT, args, 'TEXT')})`,
+
+    'arduino_text_textStartsWith': (args) =>
+        `placa.texto_empieza_con(${formatValue(args.TEXT, args, 'TEXT')}, ${formatValue(args.PREFIX, args, 'PREFIX')})`,
+
+    'arduino_text_textEndsWith': (args) =>
+        `placa.texto_termina_con(${formatValue(args.TEXT, args, 'TEXT')}, ${formatValue(args.SUFFIX, args, 'SUFFIX')})`,
+
+    'arduino_text_textIndexOf': (args) =>
+        `placa.texto_indice_de(${formatValue(args.TEXT, args, 'TEXT')}, ${formatValue(args.SEARCH, args, 'SEARCH')})`,
+
+    'arduino_text_textReplace': (args) =>
+        `placa.texto_reemplazar(${formatValue(args.TEXT, args, 'TEXT')}, ${formatValue(args.OLD, args, 'OLD')}, ${formatValue(args.NEW, args, 'NEW')})`,
+
+    'arduino_text_textRepeat': (args) =>
+        `placa.texto_repetir(${formatValue(args.TEXT, args, 'TEXT')}, ${formatNumberOrExpr(args.COUNT, args, 'COUNT')})`,
+
+    'arduino_text_textToAscii': (args) =>
+        `placa.texto_a_ascii(${formatValue(args.CHAR, args, 'CHAR')})`,
+
+    'arduino_text_textFromAscii': (args) =>
+        `placa.texto_de_ascii(${formatNumberOrExpr(args.CODE, args, 'CODE')})`,
+
+    // ── Arrays ─────────────────────────────────────────────────────
+    'arduino_arrays_arrayDeclare': (args) =>
+        `placa.array_declarar(${formatValue(args.NAME, args, 'NAME')}, "${escapeString(args.TYPE)}", ${formatNumberOrExpr(args.SIZE, args, 'SIZE')})`,
+
+    'arduino_arrays_arrayDeclareWithValues': (args) =>
+        `placa.array_declarar_con_valores(${formatValue(args.NAME, args, 'NAME')}, "${escapeString(args.TYPE)}", ${formatValue(args.VALUES, args, 'VALUES')})`,
+
+    'arduino_arrays_arrayGet': (args) =>
+        `placa.array_obtener(${formatValue(args.NAME, args, 'NAME')}, ${formatNumberOrExpr(args.INDEX, args, 'INDEX')})`,
+
+    'arduino_arrays_arraySet': (args) =>
+        `placa.array_poner(${formatValue(args.NAME, args, 'NAME')}, ${formatNumberOrExpr(args.INDEX, args, 'INDEX')}, ${formatValue(args.VALUE, args, 'VALUE')})`,
+
+    'arduino_arrays_arrayLength': (args) =>
+        `placa.array_longitud(${formatValue(args.NAME, args, 'NAME')})`,
+
+    'arduino_arrays_arrayPush': (args) =>
+        `placa.array_agregar(${formatValue(args.NAME, args, 'NAME')}, ${formatValue(args.VALUE, args, 'VALUE')})`,
+
+    'arduino_arrays_arrayPop': (args) =>
+        `placa.array_quitar_ultimo(${formatValue(args.NAME, args, 'NAME')})`,
+
+    'arduino_arrays_arrayInsert': (args) =>
+        `placa.array_insertar(${formatValue(args.NAME, args, 'NAME')}, ${formatNumberOrExpr(args.INDEX, args, 'INDEX')}, ${formatValue(args.VALUE, args, 'VALUE')})`,
+
+    'arduino_arrays_arrayRemove': (args) =>
+        `placa.array_eliminar(${formatValue(args.NAME, args, 'NAME')}, ${formatNumberOrExpr(args.INDEX, args, 'INDEX')})`,
+
+    'arduino_arrays_arrayIndexOf': (args) =>
+        `placa.array_indice_de(${formatValue(args.NAME, args, 'NAME')}, ${formatValue(args.VALUE, args, 'VALUE')})`,
+
+    'arduino_arrays_arrayContains': (args) =>
+        `placa.array_contiene(${formatValue(args.NAME, args, 'NAME')}, ${formatValue(args.VALUE, args, 'VALUE')})`,
+
+    'arduino_arrays_arrayClear': (args) =>
+        `placa.array_limpiar(${formatValue(args.NAME, args, 'NAME')})`,
+
+    'arduino_arrays_arrayReverse': (args) =>
+        `placa.array_invertir(${formatValue(args.NAME, args, 'NAME')})`,
+
+    // ── Structs ────────────────────────────────────────────────────
+    'arduino_structs_structDefine': (args) =>
+        `placa.struct_definir(${formatValue(args.NAME, args, 'NAME')}, ${formatValue(args.FIELDS, args, 'FIELDS')})`,
+
+    'arduino_structs_structCreate': (args) =>
+        `placa.struct_crear(${formatValue(args.VARNAME, args, 'VARNAME')}, ${formatValue(args.STRUCTNAME, args, 'STRUCTNAME')})`,
+
+    'arduino_structs_structSet': (args) =>
+        `placa.struct_poner(${formatValue(args.VARNAME, args, 'VARNAME')}, ${formatValue(args.FIELD, args, 'FIELD')}, ${formatValue(args.VALUE, args, 'VALUE')})`,
+
+    'arduino_structs_structGet': (args) =>
+        `placa.struct_obtener(${formatValue(args.VARNAME, args, 'VARNAME')}, ${formatValue(args.FIELD, args, 'FIELD')})`,
+
+    'arduino_structs_structArrayCreate': (args) =>
+        `placa.struct_array_crear(${formatValue(args.ARRNAME, args, 'ARRNAME')}, ${formatValue(args.STRUCTNAME, args, 'STRUCTNAME')}, ${formatNumberOrExpr(args.SIZE, args, 'SIZE')})`,
+
+    'arduino_structs_structArraySet': (args) =>
+        `placa.struct_array_poner(${formatValue(args.ARRNAME, args, 'ARRNAME')}, ${formatNumberOrExpr(args['[INDEX'], args, '[INDEX')}, ${formatValue(args.FIELD, args, 'FIELD')}, ${formatValue(args.VALUE, args, 'VALUE')})`,
+
+    'arduino_structs_structArrayGet': (args) =>
+        `placa.struct_array_obtener(${formatValue(args.ARRNAME, args, 'ARRNAME')}, ${formatNumberOrExpr(args['[INDEX'], args, '[INDEX')}, ${formatValue(args.FIELD, args, 'FIELD')})`
 };
 
 /**

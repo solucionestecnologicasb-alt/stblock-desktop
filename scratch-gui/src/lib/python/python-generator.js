@@ -80,7 +80,10 @@ class PythonGenerator {
             opcode.startsWith('event_when') ||
             opcode === 'control_start_as_clone' ||
             opcode === 'procedures_definition' ||
-            opcode.startsWith('game_on')
+            opcode.startsWith('game_on') ||
+            // Hats de dispositivo (Arduino / STBoard V2 / micro:bit)
+            opcode === 'arduino_whenArduinoBegin' ||
+            opcode === 'microbit_whenmicrobitbegin'
         );
     }
 

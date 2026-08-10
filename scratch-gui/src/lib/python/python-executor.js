@@ -6,6 +6,7 @@
  */
 
 import { runPython, loadPyodide, isReady, preload } from './python-runtime';
+import { menuToCanonical } from './device-menu-mappings';
 
 /**
  * Clase que ejecuta código Python y lo conecta con el VM
@@ -34,12 +35,43 @@ class PythonExecutor {
     }
 
     /**
+     * Obtiene el periférico conectado según el dispositivo activo
+     * @returns {object|null} - Periférico (ArduinoPeripheral, MicroBit, ...) o null
+     */
+    getPeripheral() {
+        const runtime = this.getRuntime();
+        if (!runtime || typeof runtime.getDeviceProfile !== 'function') return null;
+        const profile = runtime.getDeviceProfile();
+        if (!profile || !profile.deviceId) return null;
+
+        const deviceId = profile.deviceId;
+        const extensionId = (deviceId === 'microbit' || deviceId === 'microbitV2') ?
+            'microbit' : 'arduino';
+
+        const periphs = runtime.peripheralExtensions || {};
+        return periphs[extensionId] || null;
+    }
+
+    /**
      * Crea los callbacks para el runtime de Python
      */
     createCallbacks() {
         const self = this;
         const target = this.getCurrentTarget();
         const runtime = this.getRuntime();
+
+        // Helpers para los callbacks de dispositivo
+        const requirePeripheral = (feature) => {
+            const p = self.getPeripheral();
+            if (!p || typeof p.isConnected !== 'function' || !p.isConnected()) {
+                console.warn(`[STBlock] placa: "${feature}" requiere una placa conectada`);
+                return null;
+            }
+            return p;
+        };
+        const warnUnsupported = (feature) => {
+            console.warn(`[STBlock] placa.${feature}: no soportado en vivo por este periférico`);
+        };
 
         return {
             // ─── Movimiento ───
@@ -948,6 +980,288 @@ class PythonExecutor {
                 return false;
             },
 
+            // --- Pines ---
+            deviceSetPinMode: (pin, mode) => {
+                const p = requirePeripheral('modo');
+                if (!p) return;
+                // Traducir etiqueta en español ("salida") al canónico ("OUTPUT")
+                const canonical = menuToCanonical('mode', mode);
+                if (typeof p.setPinMode === 'function') p.setPinMode(pin, canonical);
+                else warnUnsupported('modo');
+            },
+            deviceDigitalWrite: (pin, level) => {
+                const p = requirePeripheral('escribir_digital');
+                if (!p) return;
+                // Traducir etiqueta en español ("alto") al canónico ("HIGH")
+                const canonical = menuToCanonical('level', level);
+                if (typeof p.digitalWrite === 'function') p.digitalWrite(pin, canonical);
+                else warnUnsupported('escribir_digital');
+            },
+            devicePwmWrite: (pin, value) => {
+                const p = requirePeripheral('escribir_analogico');
+                if (!p) return;
+                if (typeof p.analogWrite === 'function') p.analogWrite(pin, value);
+                else warnUnsupported('escribir_analogico');
+            },
+            deviceDigitalRead: (pin) => {
+                const p = requirePeripheral('leer_digital');
+                if (!p) return 0;
+                if (typeof p.digitalRead === 'function') return p.digitalRead(pin);
+                warnUnsupported('leer_digital');
+                return 0;
+            },
+            deviceAnalogRead: (pin) => {
+                const p = requirePeripheral('leer_analogico');
+                if (!p) return 0;
+                if (typeof p.analogRead === 'function') return p.analogRead(pin);
+                warnUnsupported('leer_analogico');
+                return 0;
+            },
+
+            // --- Servos ---
+            deviceServoAttach: (pin, minUs, maxUs) => {
+                const p = requirePeripheral('conectar_servo');
+                if (!p) return;
+                // Firmata: poner el pin en modo SERVO (sin rango configurable)
+                if (typeof p.setPinMode === 'function') p.setPinMode(pin, 'SERVO');
+                else warnUnsupported('conectar_servo');
+            },
+            deviceServoDetach: (pin) => {
+                const p = requirePeripheral('desconectar_servo');
+                if (!p) return;
+                if (typeof p.setPinMode === 'function') p.setPinMode(pin, 'INPUT');
+                else warnUnsupported('desconectar_servo');
+            },
+            deviceServoWrite: (pin, angle) => {
+                const p = requirePeripheral('escribir_servo');
+                if (!p) return;
+                if (typeof p.servoWrite === 'function') p.servoWrite(pin, angle);
+                else warnUnsupported('escribir_servo');
+            },
+            deviceServoWritePulse: (pin, pulse) => {
+                const p = requirePeripheral('escribir_servo_pulso');
+                if (!p) return;
+                // Aproximación en vivo: 500µs → 0°, 2500µs → 180°
+                if (typeof p.servoWrite === 'function') {
+                    const angle = Math.max(0, Math.min(180, (pulse - 500) * 180 / 2000));
+                    p.servoWrite(pin, angle);
+                } else warnUnsupported('escribir_servo_pulso');
+            },
+            deviceContinuousServoSpeed: (pin, speed) => {
+                const p = requirePeripheral('velocidad_servo_continuo');
+                if (!p) return;
+                warnUnsupported('velocidad_servo_continuo');
+            },
+            deviceServoCenter: (pin) => {
+                const p = requirePeripheral('centrar_servo');
+                if (!p) return;
+                if (typeof p.servoWrite === 'function') p.servoWrite(pin, 90);
+                else warnUnsupported('centrar_servo');
+            },
+            deviceStopContinuousServo: (pin) => {
+                const p = requirePeripheral('detener_servo_continuo');
+                if (!p) return;
+                warnUnsupported('detener_servo_continuo');
+            },
+            deviceServoSmooth: (pin, angle, time) => {
+                const p = requirePeripheral('mover_servo_suave');
+                if (!p) return;
+                warnUnsupported('mover_servo_suave');
+            },
+            deviceServoAttached: (pin) => {
+                const p = requirePeripheral('servo_conectado');
+                if (!p) return false;
+                warnUnsupported('servo_conectado');
+                return false;
+            },
+            deviceServoReadAngle: (pin) => {
+                const p = requirePeripheral('leer_angulo_servo');
+                if (!p) return 0;
+                warnUnsupported('leer_angulo_servo');
+                return 0;
+            },
+            deviceServoReadPulse: (pin) => {
+                const p = requirePeripheral('leer_pulso_servo');
+                if (!p) return 0;
+                warnUnsupported('leer_pulso_servo');
+                return 0;
+            },
+
+            // --- Serial ---
+            deviceSerialBegin: (baud) => {
+                const p = requirePeripheral('serial_iniciar');
+                if (!p) return;
+                if (typeof p.setBaudrate === 'function') p.setBaudrate(baud);
+                else warnUnsupported('serial_iniciar');
+            },
+            deviceSerialPrint: (data, eol) => {
+                const p = requirePeripheral('serial_enviar');
+                if (!p) return;
+                const text = String(data);
+                if (eol) {
+                    if (typeof p.sendSerialLine === 'function') p.sendSerialLine(text);
+                    else if (typeof p.sendSerialData === 'function') p.sendSerialData(text + '\n');
+                    else warnUnsupported('serial_enviar');
+                } else {
+                    if (typeof p.sendSerialData === 'function') p.sendSerialData(text);
+                    else if (typeof p.sendSerialLine === 'function') p.sendSerialLine(text.replace(/\n$/, ''));
+                    else warnUnsupported('serial_enviar');
+                }
+            },
+            deviceSerialPrintln: (data) => {
+                const p = requirePeripheral('serial_enviar_linea');
+                if (!p) return;
+                const text = String(data);
+                if (typeof p.sendSerialLine === 'function') p.sendSerialLine(text);
+                else if (typeof p.sendSerialData === 'function') p.sendSerialData(text + '\n');
+                else warnUnsupported('serial_enviar_linea');
+            },
+            deviceSerialAvailable: () => {
+                const p = requirePeripheral('serial_disponible');
+                if (!p) return 0;
+                warnUnsupported('serial_disponible');
+                return 0;
+            },
+            deviceSerialRead: () => {
+                const p = requirePeripheral('serial_leer');
+                if (!p) return 0;
+                warnUnsupported('serial_leer');
+                return 0;
+            },
+            deviceSerialReadUntil: (terminator) => {
+                const p = requirePeripheral('serial_leer_hasta');
+                if (!p) return '';
+                warnUnsupported('serial_leer_hasta');
+                return '';
+            },
+            deviceSerialFlush: () => {
+                const p = requirePeripheral('serial_vaciar');
+                if (!p) return;
+                warnUnsupported('serial_vaciar');
+            },
+
+            // --- Puertos STBoard V2 ---
+            deviceStbServoMove: (port, angle) => {
+                const p = requirePeripheral('mover_servo_puerto');
+                if (!p) return;
+                warnUnsupported('mover_servo_puerto');
+            },
+            deviceStbServoMovePulse: (port, pulse) => {
+                const p = requirePeripheral('mover_servo_puerto_pulsos');
+                if (!p) return;
+                warnUnsupported('mover_servo_puerto_pulsos');
+            },
+            deviceStbServoDetach: (port) => {
+                const p = requirePeripheral('desconectar_servo_puerto');
+                if (!p) return;
+                warnUnsupported('desconectar_servo_puerto');
+            },
+            deviceStbServoMoveSmooth: (port, angle, time) => {
+                const p = requirePeripheral('mover_servo_puerto_suave');
+                if (!p) return;
+                warnUnsupported('mover_servo_puerto_suave');
+            },
+
+            // --- I2C ---
+            deviceI2cBegin: () => {
+                const p = requirePeripheral('i2c_iniciar');
+                if (!p) return;
+                warnUnsupported('i2c_iniciar');
+            },
+            deviceI2cSetClock: (speed) => {
+                const p = requirePeripheral('i2c_velocidad');
+                if (!p) return;
+                warnUnsupported('i2c_velocidad');
+            },
+            deviceI2cBeginTransmission: (address) => {
+                const p = requirePeripheral('i2c_iniciar_transmision');
+                if (!p) return;
+                warnUnsupported('i2c_iniciar_transmision');
+            },
+            deviceI2cWriteByte: (data) => {
+                const p = requirePeripheral('i2c_enviar_byte');
+                if (!p) return;
+                warnUnsupported('i2c_enviar_byte');
+            },
+            deviceI2cWriteString: (text) => {
+                const p = requirePeripheral('i2c_enviar_texto');
+                if (!p) return;
+                warnUnsupported('i2c_enviar_texto');
+            },
+            deviceI2cEndTransmission: () => {
+                const p = requirePeripheral('i2c_finalizar_transmision');
+                if (!p) return;
+                warnUnsupported('i2c_finalizar_transmision');
+            },
+            deviceI2cRequestFrom: (count, address) => {
+                const p = requirePeripheral('i2c_solicitar');
+                if (!p) return;
+                warnUnsupported('i2c_solicitar');
+            },
+            deviceI2cAvailable: () => {
+                const p = requirePeripheral('i2c_disponible');
+                if (!p) return 0;
+                warnUnsupported('i2c_disponible');
+                return 0;
+            },
+            deviceI2cRead: () => {
+                const p = requirePeripheral('i2c_leer');
+                if (!p) return 0;
+                warnUnsupported('i2c_leer');
+                return 0;
+            },
+            deviceI2cScan: () => {
+                const p = requirePeripheral('i2c_escanear');
+                if (!p) return;
+                warnUnsupported('i2c_escanear');
+            },
+
+            // --- SPI ---
+            deviceSpiBegin: () => {
+                const p = requirePeripheral('spi_iniciar');
+                if (!p) return;
+                warnUnsupported('spi_iniciar');
+            },
+            deviceSpiSettings: (speed, order, mode) => {
+                const p = requirePeripheral('spi_configurar');
+                if (!p) return;
+                warnUnsupported('spi_configurar');
+            },
+            deviceSpiBeginTransaction: (pin) => {
+                const p = requirePeripheral('spi_iniciar_transaccion');
+                if (!p) return;
+                warnUnsupported('spi_iniciar_transaccion');
+            },
+            deviceSpiTransfer: (data) => {
+                const p = requirePeripheral('spi_transferir');
+                if (!p) return 0;
+                warnUnsupported('spi_transferir');
+                return 0;
+            },
+            deviceSpiTransferArray: (name, size) => {
+                const p = requirePeripheral('spi_transferir_lista');
+                if (!p) return;
+                warnUnsupported('spi_transferir_lista');
+            },
+            deviceSpiEndTransaction: () => {
+                const p = requirePeripheral('spi_finalizar_transaccion');
+                if (!p) return;
+                warnUnsupported('spi_finalizar_transaccion');
+            },
+            deviceSpiEnd: () => {
+                const p = requirePeripheral('spi_finalizar');
+                if (!p) return;
+                warnUnsupported('spi_finalizar');
+            },
+
+            // --- Tiempo / utilidades ---
+            deviceMicros: () => {
+                const p = requirePeripheral('micros');
+                if (!p) return 0;
+                if (typeof p.micros === 'function') return p.micros();
+                return Date.now() * 1000;
+            },
+
             // ─── Runtime ───
             getDeltaTime: () => runtime.currentStepTime || 0.016,
             getFPS: () => {
@@ -955,6 +1269,21 @@ class PythonExecutor {
                 return dt > 0 ? Math.round(1 / dt) : 60;
             }
         };
+    }
+
+    /**
+     * Detecta el hat de placa (@cuando_placa_inicie / def al_iniciar_placa)
+     * y añade una llamada para invocarlo al inicio de la ejecución.
+     * @param {string} code - Código Python
+     * @returns {string} Código con la llamada al manejador de inicio
+     */
+    _injectPlacaInit(code) {
+        if (!code) return code;
+        // Patrón: @cuando_placa_inicie\n def al_iniciar_placa():
+        if (/@cuando_placa_inicie\s*\ndef\s+al_iniciar_placa\s*\([^)]*\)\s*:/.test(code)) {
+            return `${code}\n\n# Ejecutar el manejador de inicio de la placa\nal_iniciar_placa()\n`;
+        }
+        return code;
     }
 
     /**
@@ -976,8 +1305,11 @@ class PythonExecutor {
             // Crear callbacks
             const callbacks = this.createCallbacks();
 
+            // Invocar el manejador de inicio de la placa si existe
+            const finalCode = this._injectPlacaInit(code);
+
             // Ejecutar código
-            const result = await runPython(code, callbacks);
+            const result = await runPython(finalCode, callbacks);
 
             if (result.success) {
                 if (result.output && onOutput) {

@@ -6,6 +6,64 @@
  * Incluye sistema de detección de errores de sintaxis y tipo
  */
 
+import { menuToCanonical, MENU_OPCODES } from './device-menu-mappings.js';
+
+// ═══════════════════════════════════════════════════════════════
+// DISPOSITIVO (Arduino / STBoard V2 / micro:bit)
+// ═══════════════════════════════════════════════════════════════
+
+// Métodos del objeto `placa` (API Python plana, un solo punto)
+const PLACA_METHODS = [
+    // Pines
+    'modo', 'escribir_digital', 'escribir_analogico', 'leer_digital', 'leer_analogico',
+    // Servos
+    'conectar_servo', 'desconectar_servo', 'escribir_servo', 'escribir_servo_pulso',
+    'velocidad_servo_continuo', 'centrar_servo', 'detener_servo_continuo', 'mover_servo_suave',
+    'servo_conectado', 'leer_angulo_servo', 'leer_pulso_servo',
+    // Serial
+    'serial_iniciar', 'serial_enviar', 'serial_enviar_linea', 'serial_disponible',
+    'serial_leer', 'serial_leer_hasta', 'serial_vaciar',
+    // STBoard V2 (puertos)
+    'mover_servo_puerto', 'mover_servo_puerto_pulsos', 'desconectar_servo_puerto', 'mover_servo_puerto_suave',
+    // I2C / SPI
+    'i2c_iniciar', 'i2c_velocidad', 'i2c_iniciar_transmision', 'i2c_enviar_byte', 'i2c_enviar_texto',
+    'i2c_finalizar_transmision', 'i2c_solicitar', 'i2c_disponible', 'i2c_leer', 'i2c_escanear',
+    'spi_iniciar', 'spi_configurar', 'spi_iniciar_transaccion', 'spi_transferir', 'spi_transferir_lista',
+    'spi_finalizar_transaccion', 'spi_finalizar',
+    // Datos
+    'mapear', 'limitar', 'convertir', 'caracter_ascii', 'ascii_numero', 'operacion_bits', 'no_bits',
+    // Matemáticas
+    'potencia', 'raiz_cuadrada', 'valor_absoluto', 'redondear', 'redondear_decimales', 'aleatorio_rango',
+    'semilla_aleatoria', 'semilla_aleatoria_analogica', 'micros',
+    'suma_array', 'promedio_array', 'maximo_array', 'minimo_array', 'ordenar_array',
+    // Texto
+    'texto_longitud', 'texto_caracter', 'texto_subcadena', 'texto_caso', 'texto_recortar',
+    'texto_empieza_con', 'texto_termina_con', 'texto_indice_de', 'texto_reemplazar', 'texto_repetir',
+    'texto_a_ascii', 'texto_de_ascii',
+    // Arrays
+    'array_declarar', 'array_declarar_con_valores', 'array_obtener', 'array_poner', 'array_longitud',
+    'array_agregar', 'array_quitar_ultimo', 'array_insertar', 'array_eliminar', 'array_indice_de',
+    'array_contiene', 'array_limpiar', 'array_invertir',
+    // Structs
+    'struct_definir', 'struct_crear', 'struct_poner', 'struct_obtener',
+    'struct_array_crear', 'struct_array_poner', 'struct_array_obtener'
+];
+
+// Menús `field_dropdown` directos sobre el bloque (no shadow-menu): mapean
+// inputName → nombre de menú en device-menu-mappings.js. Los campos cuyo valor
+// ya es canónico (PIN, PORT, VALUE de serialBegin, etc.) no se listan aquí.
+const FIELD_MENUS = {
+    'arduino_pin_setPinMode': { MODE: 'mode' },
+    'arduino_serial_serialPrint': { EOL: 'eol' },
+    'arduino_serial_multiSerialPrint': { EOL: 'eol' },
+    'arduino_data_dataConvert': { TYPE: 'dataType' },
+    'arduino_data_bitwiseOp': { OP: 'bitwiseOp' },
+    'arduino_math_mathRound': { MODE: 'roundMode' },
+    'arduino_math_mathArraySort': { ORDER: 'sortOrder' },
+    'arduino_text_textCase': { CASE: 'textCase' },
+    'arduino_comm_spiSettings': { ORDER: 'spiOrder', MODE: 'spiMode' }
+};
+
 // Generador de IDs únicos
 let blockIdCounter = 0;
 const generateBlockId = () => `py_block_${Date.now()}_${blockIdCounter++}`;
@@ -118,6 +176,8 @@ const KNOWN_FUNCTIONS = [
     'escenario.ancho', 'escenario.alto',
     // ── RATON EXTENDIDO ──
     'raton.velocidad', 'raton.x_anterior', 'raton.y_anterior',
+    // ── DISPOSITIVO (placa) ──
+    ...PLACA_METHODS.map(m => `placa.${m}`),
 ];
 
 // Métodos válidos para cada objeto
@@ -168,6 +228,8 @@ const VALID_METHODS = {
     'pruebas': ['afirmar_verdadero', 'afirmar_igual', 'afirmar_entre', 'reiniciar', 'pasadas', 'fallidas', 'total', 'reporte'],
     // ── IA ──
     'ia': ['mover_a_xy', 'perseguir', 'huir_de', 'mirar_a', 'distancia_a', 'en_rango', 'patrullar_x', 'perseguir_si_rango', 'mantener_distancia', 'deambular', 'cerca_de'],
+    // ── DISPOSITIVO ──
+    'placa': PLACA_METHODS,
 };
 
 // Función para encontrar la función más similar (distancia de Levenshtein)
@@ -577,7 +639,120 @@ const PYTHON_TO_OPCODE = {
     'json_tiene': 'logic_jsonHas',
     'json_texto': 'logic_jsonStringify',
     'delta_tiempo': 'sensing_deltaTime',
-    'fps': 'sensing_fps'
+    'fps': 'sensing_fps',
+
+    // ═══════════════════════════════════════════════════════════════
+    // DISPOSITIVO (Arduino / STBoard V2 / micro:bit)
+    // ═══════════════════════════════════════════════════════════════
+    '__event_placa_inicie__': 'arduino_whenArduinoBegin', // se resuelve por dispositivo en pythonCallToBlock
+
+    // Pines
+    'placa.modo': 'arduino_pin_setPinMode',
+    'placa.escribir_digital': 'arduino_pin_setDigitalOutput',
+    'placa.escribir_analogico': 'arduino_pin_setPwmOutput',
+    'placa.leer_digital': 'arduino_pin_readDigitalPin',
+    'placa.leer_analogico': 'arduino_pin_readAnalogPin',
+    // Servos
+    'placa.conectar_servo': 'arduino_pin_attachServo',
+    'placa.desconectar_servo': 'arduino_pin_detachServo',
+    'placa.escribir_servo': 'arduino_pin_setServoOutput',
+    'placa.escribir_servo_pulso': 'arduino_pin_setServoPulseOutput',
+    'placa.velocidad_servo_continuo': 'arduino_pin_setContinuousServoSpeed',
+    'placa.centrar_servo': 'arduino_pin_centerServo',
+    'placa.detener_servo_continuo': 'arduino_pin_stopContinuousServo',
+    'placa.mover_servo_suave': 'arduino_pin_moveServoSmooth',
+    'placa.servo_conectado': 'arduino_pin_isServoAttached',
+    'placa.leer_angulo_servo': 'arduino_pin_readServoAngle',
+    'placa.leer_pulso_servo': 'arduino_pin_readServoPulse',
+    // Serial
+    'placa.serial_iniciar': 'arduino_serial_serialBegin',
+    'placa.serial_enviar': 'arduino_serial_serialPrint',
+    'placa.serial_enviar_linea': 'arduino_serial_serialPrintln',
+    'placa.serial_disponible': 'arduino_serial_serialAvailable',
+    'placa.serial_leer': 'arduino_serial_serialReadAByte',
+    'placa.serial_leer_hasta': 'arduino_advanced_pro_serialReadStringUntil',
+    'placa.serial_vaciar': 'arduino_advanced_pro_serialFlush',
+    // STBoard V2 (puertos)
+    'placa.mover_servo_puerto': 'arduino_stbv2puertos_moverServoPuerto',
+    'placa.mover_servo_puerto_pulsos': 'arduino_stbv2puertos_moverServoPuertoPorPulsos',
+    'placa.desconectar_servo_puerto': 'arduino_stbv2puertos_desconectarServoPuerto',
+    'placa.mover_servo_puerto_suave': 'arduino_stbv2puertos_moverServoPuertoSuavemente',
+    // I2C / SPI
+    'placa.i2c_iniciar': 'arduino_comm_i2cBegin',
+    'placa.i2c_velocidad': 'arduino_comm_i2cSetClock',
+    'placa.i2c_iniciar_transmision': 'arduino_comm_i2cBeginTransmission',
+    'placa.i2c_enviar_byte': 'arduino_comm_i2cWriteByte',
+    'placa.i2c_enviar_texto': 'arduino_comm_i2cWriteString',
+    'placa.i2c_finalizar_transmision': 'arduino_comm_i2cEndTransmission',
+    'placa.i2c_solicitar': 'arduino_comm_i2cRequestFrom',
+    'placa.i2c_disponible': 'arduino_comm_i2cAvailable',
+    'placa.i2c_leer': 'arduino_comm_i2cRead',
+    'placa.i2c_escanear': 'arduino_comm_i2cScan',
+    'placa.spi_iniciar': 'arduino_comm_spiBegin',
+    'placa.spi_configurar': 'arduino_comm_spiSettings',
+    'placa.spi_iniciar_transaccion': 'arduino_comm_spiBeginTransaction',
+    'placa.spi_transferir': 'arduino_comm_spiTransfer',
+    'placa.spi_transferir_lista': 'arduino_comm_spiTransferArray',
+    'placa.spi_finalizar_transaccion': 'arduino_comm_spiEndTransaction',
+    'placa.spi_finalizar': 'arduino_comm_spiEnd',
+    // Datos
+    'placa.mapear': 'arduino_data_dataMap',
+    'placa.limitar': 'arduino_data_dataConstrain',
+    'placa.convertir': 'arduino_data_dataConvert',
+    'placa.caracter_ascii': 'arduino_data_dataConvertASCIICharacter',
+    'placa.ascii_numero': 'arduino_data_dataConvertASCIINumber',
+    'placa.operacion_bits': 'arduino_data_bitwiseOp',
+    'placa.no_bits': 'arduino_data_bitwiseNot',
+    // Matemáticas
+    'placa.potencia': 'arduino_math_mathPow',
+    'placa.raiz_cuadrada': 'arduino_math_mathSqrt',
+    'placa.valor_absoluto': 'arduino_math_mathAbs',
+    'placa.redondear': 'arduino_math_mathRound',
+    'placa.redondear_decimales': 'arduino_math_mathRoundDecimals',
+    'placa.aleatorio_rango': 'arduino_math_mathRandom',
+    'placa.semilla_aleatoria': 'arduino_math_mathRandomSeed',
+    'placa.semilla_aleatoria_analogica': 'arduino_math_mathRandomSeedAnalog',
+    'placa.micros': 'arduino_advanced_getMicros',
+    'placa.suma_array': 'arduino_math_mathArraySum',
+    'placa.promedio_array': 'arduino_math_mathArrayAverage',
+    'placa.maximo_array': 'arduino_math_mathArrayMax',
+    'placa.minimo_array': 'arduino_math_mathArrayMin',
+    'placa.ordenar_array': 'arduino_math_mathArraySort',
+    // Texto
+    'placa.texto_longitud': 'arduino_text_textLength',
+    'placa.texto_caracter': 'arduino_text_textCharAt',
+    'placa.texto_subcadena': 'arduino_text_textSubstring',
+    'placa.texto_caso': 'arduino_text_textCase',
+    'placa.texto_recortar': 'arduino_text_textTrim',
+    'placa.texto_empieza_con': 'arduino_text_textStartsWith',
+    'placa.texto_termina_con': 'arduino_text_textEndsWith',
+    'placa.texto_indice_de': 'arduino_text_textIndexOf',
+    'placa.texto_reemplazar': 'arduino_text_textReplace',
+    'placa.texto_repetir': 'arduino_text_textRepeat',
+    'placa.texto_a_ascii': 'arduino_text_textToAscii',
+    'placa.texto_de_ascii': 'arduino_text_textFromAscii',
+    // Arrays
+    'placa.array_declarar': 'arduino_arrays_arrayDeclare',
+    'placa.array_declarar_con_valores': 'arduino_arrays_arrayDeclareWithValues',
+    'placa.array_obtener': 'arduino_arrays_arrayGet',
+    'placa.array_poner': 'arduino_arrays_arraySet',
+    'placa.array_longitud': 'arduino_arrays_arrayLength',
+    'placa.array_agregar': 'arduino_arrays_arrayPush',
+    'placa.array_quitar_ultimo': 'arduino_arrays_arrayPop',
+    'placa.array_insertar': 'arduino_arrays_arrayInsert',
+    'placa.array_eliminar': 'arduino_arrays_arrayRemove',
+    'placa.array_indice_de': 'arduino_arrays_arrayIndexOf',
+    'placa.array_contiene': 'arduino_arrays_arrayContains',
+    'placa.array_limpiar': 'arduino_arrays_arrayClear',
+    'placa.array_invertir': 'arduino_arrays_arrayReverse',
+    // Structs
+    'placa.struct_definir': 'arduino_structs_structDefine',
+    'placa.struct_crear': 'arduino_structs_structCreate',
+    'placa.struct_poner': 'arduino_structs_structSet',
+    'placa.struct_obtener': 'arduino_structs_structGet',
+    'placa.struct_array_crear': 'arduino_structs_structArrayCreate',
+    'placa.struct_array_poner': 'arduino_structs_structArraySet',
+    'placa.struct_array_obtener': 'arduino_structs_structArrayGet'
 };
 
 /**
@@ -1004,6 +1179,122 @@ const OPCODE_INPUTS = {
     'game_knockbackFromTarget': ['TARGET', 'FORCE'],
     'game_revive': ['HEALTH'],
     'game_maxHealth': [],
+
+    // ═══════════════════════════════════════════════════════════════
+    // DISPOSITIVO (Arduino / STBoard V2 / micro:bit)
+    // El ORDEN de las claves define el orden de los argumentos Python.
+    // 'field' = field_dropdown directo | 'menu' = input shadow-menu
+    // ═══════════════════════════════════════════════════════════════
+    // Hats
+    'arduino_whenArduinoBegin': {},
+    'microbit_whenmicrobitbegin': {},
+    // Pines
+    'arduino_pin_setPinMode': { PIN: 'field', MODE: 'field' },
+    'arduino_pin_setDigitalOutput': { PIN: 'field', LEVEL: 'menu' },
+    'arduino_pin_setPwmOutput': { PIN: 'field', OUT: 'number' },
+    'arduino_pin_readDigitalPin': { PIN: 'field' },
+    'arduino_pin_readAnalogPin': { PIN: 'field' },
+    // Servos
+    'arduino_pin_attachServo': { PIN: 'field', MIN_US: 'number', MAX_US: 'number' },
+    'arduino_pin_detachServo': { PIN: 'field' },
+    'arduino_pin_setServoOutput': { PIN: 'field', OUT: 'number' },
+    'arduino_pin_setServoPulseOutput': { PIN: 'field', OUT: 'number' },
+    'arduino_pin_setContinuousServoSpeed': { PIN: 'field', OUT: 'number' },
+    'arduino_pin_centerServo': { PIN: 'field' },
+    'arduino_pin_stopContinuousServo': { PIN: 'field' },
+    'arduino_pin_moveServoSmooth': { PIN: 'field', OUT: 'number', TIME: 'number' },
+    'arduino_pin_isServoAttached': { PIN: 'field' },
+    'arduino_pin_readServoAngle': { PIN: 'field' },
+    'arduino_pin_readServoPulse': { PIN: 'field' },
+    // Serial
+    'arduino_serial_serialBegin': { VALUE: 'field' },
+    'arduino_serial_serialPrint': { VALUE: 'string', EOL: 'field' },
+    'arduino_serial_serialPrintln': { TEXTO: 'string' },
+    'arduino_serial_serialAvailable': {},
+    'arduino_serial_serialReadAByte': {},
+    'arduino_advanced_pro_serialReadStringUntil': { CHAR: 'string' },
+    'arduino_advanced_pro_serialFlush': {},
+    'arduino_advanced_getMicros': {},
+    // STBoard V2 (puertos)
+    'arduino_stbv2puertos_moverServoPuerto': { PORT: 'field', ANGLE: 'number' },
+    'arduino_stbv2puertos_moverServoPuertoPorPulsos': { PORT: 'field', PULSE: 'number' },
+    'arduino_stbv2puertos_desconectarServoPuerto': { PORT: 'field' },
+    'arduino_stbv2puertos_moverServoPuertoSuavemente': { PORT: 'field', ANGLE: 'number', TIME: 'number' },
+    // I2C / SPI
+    'arduino_comm_i2cBegin': {},
+    'arduino_comm_i2cSetClock': { SPEED: 'field' },
+    'arduino_comm_i2cBeginTransmission': { ADDR: 'string' },
+    'arduino_comm_i2cWriteByte': { DATA: 'number' },
+    'arduino_comm_i2cWriteString': { TEXT: 'string' },
+    'arduino_comm_i2cEndTransmission': {},
+    'arduino_comm_i2cRequestFrom': { COUNT: 'number', ADDR: 'string' },
+    'arduino_comm_i2cAvailable': {},
+    'arduino_comm_i2cRead': {},
+    'arduino_comm_i2cScan': {},
+    'arduino_comm_spiBegin': {},
+    'arduino_comm_spiSettings': { SPEED: 'number', ORDER: 'field', MODE: 'field' },
+    'arduino_comm_spiBeginTransaction': { PIN: 'field' },
+    'arduino_comm_spiTransfer': { DATA: 'number' },
+    'arduino_comm_spiTransferArray': { NAME: 'string', SIZE: 'number' },
+    'arduino_comm_spiEndTransaction': {},
+    'arduino_comm_spiEnd': {},
+    // Datos
+    'arduino_data_dataMap': { DATA: 'number', ARG0: 'number', ARG1: 'number', ARG2: 'number', ARG3: 'number' },
+    'arduino_data_dataConstrain': { DATA: 'number', ARG0: 'number', ARG1: 'number' },
+    'arduino_data_dataConvert': { TYPE: 'field', DATA: 'string' },
+    'arduino_data_dataConvertASCIICharacter': { DATA: 'number' },
+    'arduino_data_dataConvertASCIINumber': { DATA: 'string' },
+    'arduino_data_bitwiseOp': { OP: 'field', A: 'number', B: 'number' },
+    'arduino_data_bitwiseNot': { A: 'number' },
+    // Matemáticas
+    'arduino_math_mathPow': { BASE: 'number', EXP: 'number' },
+    'arduino_math_mathSqrt': { NUM: 'number' },
+    'arduino_math_mathAbs': { NUM: 'number' },
+    'arduino_math_mathRound': { NUM: 'number', MODE: 'field' },
+    'arduino_math_mathRoundDecimals': { NUM: 'number', DECIMALS: 'number' },
+    'arduino_math_mathRandom': { MIN: 'number', MAX: 'number' },
+    'arduino_math_mathRandomSeed': { SEED: 'number' },
+    'arduino_math_mathRandomSeedAnalog': { PIN: 'field' },
+    'arduino_math_mathArraySum': { NAME: 'string' },
+    'arduino_math_mathArrayAverage': { NAME: 'string' },
+    'arduino_math_mathArrayMax': { NAME: 'string' },
+    'arduino_math_mathArrayMin': { NAME: 'string' },
+    'arduino_math_mathArraySort': { NAME: 'string', ORDER: 'field' },
+    // Texto
+    'arduino_text_textLength': { TEXT: 'string' },
+    'arduino_text_textCharAt': { TEXT: 'string', POS: 'number' },
+    'arduino_text_textSubstring': { TEXT: 'string', START: 'number', END: 'number' },
+    'arduino_text_textCase': { TEXT: 'string', CASE: 'field' },
+    'arduino_text_textTrim': { TEXT: 'string' },
+    'arduino_text_textStartsWith': { TEXT: 'string', PREFIX: 'string' },
+    'arduino_text_textEndsWith': { TEXT: 'string', SUFFIX: 'string' },
+    'arduino_text_textIndexOf': { TEXT: 'string', SEARCH: 'string' },
+    'arduino_text_textReplace': { TEXT: 'string', OLD: 'string', NEW: 'string' },
+    'arduino_text_textRepeat': { TEXT: 'string', COUNT: 'number' },
+    'arduino_text_textToAscii': { CHAR: 'string' },
+    'arduino_text_textFromAscii': { CODE: 'number' },
+    // Arrays
+    'arduino_arrays_arrayDeclare': { NAME: 'string', TYPE: 'field', SIZE: 'number' },
+    'arduino_arrays_arrayDeclareWithValues': { NAME: 'string', TYPE: 'field', VALUES: 'string' },
+    'arduino_arrays_arrayGet': { NAME: 'string', INDEX: 'number' },
+    'arduino_arrays_arraySet': { NAME: 'string', INDEX: 'number', VALUE: 'string' },
+    'arduino_arrays_arrayLength': { NAME: 'string' },
+    'arduino_arrays_arrayPush': { NAME: 'string', VALUE: 'string' },
+    'arduino_arrays_arrayPop': { NAME: 'string' },
+    'arduino_arrays_arrayInsert': { NAME: 'string', INDEX: 'number', VALUE: 'string' },
+    'arduino_arrays_arrayRemove': { NAME: 'string', INDEX: 'number' },
+    'arduino_arrays_arrayIndexOf': { NAME: 'string', VALUE: 'string' },
+    'arduino_arrays_arrayContains': { NAME: 'string', VALUE: 'string' },
+    'arduino_arrays_arrayClear': { NAME: 'string' },
+    'arduino_arrays_arrayReverse': { NAME: 'string' },
+    // Structs
+    'arduino_structs_structDefine': { NAME: 'string', FIELDS: 'string' },
+    'arduino_structs_structCreate': { VARNAME: 'string', STRUCTNAME: 'string' },
+    'arduino_structs_structSet': { VARNAME: 'string', FIELD: 'string', VALUE: 'string' },
+    'arduino_structs_structGet': { VARNAME: 'string', FIELD: 'string' },
+    'arduino_structs_structArrayCreate': { ARRNAME: 'string', STRUCTNAME: 'string', SIZE: 'number' },
+    'arduino_structs_structArraySet': { ARRNAME: 'string', '[INDEX': 'number', FIELD: 'string', VALUE: 'string' },
+    'arduino_structs_structArrayGet': { ARRNAME: 'string', '[INDEX': 'number', FIELD: 'string' },
 };
 
 /**
@@ -1586,6 +1877,11 @@ function parsePythonLine(line) {
         return { function: '__event_clone_start__', isEvent: true, raw: trimmed };
     }
 
+    // @cuando_placa_inicie (hat de dispositivo: Arduino / STBoard V2 / micro:bit)
+    if (/^@cuando_placa_inicie\s*$/.test(trimmed)) {
+        return { function: '__decorator_placa_inicie__', isDecorator: true, raw: trimmed };
+    }
+
     // @cuando_colisiona("sprite")
     const decoratorCollisionMatch = trimmed.match(/^@cuando_colisiona\s*\(\s*["'](.+?)["']\s*\)\s*$/);
     if (decoratorCollisionMatch) {
@@ -1764,6 +2060,15 @@ function parsePythonLine(line) {
             return {
                 function: '__event_collision__',
                 arguments: [{ type: 'string', value: collisionMatch[1] }],
+                raw: trimmed,
+                isEvent: true
+            };
+        }
+        // al_iniciar_placa → evento de placa (dispositivo: Arduino / STBoard V2 / micro:bit)
+        if (funcName === 'al_iniciar_placa') {
+            return {
+                function: '__event_placa_inicie__',
+                arguments: [],
                 raw: trimmed,
                 isEvent: true
             };
@@ -1967,6 +2272,29 @@ function createShadowText(value, parentId) {
                     name: 'TEXT',
                     value: String(value)
                 }
+            },
+            next: null,
+            parent: parentId,
+            topLevel: false,
+            shadow: true
+        }
+    };
+}
+
+/**
+ * Crea un bloque shadow de menú para un input con shadow-menu de dispositivo.
+ * Ej. <value name="LEVEL"><shadow type="arduino_pin_menu_level"><field name="level">HIGH</field></shadow></value>
+ */
+function createShadowMenu(opcode, fieldName, value, parentId) {
+    const shadowId = generateBlockId();
+    return {
+        id: shadowId,
+        block: {
+            id: shadowId,
+            opcode,
+            inputs: {},
+            fields: {
+                [fieldName]: { name: fieldName, value: String(value) }
             },
             next: null,
             parent: parentId,
@@ -2530,17 +2858,24 @@ function parseConditionToBlock(conditionStr, parentId) {
 /**
  * Convierte una llamada Python parseada a estructura de bloque Scratch
  */
-function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockId = null, functionParams = {}) {
+function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockId = null, functionParams = {}, deviceId = null) {
     // Los marcadores especiales de else/elif/decoradores no generan bloques directamente
     if (parsedCall.isElse || parsedCall.isElif || parsedCall.isDecorator) {
         return null;
     }
 
-    const opcode = PYTHON_TO_OPCODE[parsedCall.function];
+    let opcode = PYTHON_TO_OPCODE[parsedCall.function];
 
     if (!opcode) {
         console.warn(`Función Python no reconocida: ${parsedCall.function}`);
         return null;
+    }
+
+    // Hat de dispositivo: se resuelve según el dispositivo seleccionado.
+    // micro:bit usa microbit_whenmicrobitbegin; el resto, arduino_whenArduinoBegin.
+    if (parsedCall.function === '__event_placa_inicie__') {
+        const isMicrobit = deviceId === 'microbit' || deviceId === 'microbitV2';
+        opcode = isMicrobit ? 'microbit_whenmicrobitbegin' : 'arduino_whenArduinoBegin';
     }
 
     const blockId = generateBlockId();
@@ -2997,6 +3332,30 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
                 fields[inputName] = { name: inputName, value: arg.value, id: arg.value };
             } else if (inputType === 'list') {
                 fields[inputName] = { name: inputName, value: arg.value, id: arg.value };
+            } else if (inputType === 'field') {
+                // Campo dropdown directo sobre el bloque (PIN, MODE, EOL, TYPE, OP, ORDER, CASE, ...)
+                const fieldMenus = FIELD_MENUS[opcode] || {};
+                const menu = fieldMenus[inputName];
+                let val = arg.value;
+                // True/False (booleano) → etiqueta Python 'True'/'False' (EOL de serialPrint)
+                if (arg.type === 'boolean') val = val ? 'True' : 'False';
+                fields[inputName] = { name: inputName, value: String(menuToCanonical(menu, val)) };
+            } else if (inputType === 'menu') {
+                // Input con shadow-menu de dispositivo
+                // (<value><shadow type="arduino_pin_menu_level"><field name="level">HIGH</field></shadow></value>)
+                const menuInfo = (MENU_OPCODES[opcode] || {})[inputName];
+                if (menuInfo) {
+                    let val = arg.value;
+                    if (arg.type === 'boolean') val = val ? 'True' : 'False';
+                    const shadow = createShadowMenu(
+                        menuInfo.shadowOpcode,
+                        menuInfo.fieldName,
+                        menuToCanonical(menuInfo.menuName, val),
+                        blockId
+                    );
+                    shadowBlocks.push(shadow);
+                    inputs[inputName] = { name: inputName, block: shadow.id, shadow: shadow.id };
+                }
             }
             // boolean/condition se dejan vacíos por ahora
 
@@ -3081,7 +3440,7 @@ class ControlStack {
  * Respeta la indentación de Python para determinar la jerarquía de bloques
  * Soporta estructuras de control anidadas (while, for, if/else)
  */
-export function pythonToBlocks(pythonCode, startPosition = { x: -500, y: 30 }) {
+export function pythonToBlocks(pythonCode, startPosition = { x: -500, y: 30 }, deviceId = null) {
     const lines = pythonCode.split('\n');
     const blockMap = {};
     const scripts = []; // Grupos de bloques conectados
@@ -3272,7 +3631,8 @@ export function pythonToBlocks(pythonCode, startPosition = { x: -500, y: 30 }) {
             parsed,
             { x: finalX, y: scriptY },
             isSubstack || isSubstack2 ? null : parentBlockId, // Los bloques de substack no usan parent normal
-            currentFunctionParams
+            currentFunctionParams,
+            deviceId
         );
 
         if (result) {
@@ -3391,7 +3751,16 @@ export function syncPythonToWorkspace(vm, pythonCode) {
         // PRIMERO: Limpiar bloques anteriores para evitar duplicados
         clearPythonBlocks(vm);
 
-        const result = pythonToBlocks(pythonCode);
+        // Resolver el dispositivo actual para el hat de placa (arduino vs microbit)
+        let deviceId = null;
+        if (vm.runtime && typeof vm.runtime.getDeviceProfile === 'function') {
+            const profile = vm.runtime.getDeviceProfile();
+            if (profile && profile.deviceId) {
+                deviceId = profile.deviceId;
+            }
+        }
+
+        const result = pythonToBlocks(pythonCode, { x: -500, y: 30 }, deviceId);
 
         if (result.total === 0 && result.errors.length === 0) {
             return {

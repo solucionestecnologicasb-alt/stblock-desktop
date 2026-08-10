@@ -127,7 +127,8 @@ import {
     generatePythonCodeWithMap,
     syncPythonToWorkspace,
     savePanelState as savePythonPanelState,
-    loadPanelState as loadPythonPanelState
+    loadPanelState as loadPythonPanelState,
+    PythonExecutor
 } from '../../lib/python';
 import {ArduinoUploader, STBLOCK_LINK_DOWNLOAD_URL} from '../../lib/arduino-uploader';
 import {openConnectionModal} from '../../reducers/modals';
@@ -427,6 +428,13 @@ const GUIComponent = props => {
 
     const selectedDevice = deviceModeDevice;
     const velxioRef = useRef(null);
+    // Executor de Python (se crea una sola vez). Se usa para ejecutar el código
+    // del panel Python cuando la bandera verde se pulsa en modo edición Python.
+    const pythonExecutorRef = useRef(null);
+    if (!pythonExecutorRef.current && vm) {
+        pythonExecutorRef.current = new PythonExecutor(vm);
+    }
+    const pythonExecutor = pythonExecutorRef.current;
     // Refs/estado para el puente con SketchForge 3D (iframe "Diseño 3D").
     // El .skf editable se captura desde el iframe y se empaqueta en el .flynt
     // para que "Guardar en tu ordenador" incluya también el proyecto 3D.
@@ -2951,6 +2959,9 @@ const GUIComponent = props => {
                         isFullScreen={isFullScreen}
                         isRendererSupported={isRendererSupported}
                         isRtl={isRtl}
+                        isPythonEditMode={isPythonEditMode}
+                        pythonExecutor={pythonExecutor}
+                        pythonCode={pythonCode}
                         stageSize={stageSize}
                         vm={vm}
                     />

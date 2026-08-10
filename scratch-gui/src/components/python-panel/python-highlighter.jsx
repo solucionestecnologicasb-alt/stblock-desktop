@@ -48,7 +48,48 @@ const STBLOCK_FUNCTIONS = new Set([
     'reiniciar_cronometro', 'cronometro', 'saltar', 'fijar_gravedad',
     'fijar_velocidad', 'aplicar_gravedad', 'en_suelo', 'en_aire',
     'fijar_salud', 'cambiar_salud', 'recibir_daño', 'curar',
-    'seguir', 'fijar_posicion', 'sacudir', 'zoom', 'colisiona_con'
+    'seguir', 'fijar_posicion', 'sacudir', 'zoom', 'colisiona_con',
+
+    // Objeto placa (dispositivos Arduino / STBoard V2 / micro:bit)
+    'placa',
+    // Pines
+    'modo', 'escribir_digital', 'escribir_analogico', 'leer_digital', 'leer_analogico',
+    // Servos
+    'conectar_servo', 'desconectar_servo', 'escribir_servo', 'escribir_servo_pulso',
+    'velocidad_servo_continuo', 'centrar_servo', 'detener_servo_continuo',
+    'mover_servo_suave', 'servo_conectado', 'leer_angulo_servo', 'leer_pulso_servo',
+    // Serial
+    'serial_iniciar', 'serial_enviar', 'serial_enviar_linea', 'serial_disponible',
+    'serial_leer', 'serial_leer_hasta', 'serial_vaciar',
+    // STBoard V2: puertos
+    'mover_servo_puerto', 'mover_servo_puerto_pulsos', 'desconectar_servo_puerto',
+    'mover_servo_puerto_suave',
+    // I2C
+    'i2c_iniciar', 'i2c_velocidad', 'i2c_iniciar_transmision', 'i2c_enviar_byte',
+    'i2c_enviar_texto', 'i2c_finalizar_transmision', 'i2c_solicitar', 'i2c_disponible',
+    'i2c_leer', 'i2c_escanear',
+    // SPI
+    'spi_iniciar', 'spi_configurar', 'spi_iniciar_transaccion', 'spi_transferir',
+    'spi_transferir_lista', 'spi_finalizar_transaccion', 'spi_finalizar',
+    // Datos
+    'mapear', 'limitar', 'convertir', 'caracter_ascii', 'ascii_numero',
+    'operacion_bits', 'no_bits',
+    // Matemáticas
+    'potencia', 'raiz_cuadrada', 'valor_absoluto', 'redondear', 'redondear_decimales',
+    'aleatorio_rango', 'semilla_aleatoria', 'semilla_aleatoria_analogica', 'micros',
+    // Texto
+    'texto_longitud', 'texto_caracter', 'texto_subcadena', 'texto_caso', 'texto_recortar',
+    'texto_empieza_con', 'texto_termina_con', 'texto_indice_de', 'texto_reemplazar',
+    'texto_repetir', 'texto_a_ascii', 'texto_de_ascii',
+    // Arrays
+    'array_declarar', 'array_declarar_con_valores', 'array_obtener', 'array_poner',
+    'array_longitud', 'array_agregar', 'array_quitar_ultimo', 'array_insertar',
+    'array_eliminar', 'array_indice_de', 'array_contiene', 'array_limpiar',
+    'array_invertir', 'suma_array', 'promedio_array', 'maximo_array', 'minimo_array',
+    'ordenar_array',
+    // Structs
+    'struct_definir', 'struct_crear', 'struct_poner', 'struct_obtener',
+    'struct_array_crear', 'struct_array_poner', 'struct_array_obtener'
 ]);
 
 /**

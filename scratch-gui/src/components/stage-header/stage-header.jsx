@@ -51,11 +51,14 @@ const StageHeaderComponent = function (props) {
     const {
         isFullScreen,
         isPlayerOnly,
+        isPythonEditMode,
         onKeyPress,
         onSetStageLarge,
         onSetStageSmall,
         onSetStageFull,
         onSetStageUnFull,
+        pythonExecutor,
+        pythonCode,
         showBranding,
         stageSizeMode,
         vm
@@ -101,7 +104,12 @@ const StageHeaderComponent = function (props) {
                     className={styles.stageMenuWrapper}
                     style={{width: stageDimensions.width}}
                 >
-                    <Controls vm={vm} />
+                    <Controls
+                        isPythonEditMode={isPythonEditMode}
+                        pythonExecutor={pythonExecutor}
+                        pythonCode={pythonCode}
+                        vm={vm}
+                    />
                     {stageButton}
                 </Box>
             </Box>
@@ -135,7 +143,12 @@ const StageHeaderComponent = function (props) {
         header = (
             <Box className={styles.stageHeaderWrapper}>
                 <Box className={styles.stageMenuWrapper}>
-                    <Controls vm={vm} />
+                    <Controls
+                        isPythonEditMode={isPythonEditMode}
+                        pythonExecutor={pythonExecutor}
+                        pythonCode={pythonCode}
+                        vm={vm}
+                    />
                     <div className={styles.stageSizeRow}>
                         {stageControls}
                         <div>
@@ -170,11 +183,14 @@ StageHeaderComponent.propTypes = {
     intl: intlShape,
     isFullScreen: PropTypes.bool.isRequired,
     isPlayerOnly: PropTypes.bool.isRequired,
+    isPythonEditMode: PropTypes.bool,
     onKeyPress: PropTypes.func.isRequired,
     onSetStageFull: PropTypes.func.isRequired,
     onSetStageLarge: PropTypes.func.isRequired,
     onSetStageSmall: PropTypes.func.isRequired,
     onSetStageUnFull: PropTypes.func.isRequired,
+    pythonExecutor: PropTypes.object,
+    pythonCode: PropTypes.string,
     showBranding: PropTypes.bool.isRequired,
     stageSizeMode: PropTypes.oneOf(Object.keys(STAGE_SIZE_MODES)),
     vm: PropTypes.instanceOf(VM).isRequired
