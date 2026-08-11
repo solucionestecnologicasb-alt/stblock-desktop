@@ -1,7 +1,7 @@
 {
     "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName":  "STBlock",
-    "version":  "0.1.21",
+    "version":  "0.1.23",
     "identifier":  "com.stbacademy.stblock",
     "build":  {
                   "frontendDist":  "../scratch-gui/build",
@@ -46,14 +46,7 @@
                                },
                    "resources":  [
                                      "drivers/**/*",
-                                     "tools/Arduino/arduino-cli.exe",
-                                     "tools/Arduino/arduino-cli.yaml",
-                                     "tools/Arduino/inventory.yaml",
-                                     "tools/Arduino/library_index.json",
-                                     "tools/Arduino/package_*.json",
-                                     "tools/Arduino/packages/arduino/**/*",
-                                     "tools/Arduino/packages/builtin/**/*",
-                                     "tools/Arduino/libraries/**/*",
+                                     "tools/Arduino/**/*",
                                      "backends/**/*"
                                  ],
                    "createUpdaterArtifacts":  false,
