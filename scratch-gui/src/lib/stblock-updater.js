@@ -53,7 +53,7 @@ const fetchPolicy = async () => {
 
 const wasDismissed = version => {
     try {
-        return localStorage.getItem(DISMISSED_VERSION_KEY) === normalizeVersion(version);
+        return sessionStorage.getItem(DISMISSED_VERSION_KEY) === normalizeVersion(version);
     } catch (_e) {
         return false;
     }
@@ -61,7 +61,7 @@ const wasDismissed = version => {
 
 export const dismissRecommendedUpdate = version => {
     try {
-        localStorage.setItem(DISMISSED_VERSION_KEY, normalizeVersion(version));
+        sessionStorage.setItem(DISMISSED_VERSION_KEY, normalizeVersion(version));
     } catch (_e) {
         // Best effort only.
     }

@@ -1,7 +1,7 @@
 {
     "name":  "stblock",
     "description":  "STBlock - Programacion visual, electronica, robotica y creacion de juegos.",
-    "version":  "0.1.23",
+    "version":  "0.1.25",
     "workspaces":  [
                        "scratch-gui",
                        "scratch-vm"
@@ -19,6 +19,8 @@
                     "build":  "tauri build",
                     "build:installer":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\build-installer.ps1",
                     "deploy:all":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Level recommended",
+                    "deploy:all-mandatory":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Level mandatory",
+                    "deploy:all:mandatory":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Level mandatory",
                     "deploy:recommended":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Level recommended",
                     "deploy:mandatory":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Level mandatory",
                     "deploy:test":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Bump none -SkipInstallerBuild -SkipGitCommit -SkipGitPush -SkipReleasePublish",
