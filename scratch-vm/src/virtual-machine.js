@@ -819,10 +819,12 @@ class VirtualMachine extends EventEmitter {
                 this.editingTarget.fixUpVariableReferences();
             }
 
+            // Keep Runtime consistent before any synchronous UI listener builds
+            // the toolbox for the newly installed sprite/project.
+            this.runtime.setEditingTarget(this.editingTarget);
             // Update the VM user's knowledge of targets and blocks on the workspace.
             this.emitTargetsUpdate(false /* Don't emit project change */);
             this.emitWorkspaceUpdate();
-            this.runtime.setEditingTarget(this.editingTarget);
             this.runtime.ioDevices.cloud.setStage(this.runtime.getTargetForStage());
         });
     }
@@ -835,7 +837,6 @@ class VirtualMachine extends EventEmitter {
      */
     addSprite (input) {
         const errorPrefix = 'Sprite Upload Error:';
-        console.error('[STBlock VM] addSprite iniciado');
         if (typeof input === 'object' && !(input instanceof ArrayBuffer) &&
           !ArrayBuffer.isView(input)) {
             // If the input is an object and not any ArrayBuffer
@@ -853,7 +854,6 @@ class VirtualMachine extends EventEmitter {
             // that the given input should be treated as a single sprite and not
             // an entire project
             validate(input, true, (error, res) => {
-                console.error('[STBlock VM] validacion terminada', error);
                 if (error) return reject(error);
                 resolve(res);
             });
@@ -862,7 +862,6 @@ class VirtualMachine extends EventEmitter {
         return validationPromise
             .then(validatedInput => {
                 const projectVersion = validatedInput[0].projectVersion;
-                console.error('[STBlock VM] version validada', projectVersion);
                 if (projectVersion === 2) {
                     return this._addSprite2(validatedInput[0], validatedInput[1]);
                 }
@@ -908,28 +907,10 @@ class VirtualMachine extends EventEmitter {
      */
     _addSprite3 (sprite, zip) {
         // Validate & parse
-        console.log('[STBlock VM DEBUG] _addSprite3 called');
-        console.log('[STBlock VM DEBUG] sprite name:', sprite?.name);
-        console.log('[STBlock VM DEBUG] sprite costumes:', sprite?.costumes?.length);
-        console.log('[STBlock VM DEBUG] has zip:', !!zip);
-        console.log('[STBlock VM DEBUG] runtime.storage exists:', !!this.runtime?.storage);
-        console.log('[STBlock VM DEBUG] runtime.storage.assetHost:', this.runtime?.storage?.assetHost);
-
         const sb3 = require('./serialization/sb3');
         return sb3
             .deserialize(sprite, this.runtime, zip, true)
-            .then(({targets, extensions}) => {
-                console.log('[STBlock VM DEBUG] sb3.deserialize SUCCESS, targets:', targets?.length);
-                return this.installTargets(targets, extensions, false);
-            })
-            .then(result => {
-                console.log('[STBlock VM DEBUG] installTargets SUCCESS');
-                return result;
-            })
-            .catch(error => {
-                console.error('[STBlock VM DEBUG] _addSprite3 FAILED:', error);
-                throw error;
-            });
+            .then(({targets, extensions}) => this.installTargets(targets, extensions, false));
     }
 
     /**
@@ -1502,17 +1483,26 @@ class VirtualMachine extends EventEmitter {
      * @param {string} targetId Id of target to set as editing.
      */
     setEditingTarget (targetId) {
-        // Has the target id changed? If not, exit.
+        // Has the target id changed? If not, verify that Runtime did not get
+        // out of sync because of an exception in a previous UI listener.
         if (this.editingTarget && targetId === this.editingTarget.id) {
+            if (this.runtime.getEditingTarget() !== this.editingTarget) {
+                this.runtime.setEditingTarget(this.editingTarget);
+                this.emitTargetsUpdate(false /* Don't emit project change */);
+                this.emitWorkspaceUpdate();
+            }
             return;
         }
         const target = this.runtime.getTargetById(targetId);
         if (target) {
             this.editingTarget = target;
+            // Runtime must be consistent before notifying UI listeners. Toolbox
+            // extensions consult runtime.getEditingTarget() synchronously while
+            // processing the workspace update.
+            this.runtime.setEditingTarget(target);
             // Emit appropriate UI updates.
             this.emitTargetsUpdate(false /* Don't emit project change */);
             this.emitWorkspaceUpdate();
-            this.runtime.setEditingTarget(target);
         }
     }
 
@@ -1605,8 +1595,8 @@ class VirtualMachine extends EventEmitter {
      */
     refreshWorkspace () {
         if (this.editingTarget) {
-            this.emitWorkspaceUpdate();
             this.runtime.setEditingTarget(this.editingTarget);
+            this.emitWorkspaceUpdate();
             this.emitTargetsUpdate(false /* Don't emit project change */);
         }
     }

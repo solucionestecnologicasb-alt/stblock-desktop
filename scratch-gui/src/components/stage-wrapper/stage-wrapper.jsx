@@ -18,6 +18,7 @@ const StageWrapperComponent = function (props) {
         isRtl,
         isRendererSupported,
         loading,
+        onSyncPythonToBlocks,
         pythonExecutor,
         pythonCode,
         stageSize,
@@ -35,6 +36,7 @@ const StageWrapperComponent = function (props) {
             <Box className={styles.stageMenuWrapper}>
                 <StageHeader
                     isPythonEditMode={isPythonEditMode}
+                    onSyncPythonToBlocks={onSyncPythonToBlocks}
                     pythonExecutor={pythonExecutor}
                     pythonCode={pythonCode}
                     stageSize={stageSize}
@@ -64,6 +66,7 @@ StageWrapperComponent.propTypes = {
     isRendererSupported: PropTypes.bool.isRequired,
     isRtl: PropTypes.bool.isRequired,
     loading: PropTypes.bool,
+    onSyncPythonToBlocks: PropTypes.func,
     pythonExecutor: PropTypes.object,
     pythonCode: PropTypes.string,
     stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired,

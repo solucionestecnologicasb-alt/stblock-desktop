@@ -5,7 +5,7 @@
  * permitiendo que el código Python controle los sprites.
  */
 
-import { runPython, loadPyodide, isReady, preload } from './python-runtime';
+import {runPython, loadPyodide, requestPythonStop, isReady, preload} from './python-runtime';
 import { menuToCanonical } from './device-menu-mappings';
 
 /**
@@ -17,6 +17,7 @@ class PythonExecutor {
         this.isRunning = false;
         this.shouldStop = false;
         this.pendingWaits = [];
+        this.currentExecutionPromise = null;
         this._testResults = { passed: 0, failed: 0, total: 0, messages: [] };
     }
 
@@ -384,11 +385,18 @@ class PythonExecutor {
 
             // ─── Control ───
             wait: (secs) => {
-                // Wait es manejado diferente en async
                 return new Promise(resolve => {
-                    setTimeout(resolve, secs * 1000);
+                    const timeoutId = setTimeout(() => {
+                        this.pendingWaits = this.pendingWaits.filter(wait => wait.timeoutId !== timeoutId);
+                        resolve();
+                    }, Math.max(0, Number(secs) || 0) * 1000);
+                    this.pendingWaits.push({timeoutId, resolve});
                 });
             },
+
+            // Ceder el hilo principal para que React, Blockly y el escenario
+            // procesen pintura, teclado y el botón detener.
+            yieldControl: () => new Promise(resolve => setTimeout(resolve, 0)),
 
             stopAll: () => {
                 runtime.stopAll();
@@ -782,7 +790,7 @@ class PythonExecutor {
 
             // ─── Debug ───
             debugLog: (value) => {
-                console.log('[STBlock]', value);
+                
             },
             debugWarn: (value) => {
                 console.warn('[STBlock]', value);
@@ -1280,10 +1288,68 @@ class PythonExecutor {
     _injectPlacaInit(code) {
         if (!code) return code;
         // Patrón: @cuando_placa_inicie\n def al_iniciar_placa():
-        if (/@cuando_placa_inicie\s*\ndef\s+al_iniciar_placa\s*\([^)]*\)\s*:/.test(code)) {
-            return `${code}\n\n# Ejecutar el manejador de inicio de la placa\nal_iniciar_placa()\n`;
+        // Solo se auto-invoca si la función NO tiene parámetros (paréntesis vacíos).
+        // Si el usuario definió al_iniciar_placa(pin), no podemos llamarla sin
+        // argumentos (TypeError), así que no se auto-invoca.
+        if (/@cuando_placa_inicie\s*\ndef\s+al_iniciar_placa\s*\(\s*\)\s*:/.test(code)) {
+            return `${code}\n\n# Ejecutar el manejador de inicio de la placa\nawait al_iniciar_placa()\n`;
         }
         return code;
+    }
+
+    /**
+     * Prepara bucles cooperativos y normaliza el literal educativo `true`.
+     * @param {string} code Código escrito o generado en el panel
+     * @returns {string} Código preparado para ejecución cooperativa
+     */
+    _prepareCooperativeCode(code) {
+        const output = [];
+        let eventDecoratorPending = false;
+
+        for (const sourceLine of (code || '').split('\n')) {
+            let line = sourceLine.replace(/^(\s*while\s+)true(\s*:)/i, '$1True$2');
+            const trimmed = line.trim();
+
+            if (/^@cuando_/.test(trimmed)) {
+                eventDecoratorPending = true;
+            } else if (eventDecoratorPending && /^def\s+/.test(trimmed)) {
+                line = line.replace(/^(\s*)def\s+/, '$1async def ');
+                eventDecoratorPending = false;
+            } else if (trimmed && !trimmed.startsWith('#')) {
+                eventDecoratorPending = false;
+            }
+
+            if (!/^\s*(async\s+)?def\s+esperar\s*\(/.test(line)) {
+                line = line.replace(/\bawait\s+esperar\s*\(/g, 'esperar(');
+                line = line.replace(/\besperar\s*\(/g, 'await esperar(');
+            }
+
+            output.push(line);
+
+            const loopMatch = line.match(/^(\s*)(?:async\s+)?(?:while|for)\b.*:\s*(?:#.*)?$/);
+            if (loopMatch) {
+                output.push(`${loopMatch[1]}    await _stblock_checkpoint()`);
+            }
+        }
+
+        return output.join('\n');
+    }
+
+    /**
+     * Prepara un programa Python para una pulsación de bandera verde.
+     * Primero limpia handlers registrados por una ejecución anterior, carga el
+     * código del usuario y finalmente dispara todos los @cuando_bandera_verde.
+     * El código directo (sin decorador) conserva su comportamiento normal.
+     * @param {string} code - Código Python del target activo
+     * @returns {string} Programa listo para ejecutar en Pyodide
+     */
+    _buildGreenFlagProgram(code) {
+        const program = this._prepareCooperativeCode(this._injectPlacaInit(code || ''));
+        const guardedProgram = `${program}\n\n# Disparar los handlers de la bandera verde\nawait _stblock_run_green_flag()`
+            .split('\n')
+            .map(line => `    ${line}`)
+            .join('\n');
+        return `_stblock_prepare_green_flag()\ntry:\n${guardedProgram}\nexcept _STBlockStopped:\n    pass\n`;
     }
 
     /**
@@ -1291,8 +1357,12 @@ class PythonExecutor {
      */
     async execute(code, onOutput, onError, onComplete) {
         if (this.isRunning) {
-            if (onError) onError('Ya hay código ejecutándose');
-            return;
+            this.stop();
+            try {
+                await this.currentExecutionPromise;
+            } catch (e) {
+                // La ejecución anterior puede terminar por cancelación/error.
+            }
         }
 
         this.isRunning = true;
@@ -1305,11 +1375,12 @@ class PythonExecutor {
             // Crear callbacks
             const callbacks = this.createCallbacks();
 
-            // Invocar el manejador de inicio de la placa si existe
-            const finalCode = this._injectPlacaInit(code);
+            // Cargar el programa y disparar sus handlers de bandera verde.
+            const finalCode = this._buildGreenFlagProgram(code);
 
             // Ejecutar código
-            const result = await runPython(finalCode, callbacks);
+            this.currentExecutionPromise = runPython(finalCode, callbacks);
+            const result = await this.currentExecutionPromise;
 
             if (result.success) {
                 if (result.output && onOutput) {
@@ -1324,6 +1395,7 @@ class PythonExecutor {
             if (onError) onError(error.message);
         } finally {
             this.isRunning = false;
+            this.currentExecutionPromise = null;
         }
     }
 
@@ -1332,7 +1404,11 @@ class PythonExecutor {
      */
     stop() {
         this.shouldStop = true;
-        this.isRunning = false;
+        requestPythonStop();
+        for (const wait of this.pendingWaits.splice(0)) {
+            clearTimeout(wait.timeoutId);
+            wait.resolve();
+        }
     }
 
     /**

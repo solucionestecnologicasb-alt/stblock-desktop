@@ -416,7 +416,7 @@ class STBlockLinkClient {
             break;
 
         default:
-            console.log('STBlockLinkClient: Unknown method', method, params);
+            
         }
     }
 

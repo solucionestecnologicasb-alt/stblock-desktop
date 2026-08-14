@@ -137,8 +137,15 @@ class Blocks extends React.Component {
         this._pendingTrashRestore = false;
         this._isClearingWorkspace = false;
         this._prevEditingTargetId = null;
+        this._lastLoadedWorkspaceXML = null;
+        this._lastLoadedWorkspaceTargetId = null;
         this.arduinoGenerator = null;
         this._codeGenerationDebounce = null;
+        // Cache del toolbox XML: reconstruir ~315 bloques (stbBoardV2) en cada
+        // workspaceUpdate es caro. Se cachea por firma y se invalida con
+        // _toolboxCacheGeneration (EXTENSION_ADDED / BLOCKSINFO_UPDATE).
+        this._toolboxCache = null;
+        this._toolboxCacheGeneration = 0;
     }
     componentDidMount () {
         this.ScratchBlocks = VMScratchBlocks(this.props.vm, this.props.useCatBlocks);
@@ -449,9 +456,12 @@ class Blocks extends React.Component {
                     self.handleDeviceBlocksToggle();
                     return;
                 }
-                // Toggle deselection: if clicking the same category already selected, deselect and show all
+                // Toggle deselection: if clicking the same category already selected, deselect and show all.
+                // Solo se aplica a clics reales del usuario: durante populate_ (updateToolbox programático)
+                // _preventFlyoutShow es true y setSelectedItem(categories_[0]) debe seleccionar, no
+                // deseleccionar (dejando selectedItem_ en null y rompiendo getSelectedCategoryId).
                 const currentItem = toolbox.selectedItem_;
-                if (currentItem && item && currentItem.id_ === item.id_) {
+                if (currentItem && item && currentItem.id_ === item.id_ && !self._preventFlyoutShow) {
                     // Same category clicked again → show all categories first, THEN clear selection
                     // (showAll_ may trigger scroll events that need the selected item to be valid)
                     const self = this;
@@ -773,21 +783,25 @@ class Blocks extends React.Component {
         let categoryId = null;
         let offset = 0;
 
-        // Protección contra errores cuando el toolbox está en un estado inválido
+        // La ausencia de una categoría seleccionada es un estado transitorio
+        // normal después de populate_/cambio de target. No debe impedir que el
+        // nuevo toolbox reemplace al anterior.
         try {
-            categoryId = toolbox.getSelectedCategoryId();
+            categoryId = toolbox.selectedItem_ ? toolbox.getSelectedCategoryId() : null;
             offset = toolbox.getCategoryScrollOffset();
-        } catch (e) {
-            // El toolbox puede estar oculto o en un estado inválido
-            console.warn('[Blocks] Toolbox en estado inválido, omitiendo actualización');
-            return;
+        } catch (_e) {
+            categoryId = null;
+            offset = 0;
         }
 
         // populate_() always selects categories_[0]. Prevent the setSelectedItem
         // override from calling flyout.show during that internal call.
         this._preventFlyoutShow = true;
-        this.workspace.updateToolbox(xml);
-        this._preventFlyoutShow = false;
+        try {
+            this.workspace.updateToolbox(xml);
+        } finally {
+            this._preventFlyoutShow = false;
+        }
         this._renderedToolboxXML = xml;
 
         // In order to catch any changes that mutate the toolbox during "normal runtime"
@@ -811,7 +825,9 @@ class Blocks extends React.Component {
             }
         }
         if (!restoredCategory) {
-            categoryId = toolbox.getSelectedCategoryId();
+            // Acceso seguro: getSelectedCategoryId() lanza TypeError si selectedItem_ es null
+            // (p.ej. tras un updateToolbox sin categorías o una deselección previa).
+            categoryId = (toolbox && toolbox.selectedItem_) ? toolbox.selectedItem_.id_ : null;
         }
 
         if (categoryId) {
@@ -961,42 +977,67 @@ class Blocks extends React.Component {
             const stage = runtime.getTargetForStage();
             if (!target) target = stage; // If no editingTarget, use the stage
 
-            const stageCostumes = stage.getCostumes();
-            const targetCostumes = target.getCostumes();
-            const targetSounds = target.getSounds();
-            const dynamicBlocksXML = injectExtensionCategoryTheme(
-                this.props.vm.runtime.getBlocksXML(target),
-                this.props.theme
-            ).map(normalizeCategoryXML);
-            var baseXML;
-            if (runtime.isHardwareModeActive()) {
-                const selectedDevice = this.props.selectedDevice;
-                if (selectedDevice) {
+            // Cache de la construcción del toolbox (~315 bloques de stbBoardV2).
+            // La firma incluye todo lo que puede afectar al XML resultante.
+            // _toolboxCacheGeneration se invalida en EXTENSION_ADDED/BLOCKSINFO_UPDATE.
+            const cacheKey = JSON.stringify([
+                target.id,
+                target.blocks.toXML(),
+                this._toolboxCacheGeneration || 0,
+                this.props.theme,
+                this.props.selectedDevice ? this.props.selectedDevice.id : 'none',
+                runtime.isHardwareModeActive(),
+                this.state.showAdvancedBlocks,
+                this.state.showDeviceBlocks
+            ]);
+
+            const toolboxCacheHit = Boolean(this._toolboxCache && this._toolboxCache.key === cacheKey);
+            let baseXML = toolboxCacheHit ?
+                this._toolboxCache.xml : null;
+
+            if (!baseXML) {
+                const stageCostumes = stage.getCostumes();
+                const targetCostumes = target.getCostumes();
+                const targetSounds = target.getSounds();
+                const dynamicBlocksXML = injectExtensionCategoryTheme(
+                    this.props.vm.runtime.getBlocksXML(target),
+                    this.props.theme
+                ).map(normalizeCategoryXML);
+                if (runtime.isHardwareModeActive()) {
+                    const selectedDevice = this.props.selectedDevice;
+                    if (selectedDevice) {
+                        baseXML = makeToolboxXML(false, target.isStage, target.id, dynamicBlocksXML,
+                            targetCostumes[targetCostumes.length - 1].name,
+                            stageCostumes[stageCostumes.length - 1].name,
+                            targetSounds.length > 0 ? targetSounds[targetSounds.length - 1].name : '',
+                            getColorsForTheme(this.props.theme),
+                            selectedDevice,
+                            true // isHardwareMode
+                        );
+                    } else {
+                        // Fallback: sin dispositivo activo aún. Construir un toolbox estándar,
+                        // nunca un XML sin categorías: un toolbox sin categorías lleva a la rama
+                        // del flyout en updateToolbox y deja selectedItem_ en null.
+                        baseXML = makeToolboxXML(false, target.isStage, target.id, dynamicBlocksXML,
+                            targetCostumes[targetCostumes.length - 1].name,
+                            stageCostumes[stageCostumes.length - 1].name,
+                            targetSounds.length > 0 ? targetSounds[targetSounds.length - 1].name : '',
+                            getColorsForTheme(this.props.theme),
+                            null, false, this.state.showAdvancedBlocks, this.state.showDeviceBlocks);
+                    }
+                } else {
                     baseXML = makeToolboxXML(false, target.isStage, target.id, dynamicBlocksXML,
                         targetCostumes[targetCostumes.length - 1].name,
                         stageCostumes[stageCostumes.length - 1].name,
                         targetSounds.length > 0 ? targetSounds[targetSounds.length - 1].name : '',
                         getColorsForTheme(this.props.theme),
-                        selectedDevice,
-                        true // isHardwareMode
+                        this.props.selectedDevice,
+                        false,
+                        this.state.showAdvancedBlocks,
+                        this.state.showDeviceBlocks
                     );
-                } else {
-                    // Fallback: show only extension categories while device is not ready
-                    baseXML = `<xml id="toolbox-categories" style="display: none">${
-                        dynamicBlocksXML.map(category => category.xml).join('')
-                    }</xml>`;
                 }
-            } else {
-                baseXML = makeToolboxXML(false, target.isStage, target.id, dynamicBlocksXML,
-                    targetCostumes[targetCostumes.length - 1].name,
-                    stageCostumes[stageCostumes.length - 1].name,
-                    targetSounds.length > 0 ? targetSounds[targetSounds.length - 1].name : '',
-                    getColorsForTheme(this.props.theme),
-                    this.props.selectedDevice,
-                    false,
-                    this.state.showAdvancedBlocks,
-                    this.state.showDeviceBlocks
-                );
+                this._toolboxCache = {key: cacheKey, xml: baseXML};
             }
             // Inject trash category with saved blocks
             var trashBlocks = trashOverride || this.props.trashBlocks;
@@ -1034,29 +1075,40 @@ class Blocks extends React.Component {
         this._prevEditingTargetId = this.props.vm.editingTarget ?
             this.props.vm.editingTarget.id : null;
 
-        // Remove and reattach the workspace listener (but allow flyout events)
-        this.workspace.removeChangeListener(this.props.vm.blockListener);
-        this._isClearingWorkspace = true;
-        const dom = this.ScratchBlocks.Xml.textToDom(data.xml);
-        try {
-            this.ScratchBlocks.Xml.clearWorkspaceAndLoadFromXml(dom, this.workspace);
-        } catch (error) {
-            // The workspace is likely incomplete. What did update should be
-            // functional.
-            //
-            // Instead of throwing the error, by logging it and continuing as
-            // normal lets the other workspace update processes complete in the
-            // gui and vm, which lets the vm run even if the workspace is
-            // incomplete. Throwing the error would keep things like setting the
-            // correct editing target from happening which can interfere with
-            // some blocks and processes in the vm.
-            if (error.message) {
-                error.message = `Workspace Update Error: ${error.message}`;
+        // Remove and reattach the workspace listener (but allow flyout events).
+        // Si el XML no cambió (misma serialización VM, determinista), omitir el
+        // clearWorkspaceAndLoadFromXml: conserva el estado de undo/redo y evita
+        // recargas innecesarias del workspace (parpadeo).
+        const activeTargetId = this.props.vm.editingTarget ? this.props.vm.editingTarget.id : null;
+        const workspaceChanged = data.xml !== this._lastLoadedWorkspaceXML ||
+            activeTargetId !== this._lastLoadedWorkspaceTargetId;
+        if (workspaceChanged) {
+            this.workspace.removeChangeListener(this.props.vm.blockListener);
+            this._isClearingWorkspace = true;
+            const dom = this.ScratchBlocks.Xml.textToDom(data.xml);
+            try {
+                this.ScratchBlocks.Xml.clearWorkspaceAndLoadFromXml(dom, this.workspace);
+            } catch (error) {
+                // The workspace is likely incomplete. What did update should be
+                // functional.
+                //
+                // Instead of throwing the error, by logging it and continuing as
+                // normal lets the other workspace update processes complete in the
+                // gui and vm, which lets the vm run even if the workspace is
+                // incomplete. Throwing the error would keep things like setting the
+                // correct editing target from happening which can interfere with
+                // some blocks and processes in the vm.
+                if (error.message) {
+                    error.message = `Workspace Update Error: ${error.message}`;
+                }
+                log.error(error);
+            } finally {
+                this._isClearingWorkspace = false;
             }
-            log.error(error);
+            this.workspace.addChangeListener(this.props.vm.blockListener);
+            this._lastLoadedWorkspaceXML = data.xml;
+            this._lastLoadedWorkspaceTargetId = activeTargetId;
         }
-        this._isClearingWorkspace = false;
-        this.workspace.addChangeListener(this.props.vm.blockListener);
 
         // Restore undo stacks for the new editing target
         var targetId = this.props.vm.editingTarget ? this.props.vm.editingTarget.id : null;
@@ -1108,6 +1160,9 @@ class Blocks extends React.Component {
         }
     }
     handleExtensionAdded (categoryInfo) {
+        // El toolbox cambió (nuevos bloques/extensiones): invalidar el cache.
+        // handleBlocksInfoUpdate delega aquí, así que ambos invalidan.
+        this._toolboxCacheGeneration += 1;
         const defineBlocks = blockInfoArray => {
             if (blockInfoArray && blockInfoArray.length > 0) {
                 const staticBlocksJson = [];
@@ -1459,6 +1514,9 @@ class Blocks extends React.Component {
             const canvas = ws && ws.getCanvas();
             if (!canvas) return;
             const children = Array.from(canvas.children);
+            // Saltar la animación en flyouts grandes (p. ej. stbBoardV2 tiene
+            // ~315 bloques): animar todos los SVG ahí es costoso y no aporta.
+            if (children.length > 40) return;
             children.forEach((el, i) => {
                 el.style.opacity = '0';
                 el.animate([

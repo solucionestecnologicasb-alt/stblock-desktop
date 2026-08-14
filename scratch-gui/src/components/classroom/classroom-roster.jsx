@@ -25,7 +25,7 @@ const ClassroomRoster = ({isOpen, onClose, targets}) => {
             // Re-sincronizar con el estado actual del controlador (mismo motivo que
             // en la consola: useState conserva el estado capturado al montar).
             const fresh = classroomController.getState();
-            console.log('[Classroom] Directorio abierto — participantes:', fresh.roster);
+            
             setState(fresh);
             const unsub = classroomController.subscribe(setState);
             return () => unsub();

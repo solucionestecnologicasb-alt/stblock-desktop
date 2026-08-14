@@ -802,7 +802,7 @@ function deformSolidWithMeshUpdates(cad: OcctKernel, solid: ShapeHandle, updates
   for (let index = 0; index < mesh.positions.length; index += 3) {
     if (positions[index] !== mesh.positions[index] || positions[index + 1] !== mesh.positions[index + 1] || positions[index + 2] !== mesh.positions[index + 2]) movedVerts += 1;
   }
-  console.log(`[TopoEdit] deform: in=${mesh.positions.length / 3} verts / ${mesh.indices.length / 3} tris, tol=${tolerance.toFixed(4)}, updates=${updates.length}, movedVerts=${movedVerts}`);
+  
   const newSolid = reconstructSolid(cad, { positions, indices: mesh.indices, hole: false });
   const transformedPartitions = transformPartitionEdges(partitions, updates, tolerance * 2);
   const restored = ensurePartitionEdges(cad, newSolid, transformedPartitions);
@@ -812,7 +812,7 @@ function deformSolidWithMeshUpdates(cad: OcctKernel, solid: ShapeHandle, updates
     const displayEdges = collectEdges(cad, restored.shape, 0).displayEdges;
     transformedPartitions.forEach((partition) => displayEdges.push({ points: [partition.start.x, partition.start.y, partition.start.z, partition.end.x, partition.end.y, partition.end.z] }));
     const brep = cad.toBREP(restored.shape);
-    console.log(`[TopoEdit] deform -> solid: ${preview.triangleCount} tris, brep=${(brep.length / 1024).toFixed(1)}KB`);
+    
     return {
       positions: preview.positions,
       normals: preview.normals,
@@ -838,7 +838,7 @@ function isMissingValidatorFault(message: string) {
 
 self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
   const request = event.data;
-  console.log(`[TopoEdit] worker onmessage: type=${request.type} reqId=${request.requestId}`);
+  
   let cad: OcctKernel | null = null;
   try {
     cad = await kernel();
@@ -968,7 +968,7 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
             }
           }
           if (face === null || bestDistance > tolerance) throw new Error("The selected face no longer exists; pick it again");
-          console.log(`[TopoEdit] extrudeFace: reqId=${request.requestId} center=(${request.faceCenter.x.toFixed(3)},${request.faceCenter.y.toFixed(3)},${request.faceCenter.z.toFixed(3)}) dist=${Math.abs(request.distance).toFixed(3)} bestFaceDist=${bestDistance.toExponential(2)}`);
+          
           const center = activeCad.getSurfaceCenterOfMass(face);
           const normal = orientedFaceNormal(activeCad, face, center);
           const magnitude = Math.abs(request.distance);
@@ -1024,7 +1024,7 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
         return;
       }
       try {
-        console.log(`[TopoEdit] moveVertex: reqId=${request.requestId} from=(${request.from.x.toFixed(3)},${request.from.y.toFixed(3)},${request.from.z.toFixed(3)}) to=(${request.position.x.toFixed(3)},${request.position.y.toFixed(3)},${request.position.z.toFixed(3)})`);
+        
         const result = deformSolidWithMeshUpdates(activeCad, solid, [{ from: request.from, to: request.position }], partitionEdgesFromParts(request.parts));
         post(
           { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges, partitionEdges: result.partitionEdges },
@@ -1084,7 +1084,7 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
           } finally {
             releaseHandles(activeCad, vertexHandles);
           }
-          console.log(`[TopoEdit] moveFace: reqId=${request.requestId} center=(${request.faceCenter.x.toFixed(3)},${request.faceCenter.y.toFixed(3)},${request.faceCenter.z.toFixed(3)}) faceVerts=${updates.length} offset=(${request.offset.x.toFixed(3)},${request.offset.y.toFixed(3)},${request.offset.z.toFixed(3)}) bestFaceDist=${bestDistance.toExponential(2)}`);
+          
           const result = deformSolidWithMeshUpdates(activeCad, solid, updates, partitionEdgesFromParts(request.parts));
           post(
             { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges, partitionEdges: result.partitionEdges },
@@ -1136,11 +1136,11 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
         } finally {
           releaseHandles(activeCad, edgeHandles);
         }
-        console.log(`[TopoEdit] addVertex: reqId=${request.requestId} point=(${request.position.x.toFixed(3)},${request.position.y.toFixed(3)},${request.position.z.toFixed(3)}) nearestDist=${nearestDistance.toFixed(4)} tol=${tolerance.toFixed(4)}`);
+        
         const mesh = copyCadMesh(activeCad.tessellate(solid, { linearDeflection: 0.03, angularDeflection: 0.15 }));
         const split = splitMeshEdgeAtPoint(mesh.positions, mesh.indices, projection, tolerance);
         if (split === null) throw new Error("Could not insert a vertex on the nearest edge");
-        console.log(`[TopoEdit] addVertex: split newVertex=${split.newVertexIndex}, out=${split.positions.length / 3} verts / ${split.indices.length / 3} tris`);
+        
         const newSolid = reconstructSolid(activeCad, { positions: split.positions, indices: split.indices, hole: false });
         try {
           const options = { linearDeflection: 0.1, angularDeflection: 0.25 };
@@ -1175,7 +1175,7 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
           partitionEdges.forEach((partition) => displayEdges.push({ points: [partition.start.x, partition.start.y, partition.start.z, partition.end.x, partition.end.y, partition.end.z] }));
           const brep = activeCad.toBREP(split.shape);
           const topology = collectTopology(activeCad, split.shape);
-          console.log(`[TopoEdit] splitFace: reqId=${request.requestId} faces=${topology.faces.length} edges=${topology.edges.length} partitions=${partitionEdges.length}`);
+          
           post(
             { type: "preview", requestId: request.requestId, positions: preview.positions, normals: preview.normals, indices: preview.indices, triangleCount: preview.triangleCount, brep, displayEdges, partitionEdges },
             [preview.positions.buffer, preview.normals.buffer, preview.indices.buffer],
@@ -1199,7 +1199,7 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
         return;
       }
       try {
-        console.log(`[TopoEdit] moveEdge: reqId=${request.requestId} endpoints=${request.endpoints.length}`);
+        
         const result = deformSolidWithMeshUpdates(activeCad, solid, request.endpoints, partitionEdgesFromParts(request.parts));
         post(
           { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges, partitionEdges: result.partitionEdges },
@@ -1221,7 +1221,7 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
         return;
       }
       try {
-        console.log(`[TopoEdit] moveVertices: reqId=${request.requestId} updates=${request.updates.length}`);
+        
         const result = deformSolidWithMeshUpdates(activeCad, solid, request.updates, partitionEdgesFromParts(request.parts));
         post(
           { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges, partitionEdges: result.partitionEdges },
@@ -1292,7 +1292,7 @@ self.onmessage = async (event: MessageEvent<CadModifierWorkerRequest>) => {
               releaseHandles(activeCad, vertexHandles);
             }
           }
-          console.log(`[TopoEdit] moveFaces: reqId=${request.requestId} faces=${request.faces.length} located=${locatedFaces} updates=${updates.length} tol=${tolerance.toExponential(2)}`);
+          
           const result = deformSolidWithMeshUpdates(activeCad, solid, updates, partitionEdgesFromParts(request.parts));
           post(
             { type: "preview", requestId: request.requestId, positions: result.positions, normals: result.normals, indices: result.indices, triangleCount: result.triangleCount, brep: result.brep, displayEdges: result.displayEdges, partitionEdges: result.partitionEdges },

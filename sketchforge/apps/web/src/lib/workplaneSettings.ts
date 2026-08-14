@@ -12,7 +12,7 @@ export const DEFAULT_WORKPLANE_WORKSPACE: WorkplaneWorkspaceSettings = {
   gridBlockPreset: "5 mm",
   gridColor: DEFAULT_WORKPLANE_GRID_COLOR,
   background: "#f8fbfc",
-  showShadows: true,
+  showShadows: false,
   showGrid: true,
   cruiseShapes: true,
   zoomSpeed: 5,

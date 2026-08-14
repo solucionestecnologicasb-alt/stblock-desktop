@@ -87,12 +87,12 @@ class LibraryComponent extends React.Component {
         }
     }
     handleSelect (id) {
-        console.log('[STBlock DEBUG] LibraryComponent.handleSelect called, id:', id);
+        
         const item = this.getFilteredData().find(item => this.constructKey(item) === id);
-        console.log('[STBlock DEBUG] Found item:', item ? item.name : 'NOT FOUND');
+        
         this.handleClose();
         if (item) {
-            console.log('[STBlock DEBUG] Calling onItemSelected with item:', item.name);
+            
             this.props.onItemSelected(item);
         } else {
             console.error('[STBlock DEBUG] ERROR: Item not found for id:', id);

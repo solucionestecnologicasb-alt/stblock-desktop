@@ -327,7 +327,7 @@ function autoCorrect(blockData) {
     assignPositions(topBlocks);
 
     if (changes.length > 0) {
-        console.log('[AI Blocks] Auto-correcciones aplicadas:', changes);
+        
     }
 
     return {

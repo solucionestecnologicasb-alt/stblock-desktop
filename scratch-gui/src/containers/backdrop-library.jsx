@@ -25,14 +25,14 @@ class BackdropLibrary extends React.Component {
         ]);
     }
     handleItemSelect (item) {
-        console.log('[STBlock DEBUG] BackdropLibrary.handleItemSelect called');
-        console.log('[STBlock DEBUG] Item received:', item);
+        
+        
         if (!item) {
             console.error('[STBlock DEBUG] ERROR: item is null/undefined!');
             return;
         }
-        console.log('[STBlock DEBUG] Item name:', item.name);
-        console.log('[STBlock DEBUG] Item md5ext:', item.md5ext);
+        
+        
 
         const vmBackdrop = {
             name: item.name,
@@ -41,14 +41,14 @@ class BackdropLibrary extends React.Component {
             bitmapResolution: item.bitmapResolution,
             skinId: null
         };
-        console.log('[STBlock DEBUG] vmBackdrop created:', vmBackdrop);
-        console.log('[STBlock DEBUG] VM exists:', !!this.props.vm);
-        console.log('[STBlock DEBUG] Calling vm.addBackdrop with md5ext:', item.md5ext);
+        
+        
+        
 
         // Do not switch to stage, just add the backdrop
         this.props.vm.addBackdrop(item.md5ext, vmBackdrop)
             .then(() => {
-                console.log('[STBlock DEBUG] vm.addBackdrop SUCCESS!');
+                
             })
             .catch(error => {
                 console.error('[STBlock DEBUG] vm.addBackdrop FAILED!');

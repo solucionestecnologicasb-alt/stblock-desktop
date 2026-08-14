@@ -149,9 +149,9 @@ const initArduinoGenerator = (ScratchBlocks) => {
      * @returns {string} Complete Arduino sketch
      */
     Arduino.finish = function (code) {
-        console.log('[DEBUG] Arduino.finish - includes_ size:', this.includes_.size);
-        console.log('[DEBUG] Arduino.finish - definitions_ size:', this.definitions_.size);
-        console.log('[DEBUG] Arduino.finish - definitions keys:', Array.from(this.definitions_.keys()));
+        
+        
+        
         let finalCode = '// generado por STB academy\n';
 
         // Includes
@@ -954,7 +954,7 @@ const initArduinoGenerator = (ScratchBlocks) => {
     };
 
     Arduino['arduino_stbv2inicio_stbBoardV2_initBootScreen'] = function (block) {
-        console.log('[DEBUG] initBootScreen generator function executed');
+        
         // Initialize OLED display with boot screen - FULL VERSION matching OpenBlock
         this.addInclude('Wire.h');
         this.addInclude('Adafruit_GFX.h');

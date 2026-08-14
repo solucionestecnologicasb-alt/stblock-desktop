@@ -57,7 +57,7 @@ function verifyBlocks(blockData, vm) {
         return {ok: false, issues: issues};
     }
 
-    console.log('[AI Blocks] Verificación: OK — ' + intendedCount + ' bloques creados correctamente');
+    
     return {ok: true, issues: []};
 }
 

@@ -9,6 +9,7 @@ const StageWrapper = props => <StageWrapperComponent {...props} />;
 StageWrapper.propTypes = {
     isRendererSupported: PropTypes.bool.isRequired,
     isPythonEditMode: PropTypes.bool,
+    onSyncPythonToBlocks: PropTypes.func,
     pythonExecutor: PropTypes.object,
     pythonCode: PropTypes.string,
     stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)).isRequired,

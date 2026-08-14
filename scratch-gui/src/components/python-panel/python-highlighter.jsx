@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, {useMemo, useRef} from 'react';
 import PropTypes from 'prop-types';
 import {connect} from 'react-redux';
 import styles from './python-panel.css';
@@ -219,86 +219,136 @@ const tokenizeLine = (line) => {
     return tokens;
 };
 
+const TOKEN_CLASS_NAMES = {
+    comment: styles.tokenComment,
+    header: styles.tokenHeader,
+    keyword: styles.tokenKeyword,
+    definition: styles.tokenDefinition,
+    function: styles.tokenFunction,
+    decorator: styles.tokenDecorator,
+    string: styles.tokenString,
+    number: styles.tokenNumber,
+    operator: styles.tokenOperator,
+    boolean: styles.tokenBoolean,
+    builtin: styles.tokenBuiltin,
+    variable: styles.tokenVariable,
+    parameter: styles.tokenParameter,
+    class: styles.tokenClass,
+    punctuation: styles.tokenPunctuation,
+    self: styles.tokenSelf,
+    import: styles.tokenImport
+};
+
+const HighlightedLine = React.memo(({
+    lineNumber,
+    tokens,
+    hasError,
+    hasWarning,
+    isHighlighted,
+    showLineNumbers
+}) => {
+    const lineClass = [
+        styles.codeLine,
+        hasError ? styles.hasError : '',
+        hasWarning ? styles.hasWarning : '',
+        isHighlighted ? styles.hasHighlight : ''
+    ].filter(Boolean).join(' ');
+
+    return (
+        <div
+            className={lineClass}
+            title={hasError ? 'Esta línea tiene un error' :
+                (hasWarning ? 'Esta línea tiene una advertencia' : '')}
+        >
+            {showLineNumbers && (
+                <span className={styles.lineNumber}>{lineNumber}</span>
+            )}
+            <span className={styles.lineContent}>
+                {tokens.map((token, tokenIndex) => {
+                    const tokenClass = TOKEN_CLASS_NAMES[token.type];
+                    return tokenClass ? (
+                        <span
+                            key={tokenIndex}
+                            className={tokenClass}
+                        >
+                            {token.value}
+                        </span>
+                    ) : <span key={tokenIndex}>{token.value}</span>;
+                })}
+                {tokens.length === 0 && '\u00A0'}
+            </span>
+        </div>
+    );
+});
+HighlightedLine.displayName = 'HighlightedLine';
+
+HighlightedLine.propTypes = {
+    lineNumber: PropTypes.number.isRequired,
+    tokens: PropTypes.arrayOf(PropTypes.shape({
+        type: PropTypes.string.isRequired,
+        value: PropTypes.string.isRequired
+    })).isRequired,
+    hasError: PropTypes.bool.isRequired,
+    hasWarning: PropTypes.bool.isRequired,
+    isHighlighted: PropTypes.bool.isRequired,
+    showLineNumbers: PropTypes.bool.isRequired
+};
+
 /**
  * Componente que renderiza código Python con syntax highlighting
  * Soporta marcado de líneas con errores y resaltado de debug
  */
-const PythonHighlighter = ({ code, showLineNumbers, className, errorLines = [], highlightLine = null }) => {
-    // Auto-scroll a la línea resaltada
+const PythonHighlighter = ({
+    code,
+    showLineNumbers,
+    className,
+    errorLines = [],
+    warningLines = [],
+    highlightLine = null
+}) => {
+    // Conservar los tokens de las líneas que no cambiaron. Antes, cada tecla
+    // volvía a tokenizar el archivo completo y recreaba todos sus spans.
+    const tokenCacheRef = useRef(new Map());
     const highlightedCode = useMemo(() => {
         if (!code) return [];
 
         const lines = code.split('\n');
-        return lines.map((line, lineIndex) => {
+        const errorLineSet = new Set(errorLines);
+        const warningLineSet = new Set(warningLines);
+        const previousCache = tokenCacheRef.current;
+        const nextCache = new Map();
+        const occurrenceByText = new Map();
+        const result = lines.map((line, lineIndex) => {
+            const occurrence = occurrenceByText.get(line) || 0;
+            occurrenceByText.set(line, occurrence + 1);
+            const cacheKey = `${occurrence}\u0000${line}`;
+            const tokens = previousCache.get(cacheKey) || tokenizeLine(line);
+            nextCache.set(cacheKey, tokens);
             const lineNumber = lineIndex + 1;
-            const tokens = tokenizeLine(line);
             return {
-                lineNumber: lineNumber,
+                lineNumber,
                 tokens,
-                hasError: errorLines.includes(lineNumber),
+                hasError: errorLineSet.has(lineNumber),
+                hasWarning: warningLineSet.has(lineNumber),
                 isHighlighted: highlightLine === lineNumber
             };
         });
-    }, [code, errorLines, highlightLine]);
-
-    const getTokenClass = (type) => {
-        const classMap = {
-            'comment': styles.tokenComment,
-            'header': styles.tokenHeader,
-            'keyword': styles.tokenKeyword,
-            'definition': styles.tokenDefinition,
-            'function': styles.tokenFunction,
-            'decorator': styles.tokenDecorator,
-            'string': styles.tokenString,
-            'number': styles.tokenNumber,
-            'operator': styles.tokenOperator,
-            'boolean': styles.tokenBoolean,
-            'builtin': styles.tokenBuiltin,
-            'variable': styles.tokenVariable,
-            'parameter': styles.tokenParameter,
-            'class': styles.tokenClass,
-            'punctuation': styles.tokenPunctuation,
-            'self': styles.tokenSelf,
-            'import': styles.tokenImport,
-            'whitespace': null,
-            'text': null
-        };
-        return classMap[type] || null;
-    };
-
-    const getLineClass = (line) => {
-        let cls = styles.codeLine;
-        if (line.hasError) cls += ` ${styles.hasError}`;
-        if (line.isHighlighted) cls += ` ${styles.hasHighlight}`;
-        return cls;
-    };
+        tokenCacheRef.current = nextCache;
+        return result;
+    }, [code, errorLines, warningLines, highlightLine]);
 
     return (
         <div className={`${styles.codeDisplay} ${className || ''}`}>
-            {highlightedCode.map((line, index) => (
-                <div
-                    key={index}
-                    className={getLineClass(line)}
-                    title={line.hasError ? 'Esta línea tiene un error' : ''}
-                >
-                    {showLineNumbers && (
-                        <span className={styles.lineNumber}>{line.lineNumber}</span>
-                    )}
-                    <span className={styles.lineContent}>
-                        {line.tokens.map((token, tokenIndex) => {
-                            const tokenClass = getTokenClass(token.type);
-                            if (tokenClass) {
-                                return (
-                                    <span key={tokenIndex} className={tokenClass}>
-                                        {token.value}
-                                    </span>
-                                );
-                            }
-                            return <span key={tokenIndex}>{token.value}</span>;
-                        })}
-                        {line.tokens.length === 0 && '\u00A0'}
-                    </span>
-                </div>
+            {highlightedCode.map(line => (
+                <HighlightedLine
+                    key={line.lineNumber}
+                    lineNumber={line.lineNumber}
+                    tokens={line.tokens}
+                    hasError={line.hasError}
+                    hasWarning={line.hasWarning}
+                    isHighlighted={line.isHighlighted}
+                    showLineNumbers={showLineNumbers}
+                />
             ))}
         </div>
     );
@@ -309,6 +359,7 @@ PythonHighlighter.propTypes = {
     showLineNumbers: PropTypes.bool,
     className: PropTypes.string,
     errorLines: PropTypes.arrayOf(PropTypes.number),
+    warningLines: PropTypes.arrayOf(PropTypes.number),
     highlightLine: PropTypes.number
 };
 
@@ -317,6 +368,7 @@ PythonHighlighter.defaultProps = {
     showLineNumbers: true,
     className: '',
     errorLines: [],
+    warningLines: [],
     highlightLine: null
 };
 

@@ -356,7 +356,7 @@ function convertJsonToBlockMap(jsonObj) {
     for (var cid in blockMap) {
         if (!blockMap[cid].shadow) nonShadow++;
     }
-    console.log('[AI Blocks] Parsed JSON ' + total + ' total blocks (' + nonShadow + ' non-shadow, ' + topBlocks.length + ' top-level)');
+    
 
     return {
         blockMap: blockMap,
@@ -389,7 +389,7 @@ function parse(text) {
     if (tmpl) {
         if (TEMPLATES[tmpl.name]) {
             var result = expandTemplate(tmpl.name, tmpl.params);
-            console.log('[AI Blocks] Template "' + tmpl.name + '" expanded: ' + Object.keys(result.blockMap).length + ' blocks');
+            
             return result;
         }
         return {blockMap: {}, topBlocks: [], errors: ['Template "' + tmpl.name + '" no encontrado'], valid: false};
@@ -397,10 +397,10 @@ function parse(text) {
 
     var descriptor = extractDescriptor(text);
     if (!descriptor) {
-        console.log('[AI Blocks] No @bloques descriptor found in response');
+        
         return null;
     }
-    console.log('[AI Blocks] Raw descriptor text:', descriptor.substring(0, 200));
+    
 
     var rawLines = descriptor.split('\n');
     var blockMap = {};
@@ -590,7 +590,7 @@ function parse(text) {
     for (var cid in blockMap) {
         if (!blockMap[cid].shadow) nonShadow++;
     }
-    console.log('[AI Blocks] Parsed ' + total + ' total blocks (' + nonShadow + ' non-shadow, ' + topBlocks.length + ' top-level)');
+    
     if (errors.length > 0) console.warn('[AI Blocks] Parse errors:', errors);
 
     return {

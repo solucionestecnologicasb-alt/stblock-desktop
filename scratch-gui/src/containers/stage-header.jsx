@@ -46,6 +46,7 @@ StageHeader.propTypes = {
     isFullScreen: PropTypes.bool,
     isPlayerOnly: PropTypes.bool,
     isPythonEditMode: PropTypes.bool,
+    onSyncPythonToBlocks: PropTypes.func,
     onSetStageUnFull: PropTypes.func.isRequired,
     pythonExecutor: PropTypes.object,
     pythonCode: PropTypes.string,

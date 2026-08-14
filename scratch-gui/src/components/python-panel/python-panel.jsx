@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, {useState, useRef, useEffect, useLayoutEffect, useMemo} from 'react';
 import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import styles from './python-panel.css';
@@ -146,6 +146,7 @@ const PythonPanel = ({
     onCopyCode,
     onSyncToBlocks,
     isProgrammingMode,
+    targetId,
     targetName,
     isStage
 }) => {
@@ -153,12 +154,18 @@ const PythonPanel = ({
     const highlighterRef = useRef(null);
     const editorWrapperRef = useRef(null);
     const syncTimerRef = useRef(null);
+    const codeCommitRef = useRef(null);
+    const scrollFrameRef = useRef(null);
+    const isComposingRef = useRef(false);
     const lastSyncedCodeRef = useRef('');
-    const lastTargetRef = useRef(targetName);
+    const targetKey = targetId || targetName;
+    const lastTargetRef = useRef(targetKey);
     const [copyFeedback, setCopyFeedback] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
     const [errors, setErrors] = useState([]); // Lista de errores
     const [showErrors, setShowErrors] = useState(true); // Mostrar/ocultar panel de errores
+    const [draftCode, setDraftCode] = useState(pythonCode || '');
+    const draftCodeRef = useRef(pythonCode || '');
     // Tamaño de fuente del editor Python (persistido)
     const [fontSize, setFontSize] = useState(() => {
         try {
@@ -190,27 +197,61 @@ const PythonPanel = ({
             wrapper.style.setProperty('--editor-sbw', `${sbw}px`);
         };
         measureScrollbar();
+        const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measureScrollbar);
+        if (resizeObserver && editorWrapperRef.current) resizeObserver.observe(editorWrapperRef.current);
+        if (resizeObserver && codeRef.current) resizeObserver.observe(codeRef.current);
         window.addEventListener('resize', measureScrollbar);
-        return () => window.removeEventListener('resize', measureScrollbar);
-    }, [pythonCode, isLocked]);
+        return () => {
+            window.removeEventListener('resize', measureScrollbar);
+            if (resizeObserver) resizeObserver.disconnect();
+        };
+    }, [isLocked, fontSize]);
+
+    // El texto se mantiene local mientras se escribe. Propagar cada tecla hasta
+    // GUI vuelve a renderizar casi toda la aplicación, incluido el escenario.
+    const commitDraft = () => {
+        const pending = codeCommitRef.current;
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        codeCommitRef.current = null;
+        pending.onCodeChange(pending.code);
+    };
+
+    useEffect(() => {
+        if (codeCommitRef.current && targetKey === lastTargetRef.current) return;
+        draftCodeRef.current = pythonCode || '';
+        setDraftCode(pythonCode || '');
+    }, [pythonCode, targetKey]);
+
+    useEffect(() => () => {
+        commitDraft();
+        if (scrollFrameRef.current) cancelAnimationFrame(scrollFrameRef.current);
+    }, []);
 
     // Resetear estado cuando cambia el target (sprite/escenario)
     useEffect(() => {
-        if (targetName !== lastTargetRef.current) {
-            lastTargetRef.current = targetName;
+        if (targetKey !== lastTargetRef.current) {
             // Resetear referencia de código sincronizado para el nuevo target
             lastSyncedCodeRef.current = '';
+            // Confirmar el texto pendiente usando el callback del target anterior.
+            commitDraft();
+            lastTargetRef.current = targetKey;
             // Limpiar errores del target anterior
             setErrors([]);
         }
-    }, [targetName]);
+    }, [targetKey]);
 
     // Sincronizar scroll entre textarea y highlighter
     const handleScroll = (e) => {
-        if (highlighterRef.current) {
-            highlighterRef.current.scrollTop = e.target.scrollTop;
-            highlighterRef.current.scrollLeft = e.target.scrollLeft;
-        }
+        const {scrollTop, scrollLeft} = e.target;
+        if (scrollFrameRef.current) cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = requestAnimationFrame(() => {
+            if (highlighterRef.current) {
+                highlighterRef.current.scrollTop = scrollTop;
+                highlighterRef.current.scrollLeft = scrollLeft;
+            }
+            scrollFrameRef.current = null;
+        });
     };
 
     // Auto-sincronización cuando cambia el código (debounced)
@@ -220,23 +261,27 @@ const PythonPanel = ({
         // - Hay código
         // - La función de sync existe
         // - El código es diferente al último sincronizado
-        if (!isLocked && pythonCode && onSyncToBlocks && pythonCode !== lastSyncedCodeRef.current) {
+        if (!isLocked && onSyncToBlocks && pythonCode !== lastSyncedCodeRef.current) {
             // Limpiar timer anterior
             if (syncTimerRef.current) {
                 clearTimeout(syncTimerRef.current);
             }
 
-            // Debounce de 500ms - sincronizar después de que el usuario deje de escribir
+            // La reconstrucción de bloques es costosa; esperar una pausa real.
             syncTimerRef.current = setTimeout(() => {
-                const result = onSyncToBlocks(pythonCode);
+                const result = onSyncToBlocks(pythonCode, {centerGeneratedBlocks: true});
                 if (result) {
                     // Actualizar errores
                     setErrors(result.errors || []);
-                    if (result.success && result.blocksCreated > 0) {
+                    // Actualizar lastSyncedCodeRef también cuando no se generaron
+                    // bloques (result.success): si solo se actualizara con
+                    // blocksCreated > 0, el efecto de sync se re-dispararía en
+                    // bucle porque pythonCode nunca coincidiría con la referencia.
+                    if (result.success) {
                         lastSyncedCodeRef.current = pythonCode;
                     }
                 }
-            }, 500);
+            }, 450);
         }
 
         // Cleanup
@@ -245,10 +290,27 @@ const PythonPanel = ({
                 clearTimeout(syncTimerRef.current);
             }
         };
-    }, [pythonCode, isLocked, onSyncToBlocks]);
+    }, [pythonCode, isLocked, onSyncToBlocks, targetKey]);
 
-    // Obtener líneas con errores para el highlighter
-    const errorLines = errors.map(e => e.line);
+    // Separar errores bloqueantes de advertencias educativas.
+    const errorLines = useMemo(
+        () => errors.filter(e => e.severity !== 'warning').map(e => e.line),
+        [errors]
+    );
+    const warningLines = useMemo(
+        () => errors.filter(e => e.severity === 'warning').map(e => e.line),
+        [errors]
+    );
+    const errorCount = errorLines.length;
+    const warningCount = warningLines.length;
+    const diagnosticsLabel = useMemo(() => {
+        const parts = [];
+        if (errorCount) parts.push(`${errorCount} ${errorCount === 1 ? 'Error' : 'Errores'}`);
+        if (warningCount) {
+            parts.push(`${warningCount} ${warningCount === 1 ? 'Advertencia' : 'Advertencias'}`);
+        }
+        return parts.join(' • ');
+    }, [errorCount, warningCount]);
 
     // Solo mostrar en modo Programacion
     if (!isProgrammingMode) {
@@ -256,7 +318,7 @@ const PythonPanel = ({
     }
 
     const handleCopy = () => {
-        const codeToCopy = pythonCode || '# Sin codigo para copiar';
+        const codeToCopy = draftCode || '# Sin codigo para copiar';
         navigator.clipboard.writeText(codeToCopy).then(() => {
             setCopyFeedback(true);
             setTimeout(() => setCopyFeedback(false), 2000);
@@ -272,9 +334,24 @@ const PythonPanel = ({
         });
     };
 
-    const handleCodeEdit = (e) => {
+    const handleCodeEdit = (e, forceCommit = false) => {
         if (!isLocked && onCodeChange) {
-            onCodeChange(e.target.value);
+            const value = e.target.value;
+            draftCodeRef.current = value;
+            setDraftCode(value);
+            if (codeCommitRef.current) clearTimeout(codeCommitRef.current.timer);
+            codeCommitRef.current = null;
+            if (isComposingRef.current && !forceCommit) return;
+            const pending = {
+                code: value,
+                onCodeChange,
+                timer: setTimeout(() => {
+                    if (codeCommitRef.current !== pending) return;
+                    codeCommitRef.current = null;
+                    onCodeChange(value);
+                }, 150)
+            };
+            codeCommitRef.current = pending;
         }
     };
 
@@ -326,6 +403,7 @@ const PythonPanel = ({
 
             {/* Panel principal */}
             <div
+                data-stblock-python-panel="true"
                 className={classNames(styles.pythonPanel, {
                     [styles.open]: isOpen
                 })}
@@ -446,9 +524,10 @@ const PythonPanel = ({
                             })}
                         >
                             <PythonHighlighter
-                                code={isLocked ? (pythonCode || defaultCode) : pythonCode}
+                                code={isLocked ? (pythonCode || defaultCode) : draftCode}
                                 showLineNumbers={true}
                                 errorLines={errorLines}
+                                warningLines={warningLines}
                                 className={classNames(styles.highlighterLayer, {
                                     [styles.editable]: !isLocked
                                 })}
@@ -459,29 +538,54 @@ const PythonPanel = ({
                             <textarea
                                 ref={codeRef}
                                 className={`${styles.editorTextarea} python-editor-textarea no-vm-keyboard`}
-                                value={pythonCode}
+                                value={draftCode}
                                 onChange={handleCodeEdit}
+                                onCompositionStart={() => {
+                                    isComposingRef.current = true;
+                                }}
+                                onCompositionEnd={(e) => {
+                                    isComposingRef.current = false;
+                                    handleCodeEdit(e, true);
+                                }}
+                                onBlur={commitDraft}
                                 onScroll={handleScroll}
                                 onKeyDown={(e) => {
                                     e.stopPropagation();
                                     e.nativeEvent.stopImmediatePropagation();
 
-                                    // Manejar Tab para insertar 4 espacios
+                                    // Manejar Tab y Shift+Tab sin perder selección.
                                     if (e.key === 'Tab') {
                                         e.preventDefault();
                                         const textarea = e.target;
                                         const start = textarea.selectionStart;
                                         const end = textarea.selectionEnd;
-                                        const spaces = '    '; // 4 espacios
+                                        const lineStart = draftCode.lastIndexOf('\n', start - 1) + 1;
+                                        const selected = draftCode.substring(lineStart, end);
+                                        let replacement;
+                                        let nextStart;
+                                        let nextEnd;
+                                        if (e.shiftKey) {
+                                            replacement = selected.replace(/^ {1,4}/gm, '');
+                                            const removed = selected.length - replacement.length;
+                                            nextStart = Math.max(lineStart, start - Math.min(4, start - lineStart));
+                                            nextEnd = Math.max(nextStart, end - removed);
+                                        } else if (start === end) {
+                                            replacement = `${draftCode.substring(lineStart, start)}    `;
+                                            nextStart = nextEnd = start + 4;
+                                        } else {
+                                            replacement = selected.replace(/^/gm, '    ');
+                                            const added = replacement.length - selected.length;
+                                            nextStart = start + 4;
+                                            nextEnd = end + added;
+                                        }
+                                        const newValue = draftCode.substring(0, lineStart) +
+                                            replacement + draftCode.substring(end);
+                                        handleCodeEdit({target: {value: newValue}});
 
-                                        // Insertar espacios en la posición del cursor
-                                        const newValue = pythonCode.substring(0, start) + spaces + pythonCode.substring(end);
-                                        onCodeChange(newValue);
-
-                                        // Mover cursor después de los espacios
-                                        setTimeout(() => {
-                                            textarea.selectionStart = textarea.selectionEnd = start + 4;
-                                        }, 0);
+                                        requestAnimationFrame(() => {
+                                            textarea.selectionStart = nextStart;
+                                            textarea.selectionEnd = nextEnd;
+                                        });
                                     }
                                 }}
                                 onKeyUp={(e) => e.stopPropagation()}
@@ -540,8 +644,8 @@ const PythonPanel = ({
                     <div className={styles.errorsPanel}>
                         <div className={styles.errorsPanelHeader}>
                             <span className={styles.errorsTitle}>
-                                <ErrorIcon />
-                                {errors.length} {errors.length === 1 ? 'Error' : 'Errores'}
+                                {errorCount > 0 ? <ErrorIcon /> : <WarningIcon />}
+                                {diagnosticsLabel}
                             </span>
                             <button
                                 className={styles.closeErrorsButton}
@@ -556,8 +660,8 @@ const PythonPanel = ({
                                 <div
                                     key={index}
                                     className={classNames(styles.errorItem, {
-                                        [styles.errorTypeError]: error.type === 'unknown_function' || error.type === 'type_error',
-                                        [styles.errorTypeWarning]: error.type === 'syntax_error'
+                                        [styles.errorTypeError]: error.severity !== 'warning',
+                                        [styles.errorTypeWarning]: error.severity === 'warning'
                                     })}
                                 >
                                     <span className={styles.errorLine}>Línea {error.line}:</span>
@@ -576,26 +680,33 @@ const PythonPanel = ({
                 {/* Indicador de errores colapsado */}
                 {!isLocked && errors.length > 0 && !showErrors && (
                     <button
-                        className={styles.errorsCollapsed}
+                        className={classNames(styles.errorsCollapsed, {
+                            [styles.warningsOnly]: errorCount === 0
+                        })}
                         onClick={() => setShowErrors(true)}
                         title="Mostrar errores"
                     >
-                        <ErrorIcon />
-                        <span>{errors.length} {errors.length === 1 ? 'error' : 'errores'}</span>
+                        {errorCount > 0 ? <ErrorIcon /> : <WarningIcon />}
+                        <span>{diagnosticsLabel}</span>
                     </button>
                 )}
 
                 {/* Footer con info */}
-                <div className={styles.footer}>
+                <div
+                    className={styles.footer}
+                    title="Limitación: Pyodide corre en el hilo principal, por lo que un bucle `while True:` congela la pestaña."
+                >
                     <InfoIcon />
                     <span className={styles.footerInfo}>
                         {isKeyLocked
                             ? 'Modo solo Python con candado • Los bloques están bloqueados, ingresa la clave para salir'
                             : isLocked
                                 ? 'Arrastra bloques para generar código • Usa la bandera verde para ejecutar'
-                                : errors.length > 0
-                                    ? `${errors.length} error(es) encontrado(s) - Revisa tu código`
-                                    : 'Escribe código y los bloques se crean automáticamente'
+                                : errorCount > 0
+                                    ? `${errorCount} error(es) encontrado(s) - Revisa tu código`
+                                    : warningCount > 0
+                                        ? `${warningCount} advertencia(s) - Los bloques se generaron correctamente`
+                                    : 'Escribe código y los bloques se crean automáticamente • La bandera ejecuta el proyecto completo'
                         }
                     </span>
                 </div>
@@ -617,6 +728,7 @@ PythonPanel.propTypes = {
     onCopyCode: PropTypes.func,
     onSyncToBlocks: PropTypes.func,
     isProgrammingMode: PropTypes.bool,
+    targetId: PropTypes.string,
     targetName: PropTypes.string,
     isStage: PropTypes.bool
 };
@@ -629,6 +741,7 @@ PythonPanel.defaultProps = {
     onRequestKeyLock: () => {},
     onRequestKeyUnlock: () => {},
     isProgrammingMode: true,
+    targetId: null,
     targetName: 'Sprite',
     isStage: false
 };

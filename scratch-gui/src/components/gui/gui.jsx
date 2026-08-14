@@ -126,6 +126,7 @@ import {
     generatePythonCode,
     generatePythonCodeWithMap,
     syncPythonToWorkspace,
+    clearPythonBlocks,
     savePanelState as savePythonPanelState,
     loadPanelState as loadPythonPanelState,
     PythonExecutor
@@ -580,6 +581,20 @@ const GUIComponent = props => {
         // Si el panel se acaba de bloquear, regenerar Python desde los bloques
         if (pythonPanelLocked && wasUnlocked && workspaceHandle?.workspace) {
             try {
+                // Solo regenerar si hay bloques manuales reales en el workspace.
+                // Si el usuario solo escribió Python (sin bloques manuales), los
+                // únicos bloques serían py_block_* sintetizados: limpiarlos y
+                // regenerar borraría su código, así que se conserva tal cual.
+                const vmBlocks = vm && vm.editingTarget && vm.editingTarget.blocks._blocks;
+                const hasManualBlocks = vmBlocks ?
+                    Object.keys(vmBlocks).some(id => !id.startsWith('py_block_')) :
+                    false;
+                if (!hasManualBlocks) return;
+
+                // Limpiar los bloques sintetizados (py_block_*) del workspace
+                // para que el código Python no se regenere a partir de bloques
+                // que ya provenían de código Python (evita duplicados).
+                clearPythonBlocks(vm, false);
                 const result = generatePythonCodeWithMap(workspaceHandle.workspace);
                 if (vm && vm.runtime) vm.runtime.blockLineMap = result.blockLineMap;
                 setPythonCode(result.code);
@@ -627,29 +642,114 @@ const GUIComponent = props => {
         }
 
         // Escuchar cambios de target
-        vm.on('TARGETS_UPDATE', handleTargetChange);
-        // También escuchar cuando cambia el editing target directamente
-        const checkTargetInterval = setInterval(() => {
-            const targetId = vm.editingTarget?.id;
-            if (targetId && targetId !== currentTargetId) {
-                handleTargetChange();
-            }
-        }, 200);
+        vm.on('targetsUpdate', handleTargetChange);
 
         return () => {
-            vm.removeListener('TARGETS_UPDATE', handleTargetChange);
-            clearInterval(checkTargetInterval);
+            vm.removeListener('targetsUpdate', handleTargetChange);
         };
     }, [vm, currentTargetId, workspaceHandle]);
 
-    // Guardar códigos por target en localStorage cuando cambien
+    // Guardar códigos por target en localStorage cuando cambien (con debounce
+    // ~800ms: escribir en cada tecla era innecesario). Se hace flush al desmontar.
+    const pythonLocalStorageTimerRef = useRef(null);
     useEffect(() => {
-        try {
-            localStorage.setItem('stblock_python_per_target', JSON.stringify(pythonCodePerTarget));
-        } catch (e) {
-            console.warn('[GUI] Error guardando Python por target:', e);
+        if (pythonLocalStorageTimerRef.current) {
+            clearTimeout(pythonLocalStorageTimerRef.current);
         }
+        pythonLocalStorageTimerRef.current = setTimeout(() => {
+            pythonLocalStorageTimerRef.current = null;
+            try {
+                localStorage.setItem('stblock_python_per_target', JSON.stringify(pythonCodePerTarget));
+            } catch (e) {
+                console.warn('[GUI] Error guardando Python por target:', e);
+            }
+        }, 800);
+        return () => {
+            if (pythonLocalStorageTimerRef.current) {
+                clearTimeout(pythonLocalStorageTimerRef.current);
+                pythonLocalStorageTimerRef.current = null;
+            }
+        };
     }, [pythonCodePerTarget]);
+
+    // Flush pendiente al desmontar para no perder el último cambio por el debounce
+    useEffect(() => () => {
+        try {
+            localStorage.setItem('stblock_python_per_target', JSON.stringify(pythonCodePerTargetRef.current));
+        } catch (e) {
+            console.warn('[GUI] Error guardando Python por target al desmontar:', e);
+        }
+    }, []);
+
+    const pythonBlockCenterTimerRef = useRef(null);
+    const positionedPythonTargetsRef = useRef(new Set());
+    useEffect(() => () => {
+        if (pythonBlockCenterTimerRef.current) {
+            clearTimeout(pythonBlockCenterTimerRef.current);
+        }
+    }, []);
+
+    // Memoizada para que onSyncToBlocks no cambie de referencia en cada render.
+    // El panel puede pedir que se centre el primer bloque una vez que Blockly
+    // haya procesado el WORKSPACE_UPDATE emitido por la VM.
+    const handleSyncToBlocks = useCallback((code, options = {}) => {
+        const result = syncPythonToWorkspace(vm, code);
+        const targetIdAtSync = vm.editingTarget && vm.editingTarget.id;
+        const firstBlockId = result && result.topBlockIds && result.topBlockIds[0];
+        if (result.success && options.centerGeneratedBlocks && targetIdAtSync &&
+            result.blocksCreated === 0) {
+            positionedPythonTargetsRef.current.delete(targetIdAtSync);
+        }
+        if (!result.success || !options.centerGeneratedBlocks || !firstBlockId ||
+            !targetIdAtSync || positionedPythonTargetsRef.current.has(targetIdAtSync) ||
+            !workspaceHandle || !workspaceHandle.workspace) {
+            return result;
+        }
+
+        if (pythonBlockCenterTimerRef.current) {
+            clearTimeout(pythonBlockCenterTimerRef.current);
+        }
+        const workspace = workspaceHandle.workspace;
+        const centerWhenReady = attemptsLeft => {
+            if (!vm.editingTarget || vm.editingTarget.id !== targetIdAtSync) return;
+            const renderedBlock = typeof workspace.getBlockById === 'function' ?
+                workspace.getBlockById(firstBlockId) : null;
+            if (renderedBlock) {
+                const metrics = typeof workspace.getMetrics === 'function' ?
+                    workspace.getMetrics() : null;
+                const blockPosition = typeof renderedBlock.getRelativeToSurfaceXY === 'function' ?
+                    renderedBlock.getRelativeToSurfaceXY() : null;
+                const blockSize = typeof renderedBlock.getHeightWidth === 'function' ?
+                    renderedBlock.getHeightWidth() : null;
+                const panel = document.querySelector('[data-stblock-python-panel="true"]');
+                const panelWidth = panel ? panel.getBoundingClientRect().width : 0;
+
+                if (workspace.scrollbar && metrics && blockPosition && blockSize) {
+                    const visibleWidth = Math.max(240, metrics.viewWidth - panelWidth);
+                    const targetScreenX = Math.max(140, visibleWidth * 0.38);
+                    const workspaceScale = workspace.scale || 1;
+                    const blockCenterX = (blockPosition.x + (blockSize.width / 2)) * workspaceScale;
+                    const blockCenterY = (blockPosition.y + (blockSize.height / 2)) * workspaceScale;
+                    const scrollX = blockCenterX - metrics.contentLeft - targetScreenX;
+                    const scrollY = blockCenterY - metrics.contentTop - (metrics.viewHeight / 2);
+                    workspace.scrollbar.set(scrollX, scrollY);
+                } else if (typeof workspace.centerOnBlock === 'function') {
+                    workspace.centerOnBlock(firstBlockId);
+                }
+                positionedPythonTargetsRef.current.add(targetIdAtSync);
+                pythonBlockCenterTimerRef.current = null;
+                return;
+            }
+            if (attemptsLeft > 0) {
+                pythonBlockCenterTimerRef.current = setTimeout(
+                    () => centerWhenReady(attemptsLeft - 1),
+                    40
+                );
+            }
+        };
+        pythonBlockCenterTimerRef.current = setTimeout(() => centerWhenReady(4), 0);
+        return result;
+    }, [vm, workspaceHandle]);
 
     const handleClassroomRemoteUpdate = useCallback(payload => {
         if (!vm) return;
@@ -658,7 +758,7 @@ const GUIComponent = props => {
 
         const role = classroomStateRef.current.role;
         const tNames = (vm.runtime && vm.runtime.targets) ? vm.runtime.targets.map(t => t.getName()).join(', ') : 'sin-VM';
-        console.log(`[Classroom DEBUG] handleRemoteUpdate ENTRADA. role=${role} sourceClientId=${sourceClientId} userHasInteracted=${userHasInteractedRef.current} applying=${classroomApplyingRemoteRef.current} projectJSONLen=${projectJSON.length} targetsLocales=[${tNames}]`);
+        
 
         // En el cliente, no sobrescribir mientras el usuario esté escribiendo AHORA
         // MISMO (ventana de 2s desde la última interacción real). Los eventos de
@@ -667,7 +767,7 @@ const GUIComponent = props => {
         // SIEMPRE se aplica: es el proyecto del servidor al entrar.
         if (role !== 'servidor' && sourceClientId &&
             (Date.now() - lastRealInteractionRef.current < 2000)) {
-            console.log(`[Classroom DEBUG] handleRemoteUpdate BLOQUEADO por guard (fuente=${lastInteractionSourceRef.current}, hace ${Date.now() - lastRealInteractionRef.current}ms). sourceClientId=${sourceClientId}`);
+            
             return;
         }
 
@@ -679,21 +779,21 @@ const GUIComponent = props => {
             const assignedSpriteNames = Object.keys(assignments).filter(
                 name => assignments[name] === sourceClientId
             );
-            console.log(`[Classroom DEBUG] SERVIDOR recibió update del cliente ${sourceClientId}. asignados=[${assignedSpriteNames.join(', ')}] pythonKeys=[${Object.keys(pythonCodes || {}).join(', ')}]`);
+            
             try {
                 const serverProjectJSON = vm.toJSON();
                 const serverNames = JSON.parse(serverProjectJSON).targets.map(t => t.name);
                 const clientNames = JSON.parse(projectJSON).targets.map(t => t.name);
-                console.log(`[Classroom DEBUG] SERVIDOR merge: server=[${serverNames.join(', ')}] client=[${clientNames.join(', ')}]`);
+                
                 const mergeResult = mergeClientProject(serverProjectJSON, projectJSON, assignedSpriteNames);
                 finalProjectJSON = mergeResult.projectJSON;
                 const mergedNames = JSON.parse(finalProjectJSON).targets.map(t => t.name);
-                console.log(`[Classroom DEBUG] SERVIDOR merge resultante=[${mergedNames.join(', ')}] newSprites=[${mergeResult.newSprites.join(', ')}]`);
+                
                 // Los recursos que el cliente creó en su sesión (y que no existen
                 // en el proyecto del servidor) pasan a ser suyos, para que pueda
                 // seguir editándolos tras el broadcast.
                 for (const name of mergeResult.newSprites) {
-                    console.log('[Classroom] Auto-asignando recurso nuevo al cliente:', name);
+                    
                     classroomController.assignResource(name, sourceClientId);
                 }
             } catch (err) {
@@ -711,10 +811,10 @@ const GUIComponent = props => {
             // crudo del cliente) para que todos los clientes vean el estado
             // combinado. El controller ya no reenvía el payload crudo.
             lastSentSigRef.current = projectSignature(finalProjectJSON, finalPythonCodes);
-            console.log(`[Classroom DEBUG] SERVIDOR difundiendo proyecto fusionado. targets=[${JSON.parse(finalProjectJSON).targets.map(t => t.name).join(', ')}] pythonKeys=[${Object.keys(finalPythonCodes).join(', ')}]`);
+            
             classroomController.sendProjectUpdate({projectJSON: finalProjectJSON, pythonCodes: finalPythonCodes});
         } else {
-            console.log(`[Classroom DEBUG] handleRemoteUpdate aplicará proyecto (role=${role} sourceClientId=${sourceClientId}). targetsEntrantes=[${(JSON.parse(projectJSON).targets || []).map(t => t.name).join(', ')}]`);
+            
         }
 
         if (classroomDebounceRef.current) {
@@ -740,11 +840,11 @@ const GUIComponent = props => {
         clearTimeout(classroomApplyTimerRef.current);
         classroomApplyTimerRef.current = setTimeout(releaseRefs, 8000);
         const aplicandoNames = JSON.parse(finalProjectJSON).targets.map(t => t.name).join(', ');
-        console.log(`[Classroom DEBUG] APLICANDO loadProject. role=${role} targetsEntrantes=[${aplicandoNames}] localesActuales=[${tNames}]`);
+        
         try {
             Promise.resolve(vm.loadProject(finalProjectJSON)).then(() => {
                 if (vm.runtime && vm.runtime.targets) {
-                    console.log('[Classroom DEBUG] Proyecto cargado. targets en VM:', vm.runtime.targets.map(t => `${t.getName()} (ID: ${t.id})`));
+                    
                     const sprite = vm.runtime.targets.find(t => !t.isStage);
                     if (sprite) {
                         vm.setEditingTarget(sprite.id);
@@ -770,7 +870,7 @@ const GUIComponent = props => {
                     vm.toJSON(),
                     pythonCodesByName(vm, pythonById)
                 );
-                console.log(`[Classroom DEBUG] loadProject COMPLETADO. targetsFinales=${vm.runtime.targets.length} baseline=${lastAppliedRemoteSigRef.current}`);
+                
                 setTimeout(() => {
                     classroomApplyingRemoteRef.current = false;
                     userHasInteractedRef.current = false;
@@ -795,7 +895,7 @@ const GUIComponent = props => {
             onRemoteProjectUpdate: handleClassroomRemoteUpdate,
             // El controlador invoca onClientAccepted al aceptar una solicitud.
             onClientAccepted: client => {
-                console.log('[Classroom] Cliente aceptado:', client && client.name);
+                
                 try {
                     const projectJSON = vm.toJSON();
                     const pythonCodes = pythonCodesByName(vm, pythonCodePerTargetRef.current);
@@ -854,7 +954,7 @@ const GUIComponent = props => {
         }
 
         setTimeout(() => {
-            console.log('[Classroom] Uniendo al simulador:', {host, port, code, name});
+            
             classroomController.joinSession({host, port, code, name});
         }, 1000);
     }, []);
@@ -865,14 +965,14 @@ const GUIComponent = props => {
         const logSkip = reason => {
             if (lastSnapshotSkipRef.current !== reason) {
                 lastSnapshotSkipRef.current = reason;
-                console.log(`[Classroom] snapshot SKIP: ${reason}`);
+                
             }
         };
         const role = classroomStateRef.current.role;
         const tNames = vm && vm.runtime ? vm.runtime.targets.map(t => t.getName()).join(', ') : 'sin-VM';
         if (classroomApplyingRemoteRef.current) {
             logSkip('aplicando remoto');
-            console.log(`[Classroom DEBUG] queue: GATE aplicando remoto. role=${role} targets=[${tNames}]`);
+            
             return;
         }
         if (!classroomStateRef.current.active) {
@@ -894,7 +994,7 @@ const GUIComponent = props => {
         // disfraces, código Python) es estable durante la ejecución.
         if (!userHasInteractedRef.current) {
             logSkip('sin interacción del usuario');
-            console.log(`[Classroom DEBUG] queue: GATE sin interacción. role=${role} targets=[${tNames}]`);
+            
             return;
         }
         lastSnapshotSkipRef.current = null;
@@ -904,24 +1004,24 @@ const GUIComponent = props => {
         // cancelar el snapshot pendiente. El primer evento dispara el envío a los
         // 800ms con el estado acumulado; los eventos siguientes se descartan.
         if (classroomDebounceRef.current) {
-            console.log(`[Classroom DEBUG] queue: IGNORADO (ya hay snapshot programado). role=${role} fuente=${lastInteractionSourceRef.current}`);
+            
             return;
         }
-        console.log(`[Classroom DEBUG] queue: ENCOLANDO snapshot en 800ms. role=${role} targets=[${tNames}] interactuado=${userHasInteractedRef.current} fuente=${lastInteractionSourceRef.current}`);
+        
         classroomDebounceRef.current = setTimeout(() => {
             classroomDebounceRef.current = null;
             try {
                 const projectJSON = vm.toJSON();
                 const pythonCodes = pythonCodesByName(vm, pythonCodePerTargetRef.current);
                 const sig = projectSignature(projectJSON, pythonCodes);
-                console.log(`[Classroom DEBUG] queue: debounce cumplido. role=${role} targets=${vm.runtime.targets.length} sig=${sig} lastApplied=${lastAppliedRemoteSigRef.current} lastSent=${lastSentSigRef.current} igualApplied=${sig === lastAppliedRemoteSigRef.current} igualSent=${sig === lastSentSigRef.current}`);
+                
                 if (sig === lastAppliedRemoteSigRef.current || sig === lastSentSigRef.current) {
-                    console.log('[Classroom] snapshot SKIP: sin cambios (firma idéntica)');
+                    
                     userHasInteractedRef.current = false;
                     return;
                 }
                 lastSentSigRef.current = sig;
-                console.log(`[Classroom] snapshot ENVIANDO (${vm.runtime.targets.length} targets)`);
+                
                 classroomController.sendProjectUpdate({projectJSON, pythonCodes});
                 userHasInteractedRef.current = false;
             } catch (e) {
@@ -940,11 +1040,11 @@ const GUIComponent = props => {
         const handleTargetsUpdate = () => {
             const names = (vm.runtime.targets || []).map(t => t.getName()).join('|');
             if (names === lastTargetNames) {
-                console.log(`[Classroom DEBUG] targetsUpdate sin cambio estructural (movimiento class-run, ignorado). role=${classroomStateRef.current.role}`);
+                
                 return;
             }
             lastTargetNames = names;
-            console.log(`[Classroom DEBUG] targetsUpdate estructural. role=${classroomStateRef.current.role} targets=[${names.split('|').join(', ')}]`);
+            
             markInteraction('targetsUpdate');
             queueClassroomSnapshot();
         };
@@ -957,7 +1057,7 @@ const GUIComponent = props => {
             const now = Date.now();
             if (now - lastProjectChangedLog > 5000) {
                 lastProjectChangedLog = now;
-                console.log(`[Classroom DEBUG] PROJECT_CHANGED (runtime) ignorado para envío. role=${classroomStateRef.current.role}`);
+                
             }
         };
         // El workspace de Blockly dispara eventos por edición de bloques del
@@ -977,11 +1077,11 @@ const GUIComponent = props => {
                 const now = Date.now();
                 if (now - lastNoiseLog > 5000) {
                     lastNoiseLog = now;
-                    console.log(`[Classroom DEBUG] changeListener(bloques) tipo=${et} (ruido, ignorado)`);
+                    
                 }
                 return;
             }
-            console.log(`[Classroom DEBUG] changeListener(bloques) tipo=${et} → interacción real`);
+            
             markInteraction(`bloque:${et}`);
             queueClassroomSnapshot();
         };
@@ -1009,14 +1109,14 @@ const GUIComponent = props => {
         if (!vm) return;
         const interval = setInterval(() => {
             if (classroomApplyingRemoteRef.current) {
-                console.log('[Classroom DEBUG] poll: GATE aplicando remoto');
+                
                 return;
             }
             // Durante class-run el toJSON cambia por variables/posiciones de la
             // ejecución; sondear reenviaría en bucle. Los cambios reales (bloques,
             // sprites) se envían por la cola de eventos, que sí sigue activa.
             if (classroomStateRef.current.classRunning) {
-                console.log('[Classroom DEBUG] poll: GATE class-running (sin sondeo)');
+                
                 return;
             }
             if (!classroomStateRef.current.active) return;
@@ -1026,12 +1126,12 @@ const GUIComponent = props => {
                 const pythonCodes = pythonCodesByName(vm, pythonCodePerTargetRef.current);
                 const sig = projectSignature(projectJSON, pythonCodes);
                 const targets = (vm.runtime.targets || []).map(t => t.getName()).join(', ');
-                console.log(`[Classroom DEBUG] poll: role=${classroomStateRef.current.role} sig=${sig} lastSent=${lastSentSigRef.current} lastApplied=${lastAppliedRemoteSigRef.current} igualSent=${sig === lastSentSigRef.current} igualApplied=${sig === lastAppliedRemoteSigRef.current} targets=[${targets}]`);
+                
                 if (sig === lastSentSigRef.current || sig === lastAppliedRemoteSigRef.current) {
                     return;
                 }
                 lastSentSigRef.current = sig;
-                console.log(`[Classroom] poll ENVIANDO (${vm.runtime.targets.length} targets)`);
+                
                 classroomController.sendProjectUpdate({projectJSON, pythonCodes});
                 userHasInteractedRef.current = false;
             } catch (e) {
@@ -1053,7 +1153,7 @@ const GUIComponent = props => {
             const now = Date.now();
             if (now - lastPythonFloodLogRef.current > 3000) {
                 lastPythonFloodLogRef.current = now;
-                console.log(`[Classroom DEBUG] python effect: cambio no-remoto. keys=[${Object.keys(pythonCodePerTarget).join(', ')}] remoteApplied=${remoteAppliedPythonRef.current ? 'set' : 'null'}`);
+                
             }
             queueClassroomSnapshot();
         }
@@ -1296,7 +1396,7 @@ const GUIComponent = props => {
         workspace.addChangeListener(handleWorkspaceChange);
 
         // Generar código inicial para este target (solo si panel bloqueado o no hay código)
-        if (pythonPanelLockedRef.current || !pythonCodePerTarget[currentTargetId]) {
+        if (pythonPanelLockedRef.current || !pythonCodePerTargetRef.current[currentTargetId]) {
             setTimeout(() => {
                 try {
                     // Solo regenerar si está bloqueado
@@ -1318,7 +1418,7 @@ const GUIComponent = props => {
                 clearTimeout(pythonGenDebounceRef.current);
             }
         };
-    }, [deviceMode, workspaceHandle, currentTargetId, setPythonCode, pythonCodePerTarget]);
+    }, [deviceMode, workspaceHandle, currentTargetId]);
 
     const runUpdateCheck = useCallback(async ({manual = false} = {}) => {
         try {
@@ -1393,7 +1493,7 @@ const GUIComponent = props => {
         var editorUrl = 'static/velxio/gears/editor/index.html';
 
         var openEditor = function () {
-            console.log('[GUI] Abriendo editor Gearbot:', editorUrl);
+            
             // En Tauri: usar WebviewWindow API para crear ventana hija
             if (window.__TAURI__ && window.__TAURI__.webviewWindow) {
                 try {
@@ -1431,20 +1531,20 @@ const GUIComponent = props => {
         var handleKeyDown = function (event) {
             if (!event.ctrlKey || !event.altKey || event.code !== 'KeyE') return;
             event.preventDefault();
-            console.log('[GUI] Ctrl+Alt+E detectado');
+            
             openEditor();
         };
 
         var handleMessage = function (event) {
             if (event.data && event.data.type === 'stblock-open-world-editor') {
-                console.log('[GUI] postMessage stblock-open-world-editor recibido');
+                
                 openEditor();
             }
             if (event.data && event.data.type === 'stblock-open-robot-editor') {
-                console.log('[GUI] postMessage stblock-open-robot-editor recibido');
+                
                 // Use the path provided by main.js or construct it
                 var robotEditorUrl = event.data.editorPath || 'static/velxio/gears/editor/index.html?mode=robots';
-                console.log('[GUI] Abriendo editor de robots:', robotEditorUrl);
+                
 
                 // En Tauri: usar WebviewWindow API para crear ventana hija
                 if (window.__TAURI__ && window.__TAURI__.webviewWindow) {
@@ -1480,7 +1580,7 @@ const GUIComponent = props => {
             }
             if (event.data && event.data.type === 'stblock-save-json') {
                 const { json, filename } = event.data;
-                console.log('[GUI] postMessage stblock-save-json recibido:', filename);
+                
                 
                 const isTauri = typeof window !== 'undefined' && window.__TAURI__ !== undefined;
                 if (isTauri) {
@@ -1565,7 +1665,7 @@ const GUIComponent = props => {
 
     // Handle activating a device extension (register blocks, update toolbox)
     const handleActivateExtension = useCallback((extension) => {
-        console.log('[GUI] Activating device extension:', extension.extensionId);
+        
         if (vm) {
             activateDeviceExtension(vm, extension);
         }
@@ -1573,7 +1673,7 @@ const GUIComponent = props => {
 
     // Handle deactivating a device extension (remove blocks, update toolbox)
     const handleDeactivateExtension = useCallback((extension) => {
-        console.log('[GUI] Deactivating device extension:', extension.extensionId);
+        
         if (vm) {
             deactivateDeviceExtension(vm, extension);
         }
@@ -1734,6 +1834,15 @@ const GUIComponent = props => {
         onSelectDeviceModeDevice(profile);
         onSetDeviceMode(profile ? 'device' : 'game');
 
+        // Sincronizar el runtime ANTES de loadProject: durante loadProject se dispara
+        // emitWorkspaceUpdate y runtime.getBlocksXML() usa _deviceBlockInfo. Si solo se
+        // actualizara después (en el .then), getBlocksXML devolvería las categorías de la
+        // tarjeta anterior (p.ej. STBoard) mientras selectedDevice ya es la nueva, mezclando
+        // pines/bloques de la tarjeta vieja en el workspace y el toolbox. setDeviceProfile
+        // deep-clona las categorías y emite BLOCKSINFO_UPDATE; no es borrado por clear().
+        // emitProjectChanged=false evita marcar como sucio el proyecto saliente.
+        vm.setDeviceProfile(profile, profile ? profile.defaultProgramMode : null, false);
+
         // NOTE: vm.clear() is NOT called here because loadProject → deserializeProject
         // already calls clear() internally. Calling it here causes a double-clear
         // which triggers workspace update errors (setRecyclingEnabled on null).
@@ -1846,6 +1955,10 @@ const GUIComponent = props => {
             const savedProject = profile && deviceModeProjects ?
                 deviceModeProjects[profile.deviceId] : null;
             deviceSwitchInProgress.current = true;
+            // Mismo principio que performDeviceSwitch: setDeviceProfile antes de loadProject
+            // para que getBlocksXML() use las categorías del dispositivo restaurado y no las
+            // de una tarjeta previa que pudiera quedar en _deviceBlockInfo.
+            vm.setDeviceProfile(profile, profile ? profile.defaultProgramMode : null, false);
             vm.loadProject(savedProject && savedProject.projectData ?
                 savedProject.projectData : EMPTY_DEVICE_PROJECT)
                 .then(() => {
@@ -1933,7 +2046,7 @@ const GUIComponent = props => {
                         timestamp: Date.now()
                     };
                     localStorage.setItem('stblock_last_peripheral', JSON.stringify(connectionInfo));
-                    console.log('[GUI] Saved peripheral info for auto-reconnect:', connectionInfo);
+                    
                 } catch (e) {
                     console.warn('[GUI] Failed to save peripheral info:', e);
                 }
@@ -2025,7 +2138,7 @@ const GUIComponent = props => {
         // Check if saved info is recent (within 24 hours)
         const maxAge = 24 * 60 * 60 * 1000; // 24 hours
         if (Date.now() - savedInfo.timestamp > maxAge) {
-            console.log('[GUI] Saved peripheral info expired, not auto-reconnecting');
+            
             try {
                 localStorage.removeItem('stblock_last_peripheral');
             } catch (e) {
@@ -2037,7 +2150,7 @@ const GUIComponent = props => {
         // Check if current device matches saved device
         const currentDeviceId = deviceModeDevice?.deviceId || deviceModeDevice?.id;
         if (currentDeviceId && savedInfo.deviceId === currentDeviceId) {
-            console.log('[GUI] Attempting auto-reconnect to:', savedInfo.peripheralName);
+            
 
             // Delay slightly to ensure device mode is fully initialized
             const timeoutId = setTimeout(() => {
@@ -2167,7 +2280,7 @@ const GUIComponent = props => {
         }
         const port = (s.config && s.config.port) ? s.config.port : 8870;
         if (openClassroomSimulator({port, code: s.code})) {
-            console.log('[Classroom] Ventana simulada abierta (PC-2).');
+            
         }
     }, []);
 
@@ -2180,7 +2293,7 @@ const GUIComponent = props => {
                 if (velxioRef.current && velxioRef.current.loadCircuitState) {
                     const result = await velxioRef.current.loadCircuitState(circuitData);
                     if (result) {
-                        console.log('[GUI] Circuit state restored from .flynt');
+                        
                     }
                 }
             } catch (e) {
@@ -2960,6 +3073,7 @@ const GUIComponent = props => {
                         isRendererSupported={isRendererSupported}
                         isRtl={isRtl}
                         isPythonEditMode={isPythonEditMode}
+                        onSyncPythonToBlocks={handleSyncToBlocks}
                         pythonExecutor={pythonExecutor}
                         pythonCode={pythonCode}
                         stageSize={stageSize}
@@ -3048,8 +3162,9 @@ const GUIComponent = props => {
                             onRequestKeyUnlock={handleRequestKeyUnlock}
                             onCodeChange={setPythonCode}
                             onCopyCode={() => {}}
-                            onSyncToBlocks={(code) => syncPythonToWorkspace(vm, code)}
+                            onSyncToBlocks={handleSyncToBlocks}
                             isProgrammingMode={deviceMode !== 'device'}
+                            targetId={currentTargetId}
                             targetName={vm.editingTarget?.getName() || 'Sprite'}
                             isStage={vm.editingTarget?.isStage || false}
                         />

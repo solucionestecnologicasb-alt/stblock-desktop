@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CloudUpload, Download, FileImage, FolderOpen, Hexagon, Minus, Pencil, Triangle, Type, X } from "lucide-react";
+import { Check, CloudUpload, Download, FileImage, FolderOpen, Hexagon, Minus, Pencil, Scissors, Triangle, Type, X } from "lucide-react";
 import type manifoldModule from "manifold-3d";
 import type { ManifoldToplevel } from "manifold-3d";
 import dynamic from "next/dynamic";
@@ -94,6 +94,8 @@ import { projectExportFileName } from "@/lib/exportNames";
 import { attachProjectAsset, dedupeProjectAssets, projectAssetFromBytes, sourceFormatForFileName } from "@/lib/projectAssets";
 import { findSketchOutlineIntersection } from "@/lib/sketchProfileValidation";
 import { buildSketchRevolveMesh, DEFAULT_SKETCH_REVOLVE_SETTINGS, normalizeSketchRevolveSettings, type SketchRevolveMesh } from "@/lib/sketchRevolve";
+import { buildSketchSweepMesh, DEFAULT_SKETCH_SWEEP_SETTINGS, normalizeSketchSweepSettings, type SketchSweepMesh, type SketchSweepSettings } from "@/lib/sketchSweep";
+import { trimSketchProfileSegment } from "@/lib/sketchTrim";
 import { entityFromDrag, materializeSketchEntities, tessellateSketchEntity } from "@/lib/capGeometry";
 import type { Direct2DDrawTool } from "@/lib/direct2dDrawing";
 import { appendCapTimelineEntry, capSectionHasUsableProfile, capSectionToolHeight, capSectionToolPlane, createCapSection as newCapSection, emptyCapDocument, normalizeCapDocument, planeElevation, reconcileCapDocument } from "@/lib/capDocument";
@@ -567,14 +569,84 @@ async function shapeFromRevolvedSketchProfile(
   const runtime = await getManifoldRuntime();
   const normalizedSettings = normalizeSketchRevolveSettings(settings);
   const mesh = buildSketchRevolveMesh(runtime, profile, normalizedSettings);
+
+  const oldOffsetX = existing?.importedMesh?.offsetX ?? 0;
+  const oldOffsetY = existing?.importedMesh?.offsetY ?? 0;
+  const oldOffsetZ = existing?.importedMesh?.offsetZ ?? 0;
+
+  const worldAxisX = (existing?.x ?? 0) - oldOffsetX;
+  const worldAxisY = (existing?.elevation ?? 0) - oldOffsetY;
+  const worldAxisZ = (existing?.z ?? 0) - oldOffsetZ;
+
   const planePlacement = options?.plane ? placementFromPlane(options.plane, mesh.height) : null;
   const placement = planePlacement ?? options?.placement ?? {};
   const mirrorPlacement = planePlacement ? null : options?.placement ?? null;
+
+  const targetAxisX = placement.x ?? 0;
+  const targetAxisZ = placement.z ?? 0;
+  const targetAxisY = planePlacement ? planePlacement.elevation : (options?.elevation ?? placement.elevation ?? 0);
+
+  const newX = (existing ? worldAxisX : targetAxisX) + mesh.offsetX;
+  const newZ = (existing ? worldAxisZ : targetAxisZ) + mesh.offsetZ;
+  const newElevation = (existing ? worldAxisY : targetAxisY) + mesh.offsetY;
+
   return canonicalizeShape({
     id: existing?.id ?? createLocalId("sketch-revolve"),
     name: existing?.name ?? "Revolución de boceto",
     kind: "mesh",
     color: existing?.color ?? "#78b96b",
+    hole: existing?.hole,
+    x: newX,
+    z: newZ,
+    elevation: newElevation,
+    size: Math.max(mesh.width, mesh.depth),
+    width: mesh.width,
+    depth: mesh.depth,
+    height: mesh.height,
+    rotation: placement.rotation ?? existing?.rotation ?? 0,
+    rotationX: placement.rotationX ?? existing?.rotationX ?? 0,
+    rotationZ: placement.rotationZ ?? existing?.rotationZ ?? 0,
+    mirrorX: mirrorPlacement?.mirrorX ?? existing?.mirrorX,
+    mirrorY: mirrorPlacement?.mirrorY ?? existing?.mirrorY,
+    mirrorZ: mirrorPlacement?.mirrorZ ?? existing?.mirrorZ,
+    importedMesh: {
+      positions: mesh.positions,
+      baseWidth: mesh.width,
+      baseDepth: mesh.depth,
+      baseHeight: mesh.height,
+      triangleCount: mesh.triangleCount,
+      sourceFormat: "json",
+      offsetX: mesh.offsetX,
+      offsetY: mesh.offsetY,
+      offsetZ: mesh.offsetZ,
+    },
+    sketchProfile: cloneSketchProfile(profile),
+    sketchOperation: "revolve",
+    sketchRevolve: normalizedSettings,
+    locked: existing?.locked ?? false,
+    hidden: existing?.hidden ?? false,
+    ...(options?.capSectionId ? { capSectionId: options.capSectionId } : {}),
+  } satisfies WorkplaneShape);
+}
+
+async function shapeFromSweptSketchProfile(
+  profile: SketchProfile,
+  settings: Partial<SketchSweepSettings>,
+  existing?: WorkplaneShape | null,
+  options?: SketchShapeBuildOptions,
+) {
+  const runtime = await getManifoldRuntime();
+  const normalizedSettings = normalizeSketchSweepSettings(settings);
+  const mesh = buildSketchSweepMesh(runtime, profile, normalizedSettings);
+  const planePlacement = options?.plane ? placementFromPlane(options.plane, mesh.height) : null;
+  const placement = planePlacement ?? options?.placement ?? {};
+  const mirrorPlacement = planePlacement ? null : options?.placement ?? null;
+
+  return canonicalizeShape({
+    id: existing?.id ?? createLocalId("sketch-sweep"),
+    name: existing?.name ?? "Tubería de boceto",
+    kind: "mesh",
+    color: existing?.color ?? "#4180d4",
     hole: existing?.hole,
     x: placement.x ?? existing?.x ?? 0,
     z: placement.z ?? existing?.z ?? 0,
@@ -598,8 +670,8 @@ async function shapeFromRevolvedSketchProfile(
       sourceFormat: "json",
     },
     sketchProfile: cloneSketchProfile(profile),
-    sketchOperation: "revolve",
-    sketchRevolve: normalizedSettings,
+    sketchOperation: "sweep",
+    sketchSweep: normalizedSettings,
     locked: existing?.locked ?? false,
     hidden: existing?.hidden ?? false,
     ...(options?.capSectionId ? { capSectionId: options.capSectionId } : {}),
@@ -5773,6 +5845,11 @@ export function SketchForgeEditor({
   const sketchRevolvePreviewRequestRef = useRef(0);
   const sketchRevolveUpdateRequestRef = useRef(new Map<string, number>());
   const sketchRevolveUpdateTimerRef = useRef(new Map<string, number>());
+  const [sketchSweepSettings, setSketchSweepSettings] = useState<SketchSweepSettings>(() => ({ ...DEFAULT_SKETCH_SWEEP_SETTINGS }));
+  const [sketchSweepPreview, setSketchSweepPreview] = useState<SketchSweepMesh | null>(null);
+  const sketchSweepPreviewRequestRef = useRef(0);
+  const sketchSweepUpdateRequestRef = useRef(new Map<string, number>());
+  const sketchSweepUpdateTimerRef = useRef(new Map<string, number>());
   const [sketchTool, setSketchTool] = useState<SketchTool>("line");
   const [sketchProfile, setSketchProfile] = useState<SketchProfile>(() => emptySketchProfile());
   const [sketchHistory, setSketchHistory] = useState<SketchProfile[]>([emptySketchProfile()]);
@@ -5994,7 +6071,9 @@ export function SketchForgeEditor({
       }
     }
     cadModifierWorkerRestartRef.current = createWorker;
-    createWorker();
+    // El worker de CAD se crea de forma perezosa en la primera operación de
+    // tratamiento de bordes/topología (ver postCadModifierRequest*), evitando
+    // descargar su chunk y el runtime de occt-wasm al abrir el editor.
     return () => {
       disposed = true;
       clearCadModifierWatchdog();
@@ -6044,6 +6123,10 @@ export function SketchForgeEditor({
   }, []);
 
   useEffect(() => {
+    // Escanea los botones para rellenar `title` accesible. Como el editor
+    // muta el DOM constantemente, agrupamos las mutaciones con
+    // `requestAnimationFrame` para escanear a lo sumo una vez por frame (en
+    // vez de en cada mutación), evitando jank durante el render inicial.
     const applyTitles = () => {
       document.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
         if (button.title) {
@@ -6056,10 +6139,26 @@ export function SketchForgeEditor({
       });
     };
 
+    let titleScanRaf = 0;
+    const scheduleTitleScan = () => {
+      if (titleScanRaf) {
+        return;
+      }
+      titleScanRaf = window.requestAnimationFrame(() => {
+        titleScanRaf = 0;
+        applyTitles();
+      });
+    };
+
     applyTitles();
-    const observer = new MutationObserver(applyTitles);
+    const observer = new MutationObserver(scheduleTitleScan);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label"] });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (titleScanRaf) {
+        window.cancelAnimationFrame(titleScanRaf);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -6157,6 +6256,26 @@ export function SketchForgeEditor({
     }, 90);
     return () => window.clearTimeout(timer);
   }, [sketchActive, sketchOperation, sketchProfile, sketchRevolveSettings]);
+
+  useEffect(() => {
+    const requestId = sketchSweepPreviewRequestRef.current + 1;
+    sketchSweepPreviewRequestRef.current = requestId;
+    if (!sketchActive || sketchOperation !== "sweep" || sketchProfile.segments.length === 0) {
+      setSketchSweepPreview(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void getManifoldRuntime()
+        .then((runtime) => buildSketchSweepMesh(runtime, sketchProfile, sketchSweepSettings))
+        .then((mesh) => {
+          if (sketchSweepPreviewRequestRef.current === requestId) setSketchSweepPreview(mesh);
+        })
+        .catch(() => {
+          if (sketchSweepPreviewRequestRef.current === requestId) setSketchSweepPreview(null);
+        });
+    }, 90);
+    return () => window.clearTimeout(timer);
+  }, [sketchActive, sketchOperation, sketchProfile, sketchSweepSettings]);
 
   useEffect(() => {
     const nextWorkspace = normalizeWorkspaceSettings(initialWorkspace);
@@ -6583,13 +6702,21 @@ export function SketchForgeEditor({
     [],
   );
 
-  const beginSketch = useCallback((operation: SketchOperation, profile?: SketchProfile, editingId: string | null = null, revolveSettings?: Partial<SketchRevolveSettings>) => {
+  const beginSketch = useCallback((
+    operation: SketchOperation,
+    profile?: SketchProfile,
+    editingId: string | null = null,
+    revolveSettings?: Partial<SketchRevolveSettings>,
+    sweepSettings?: Partial<SketchSweepSettings>,
+  ) => {
     const initial = cloneSketchProfile(profile ?? emptySketchProfile());
     setToolbarMode("sketch");
     setSketchActive(true);
     setSketchOperation(operation);
     setSketchRevolveSettings(normalizeSketchRevolveSettings(revolveSettings));
+    setSketchSweepSettings(normalizeSketchSweepSettings(sweepSettings));
     setSketchRevolvePreview(null);
+    setSketchSweepPreview(null);
     setSketchTool(profile?.segments.length ? "select" : "line");
     setSketchProfile(initial);
     const initialHistory = [cloneSketchProfile(initial)];
@@ -6602,7 +6729,15 @@ export function SketchForgeEditor({
     setSketchMeasureStart(null);
     setSketchMeasurement(null);
     setEditingSketchShapeId(editingId);
-    setNotice(editingId ? `Editando el perfil de boceto de ${operation === "revolve" ? "revolución" : "extrusión"}` : operation === "revolve" ? "Boceto de revolución iniciado: dibuja al lado izquierdo del eje" : "Boceto iniciado: coloca el primer punto");
+    setNotice(
+      editingId
+        ? `Editando el perfil de boceto de ${operation === "revolve" ? "revolución" : operation === "sweep" ? "tubería" : "extrusión"}`
+        : operation === "revolve"
+        ? "Boceto de revolución iniciado: dibuja al lado izquierdo del eje"
+        : operation === "sweep"
+        ? "Boceto de tubería iniciado: dibuja el trayecto de la tubería"
+        : "Boceto iniciado: coloca el primer punto"
+    );
   }, []);
 
   const beginSketchEdit = useCallback(() => {
@@ -6610,8 +6745,8 @@ export function SketchForgeEditor({
       setNotice("Selecciona una forma creada a partir de un boceto para editarla");
       return;
     }
-    const operation = selectedShape.sketchOperation ?? (selectedShape.sketchRevolve ? "revolve" : "extrude");
-    beginSketch(operation, selectedShape.sketchProfile, selectedShape.id, selectedShape.sketchRevolve);
+    const operation = selectedShape.sketchOperation ?? (selectedShape.sketchRevolve ? "revolve" : selectedShape.sketchSweep ? "sweep" : "extrude");
+    beginSketch(operation, selectedShape.sketchProfile, selectedShape.id, selectedShape.sketchRevolve, selectedShape.sketchSweep);
   }, [beginSketch, selectedShape, selectedShapes.length]);
 
   const cancelSketch = useCallback(() => {
@@ -6622,6 +6757,7 @@ export function SketchForgeEditor({
     setSketchMeasurement(null);
     setEditingSketchShapeId(null);
     setSketchRevolvePreview(null);
+    setSketchSweepPreview(null);
     setNotice("Boceto cancelado");
   }, []);
 
@@ -6670,6 +6806,7 @@ export function SketchForgeEditor({
       select: "Seleccionar: edita la geometría del boceto o coloca y escala imágenes de referencia",
       refine: "Refinar: haz clic en un segmento para agregar un punto, o en un punto para eliminarlo",
       erase: "Borrar: haz clic en un punto o segmento para eliminarlo",
+      trim: "Recortar: haz clic en un segmento para recortarlo al cruce más cercano",
       measure: "Medir: elige dos puntos",
       circle: "Círculo: haz clic y arrastra desde el centro para trazar un círculo paramétrico",
       semicircle: "Semicírculo: haz clic y arrastra para trazar un semicírculo cerrado",
@@ -6822,6 +6959,18 @@ export function SketchForgeEditor({
       commitSketchProfile({ ...sketchProfile, segments: sketchProfile.segments.filter((segment) => segment.id !== id) }, "Línea de boceto eliminada");
       setSketchActivePointId(null);
       setSketchSelection(null);
+    },
+    [commitSketchProfile, sketchProfile],
+  );
+
+  const trimSketchSegment = useCallback(
+    (id: string, clickPoint: { x: number; z: number }) => {
+      const trimmed = trimSketchProfileSegment(sketchProfile, id, clickPoint);
+      if (trimmed) {
+        commitSketchProfile(trimmed, "Segmento de boceto recortado");
+        setSketchActivePointId(null);
+        setSketchSelection(null);
+      }
     },
     [commitSketchProfile, sketchProfile],
   );
@@ -7190,13 +7339,15 @@ export function SketchForgeEditor({
     try {
       resolved = sketchOperation === "revolve"
         ? await shapeFromRevolvedSketchProfile(sketchProfile, sketchRevolveSettings, existing)
+        : sketchOperation === "sweep"
+        ? await shapeFromSweptSketchProfile(sketchProfile, sketchSweepSettings, existing)
         : await shapeFromSketchProfile(sketchProfile, height, existing);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : `No se puede ${sketchOperation === "revolve" ? "revolucionar" : "extruir"} el perfil del boceto a 3D`);
+      setNotice(error instanceof Error ? error.message : `No se puede ${sketchOperation === "revolve" ? "revolucionar" : sketchOperation === "sweep" ? "barrer" : "extruir"} el perfil del boceto a 3D`);
       return;
     }
     if (!resolved) {
-      setNotice("Cierra al menos un perfil antes de finalizar el boceto");
+      setNotice(sketchOperation === "sweep" ? "Dibuja al menos una línea o curva para definir el trayecto de la tubería" : "Cierra al menos un perfil antes de finalizar el boceto");
       return;
     }
     if (existing?.capSectionId && !resolved.capSectionId) {
@@ -7228,13 +7379,14 @@ export function SketchForgeEditor({
       }
     }
     const nextShapes = existing ? shapes.map((shape) => (shape.id === existing.id ? resolved : shape)) : [...shapes, resolved];
-    const action = sketchOperation === "revolve" ? "Boceto de revolución" : "Boceto";
-    commitShapes(nextShapes, resolved.id, existing ? `${action} actualizado` : sketchOperation === "revolve" ? "Boceto de revolución creado" : "Boceto creado a 10 mm de altura");
+    const action = sketchOperation === "revolve" ? "Boceto de revolución" : sketchOperation === "sweep" ? "Boceto de tubería" : "Boceto";
+    commitShapes(nextShapes, resolved.id, existing ? `${action} actualizado` : sketchOperation === "revolve" ? "Boceto de revolución creado" : sketchOperation === "sweep" ? "Boceto de tubería creado" : "Boceto creado a 10 mm de altura");
     setSketchActive(false);
     setSketchRevolvePreview(null);
+    setSketchSweepPreview(null);
     setEditingSketchShapeId(null);
     setToolbarMode("geometry");
-  }, [commitShapes, editingSketchShapeId, shapes, sketchOperation, sketchProfile, sketchRevolveSettings]);
+  }, [commitShapes, editingSketchShapeId, shapes, sketchOperation, sketchProfile, sketchRevolveSettings, sketchSweepSettings]);
 
   useEffect(() => {
     if (!projectId) {
@@ -7397,9 +7549,9 @@ export function SketchForgeEditor({
             name: current.name,
             color: current.color,
             hole: current.hole,
-            x: current.x,
-            z: current.z,
-            elevation: current.elevation,
+            x: generated.x,
+            z: generated.z,
+            elevation: generated.elevation,
             width,
             depth,
             height,
@@ -7425,6 +7577,61 @@ export function SketchForgeEditor({
     sketchRevolveUpdateTimerRef.current.set(id, timer);
   }, [commitShapes]);
 
+  const scheduleSweepShapeUpdate = useCallback((id: string, settings: SketchSweepSettings) => {
+    const previousTimer = sketchSweepUpdateTimerRef.current.get(id);
+    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+    const requestId = (sketchSweepUpdateRequestRef.current.get(id) ?? 0) + 1;
+    sketchSweepUpdateRequestRef.current.set(id, requestId);
+    const timer = window.setTimeout(() => {
+      sketchSweepUpdateTimerRef.current.delete(id);
+      const source = shapesRef.current.find((shape) => shape.id === id);
+      if (!source?.sketchProfile || source.sketchOperation !== "sweep") return;
+      setNotice("Actualizando vista previa de tubería…");
+      void shapeFromSweptSketchProfile(source.sketchProfile, settings, source)
+        .then((generated) => {
+          if (sketchSweepUpdateRequestRef.current.get(id) !== requestId) return;
+          const current = shapesRef.current.find((shape) => shape.id === id);
+          if (!current?.importedMesh || current.sketchOperation !== "sweep") return;
+          const widthScale = current.width / Math.max(0.001, current.importedMesh.baseWidth);
+          const depthScale = current.depth / Math.max(0.001, current.importedMesh.baseDepth);
+          const heightScale = current.height / Math.max(0.001, current.importedMesh.baseHeight);
+          const width = generated.width * widthScale;
+          const depth = generated.depth * depthScale;
+          const height = generated.height * heightScale;
+          const updated = canonicalizeShape({
+            ...generated,
+            id: current.id,
+            name: current.name,
+            color: current.color,
+            hole: current.hole,
+            x: current.x,
+            z: current.z,
+            elevation: current.elevation,
+            width,
+            depth,
+            height,
+            size: Math.max(width, depth),
+            rotation: current.rotation,
+            rotationX: current.rotationX,
+            rotationZ: current.rotationZ,
+            mirrorX: current.mirrorX,
+            mirrorY: current.mirrorY,
+            mirrorZ: current.mirrorZ,
+            locked: current.locked,
+            hidden: current.hidden,
+            sketchSweep: settings,
+          });
+          commitShapes(shapesRef.current.map((shape) => shape.id === id ? updated : shape), selectedIdsRef.current, "Tubería actualizada");
+        })
+        .catch((error) => {
+          if (sketchSweepUpdateRequestRef.current.get(id) === requestId) {
+            setNotice(error instanceof Error ? error.message : "No se pudieron aplicar los ajustes de la tubería");
+          }
+        });
+    }, 120);
+    sketchSweepUpdateTimerRef.current.set(id, timer);
+  }, [commitShapes]);
+
   const updateShape = useCallback(
     (id: string, patch: ShapeUpdatePatch) => {
       const bakeTransform = Boolean(patch.bakeTransform);
@@ -7433,6 +7640,13 @@ export function SketchForgeEditor({
         const source = shapesRef.current.find((shape) => shape.id === id);
         if (source?.sketchOperation === "revolve" && source.sketchProfile) {
           scheduleRevolveShapeUpdate(id, normalizeSketchRevolveSettings(cleanedPatch.sketchRevolve));
+          return;
+        }
+      }
+      if (cleanedPatch.sketchSweep) {
+        const source = shapesRef.current.find((shape) => shape.id === id);
+        if (source?.sketchOperation === "sweep" && source.sketchProfile) {
+          scheduleSweepShapeUpdate(id, normalizeSketchSweepSettings(cleanedPatch.sketchSweep));
           return;
         }
       }
@@ -7473,7 +7687,7 @@ export function SketchForgeEditor({
         commitShapes(next, selectedIds);
       }
     },
-    [commitShapes, scheduleRevolveShapeUpdate, selectedIds, shapes],
+    [commitShapes, scheduleRevolveShapeUpdate, scheduleSweepShapeUpdate, selectedIds, shapes],
   );
 
   const deleteSelected = useCallback(() => {
@@ -7730,7 +7944,7 @@ export function SketchForgeEditor({
     }
     const requestId = cadModifierRequestRef.current + 1;
     cadModifierRequestRef.current = requestId;
-    console.log(`[TopoEdit] post: reqId=${requestId} type=${(request as { type: string }).type}`);
+    
     return new Promise<CadModifierWorkerResponse>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         if (!cadModifierPendingRef.current.has(requestId)) return;
@@ -8033,7 +8247,7 @@ export function SketchForgeEditor({
       combined.id,
       label,
     );
-    console.log(`[TopoEdit] COMMIT "${label}": pieza="${shape.name}" id=${shape.id} -> ${response.triangleCount} tris, brep=${(response.brep.length / 1024).toFixed(1)}KB`);
+    
     // A nudge/transform commit re-resolves the selection once the fresh
     // topology arrives; any other edit clears the selection so the user has to
     // pick the entity again.
@@ -8054,7 +8268,7 @@ export function SketchForgeEditor({
     try {
       const response = await postCadModifierRequestAsync(request, transfer, 30000);
       if (session !== topologyEditSessionRef.current) {
-        console.log(`[TopoEdit] dispatch: type=${request.type} session=${session} -> DESCARTADO (sesion ahora ${topologyEditSessionRef.current})`);
+        
         return;
       }
       if (response.type !== "preview") {
@@ -8066,7 +8280,7 @@ export function SketchForgeEditor({
         topologyEditSessionRef.current += 1;
         setTopologyEditPreview(null);
       } else {
-        console.log(`[TopoEdit] dispatch: type=${request.type} session=${session} preview tris=${response.triangleCount}`);
+        
         setTopologyEditPreview({
           positions: response.positions,
           normals: response.normals,
@@ -8098,11 +8312,11 @@ export function SketchForgeEditor({
   ) => {
     const session = topologyEditSessionRef.current;
     if (topologyEditInFlightRef.current) {
-      console.log(`[TopoEdit] send: type=${request.type} session=${session} commit=${commit} -> ENCOLADO (inFlight)`);
+      
       topologyEditPendingRef.current = { request, transfer, commit, label, session, shape };
       return;
     }
-    console.log(`[TopoEdit] send: type=${request.type} session=${session} commit=${commit} pieza="${shape?.name ?? "?"}"`);
+    
     void dispatchTopologyEdit(request, transfer, commit, label, session, shape);
   }, [dispatchTopologyEdit]);
 
@@ -8155,7 +8369,7 @@ export function SketchForgeEditor({
     if (updates.length === 0 && faces.length === 0) {
       if (customResult.moved > 0) {
         setNotice(label);
-        console.log("[TopoInspector] construction transform", { label, moved: customResult.moved, delta });
+        
       }
       return;
     }
@@ -8201,7 +8415,7 @@ export function SketchForgeEditor({
     if (updates.length === 0) {
       if (customResult.moved > 0) {
         setNotice(label);
-        console.log("[TopoInspector] construction transform", { label, moved: customResult.moved, center });
+        
       }
       return;
     }
@@ -8211,7 +8425,7 @@ export function SketchForgeEditor({
       const reps = topologySelectionReps(topology, nativeSelection);
       topologyReselectRef.current = reps?.map((point, index) => ({ kind: nativeSelection[index].kind, anchor: transform(point, center) })) ?? null;
     }
-    console.log(`[TopoInspector] ${commit ? "commit" : "preview"} transform`, { mode: topologyMode, label, selected: selection.length, controlPoints: points.length, center, updates });
+    
     sendTopologyEdit(
       { type: "moveTopologyVertices", parts, updates },
       parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []),
@@ -8224,7 +8438,7 @@ export function SketchForgeEditor({
   const moveTopologyFromInspector = useCallback((delta: { x: number; y: number; z: number }) => {
     const shape = selectedShapes[0];
     if (!shape || Math.hypot(delta.x, delta.y, delta.z) < 1e-9) return;
-    console.log("[TopoInspector] move", { mode: topologyMode, selected: topologySelectionRef.current.length, delta });
+    
     topologyDeltaRequest(shape, delta, true, `${topologyMode === "vertex" ? "Vértices" : topologyMode === "edge" ? "Líneas" : "Caras"} desplazados`);
   }, [selectedShapes, topologyDeltaRequest, topologyMode]);
 
@@ -8266,7 +8480,7 @@ export function SketchForgeEditor({
           z: face.center.z + face.normal.z * distance,
         } }];
       }
-      console.log(`[TopoInspector] ${commit ? "commit" : "preview"} face-extrude`, { distance, face: face.id });
+      
       sendTopologyEdit(
         { type: "extrudeFace", parts, faceCenter: { ...face.center }, distance },
         transfer,
@@ -8287,7 +8501,7 @@ export function SketchForgeEditor({
         return { kind: "face" as const, anchor: { x: face.center.x + face.normal.x * distance, y: face.center.y + face.normal.y * distance, z: face.center.z + face.normal.z * distance } };
       });
     }
-    console.log(`[TopoInspector] ${commit ? "commit" : "preview"} face-normal`, { selected: faces.length, distance, faces });
+    
     sendTopologyEdit(
       { type: "moveTopologyFaces", parts, faces },
       transfer,
@@ -8302,7 +8516,7 @@ export function SketchForgeEditor({
     topologyEditPendingRef.current = null;
     setTopologyEditPreview(null);
     setTopologyInspectorPreviewActive(false);
-    console.log("[TopoInspector] preview cancelado");
+    
   }, []);
 
   const previewTopologyScale = useCallback((factor: number) => {
@@ -8411,7 +8625,7 @@ export function SketchForgeEditor({
         const delta = { x: position.x - from.x, y: position.y - from.y, z: position.z - from.z };
         const result = transformSelectedConstructionVertices(shape, topologySelectionRef.current, (point) => ({ x: point.x + delta.x, y: point.y + delta.y, z: point.z + delta.z }));
         updateShape(shape.id, { constructionVertices: result.shape.constructionVertices, constructionEdges: result.shape.constructionEdges });
-        console.log("[TopoEdit] constructionVertex: grupo movido", { moved: result.moved, delta });
+        
         setNotice(`${result.moved} vértices personalizados movidos`);
         return;
       }
@@ -8425,7 +8639,7 @@ export function SketchForgeEditor({
         })),
       });
       setTopologySelection([{ kind: "vertex", id: constructionVertex.topologyId }]);
-      console.log("[TopoEdit] constructionVertex: movido", { vertexId: constructionVertex.id, topologyId: constructionVertex.topologyId, world: position, local });
+      
       setNotice("Vértice personalizado movido");
       return;
     }
@@ -8507,13 +8721,7 @@ export function SketchForgeEditor({
     };
     updateShape(shape.id, { constructionVertices: [...(shape.constructionVertices ?? []), vertex] });
     setTopologySelection([{ kind: "vertex", id: topologyId }]);
-    console.log("[TopoEdit] constructionVertex: creado", {
-      shapeId: shape.id,
-      vertexId: vertex.id,
-      topologyId,
-      world: position,
-      local: vertex.position,
-    });
+    
     setNotice("Vértice creado; arrástralo con el mouse o continúa insertando");
   }, [selectedShapes, selectedTopologyShape, shapeTopology?.vertices, updateShape]);
 
@@ -8551,7 +8759,7 @@ export function SketchForgeEditor({
       };
       break;
     }
-    console.log("[TopoInspector] insert-edge-ratio", { edgeId: edge.id, ratio: amount, position });
+    
     handleTopologyAddVertex(position);
   }, [handleTopologyAddVertex, selectedShapes, shapeTopology?.edges]);
 
@@ -8594,13 +8802,7 @@ export function SketchForgeEditor({
     setTopologyVertexPlacementActive(false);
     setTopologyMode("edge");
     setTopologySelection([]);
-    console.log("[TopoInspector] partition-edge-create", {
-      shapeId: shape.id,
-      partitionId,
-      worldStart: vertices[0],
-      worldEnd: vertices[1],
-      length: distance,
-    });
+    
     setNotice(`Dividiendo físicamente la cara con una línea de ${distance.toFixed(2)} mm…`);
     sendTopologyEdit(
       { type: "splitFaceBySegment", parts, partitionId, start: vertices[0], end: vertices[1] },
@@ -8617,7 +8819,7 @@ export function SketchForgeEditor({
     if (!shape || guideEdges.length === 0) return;
     const removed = guideEdges.at(-1);
     updateShape(shape.id, { constructionEdges: shape.constructionEdges?.filter((edge) => edge.partition || edge.id !== removed?.id) });
-    console.log("[TopoInspector] construction-edge-remove", { shapeId: shape.id, edgeId: removed?.id });
+    
     setNotice("Última línea guía eliminada");
   }, [selectedShapes, updateShape]);
 
@@ -8669,7 +8871,7 @@ export function SketchForgeEditor({
         constructionVertices: constructionMove.constructionVertices,
       });
       setTopologySelection([{ kind: "edge", id: edgeId }]);
-      console.log("[TopoEdit] constructionEdge: movida", { edgeId: constructionMove.edge.id, topologyId: edgeId, endpoints: endpoints.map((endpoint) => endpoint.to) });
+      
       setNotice("Línea personalizada movida");
       return;
     }
@@ -8833,7 +9035,7 @@ export function SketchForgeEditor({
     }
     topologyReselectRef.current = null;
     setTopologySelection(picks);
-    console.log(`[TopoEdit] reselect: ${picks.length} ente${picks.length === 1 ? "" : "s"} resueltos de ${reselect.length} ancla${reselect.length === 1 ? "" : "s"}`);
+    
   }, [selectedShapes, shapeTopology]);
 
   // Keep the ref mirror of the selection so the drag/nudge handlers always read
@@ -8897,7 +9099,7 @@ export function SketchForgeEditor({
     if (updates.length === 0 && faces.length === 0) {
       if (customResult.moved > 0) {
         setNotice(label);
-        console.log("[TopoOrganizer] construction transform", { label, moved: customResult.moved });
+        
         return true;
       }
       return false;
@@ -10992,13 +11194,7 @@ export function SketchForgeEditor({
     );
     commitCap(nextCap, "Perfil creado en el viewport 3D; usa Extruir o Cortar");
     setGeometryProfileSectionId(nextSection.id);
-    console.log("[Direct2D] profile-stored", {
-      sectionId: nextSection.id,
-      plane: nextSection.plane,
-      entityCount: nextSection.sketchProfile.entities?.length ?? 0,
-      depth: nextSection.extrusionDepth,
-      unionMode: nextSection.unionMode,
-    });
+    
   }, [commitCap, geometryProfileSectionId, pushPullDistance]);
 
   const applyGeometryProfile = useCallback(async (mode: "add" | "cut" | "floating") => {
@@ -11016,15 +11212,10 @@ export function SketchForgeEditor({
       extrusionDepth: Math.max(0.1, Math.abs(Number.parseFloat(pushPullDistance) || section.extrusionDepth || 10)),
       unionMode,
     };
-    console.log("[Direct2D] operation-apply", {
-      sectionId: updated.id,
-      mode: unionMode,
-      depth: updated.extrusionDepth,
-      plane: updated.plane,
-    });
+    
     commitCap({ ...current, sections: current.sections.map((candidate) => candidate.id === updated.id ? updated : candidate) }, unionMode === "cut" ? "Preparando corte" : "Preparando extrusión");
     await generateCapPiece(updated.id);
-    console.log("[Direct2D] operation-complete", { sectionId: updated.id, mode: unionMode });
+    
     setGeometryDrawTool(null);
     setGeometryProfileSectionId(null);
   }, [commitCap, generateCapPiece, geometryProfileSectionId, pushPullDistance]);
@@ -11257,25 +11448,35 @@ export function SketchForgeEditor({
       }
 
       const step = event.shiftKey ? 5 : 1;
+      const getCameraForwardSnapped = () => {
+        const rawF = (window as any).__sketchforge_camera_forward ?? { x: 0, z: -1 };
+        if (Math.abs(rawF.x) > Math.abs(rawF.z)) {
+          return rawF.x > 0 ? { x: 1, z: 0 } : { x: -1, z: 0 };
+        } else {
+          return rawF.z > 0 ? { x: 0, z: 1 } : { x: 0, z: -1 };
+        }
+      };
+
       if (!shortcut && topologyMode !== "shape" && topologySelection.length > 0) {
+        const f = getCameraForwardSnapped();
         if (event.key === "ArrowLeft") {
           event.preventDefault();
-          handleTopologyNudge(-step, 0);
+          handleTopologyNudge(f.z * step, -f.x * step);
           return;
         }
         if (event.key === "ArrowRight") {
           event.preventDefault();
-          handleTopologyNudge(step, 0);
+          handleTopologyNudge(-f.z * step, f.x * step);
           return;
         }
         if (event.key === "ArrowUp") {
           event.preventDefault();
-          handleTopologyNudge(0, -step);
+          handleTopologyNudge(f.x * step, f.z * step);
           return;
         }
         if (event.key === "ArrowDown") {
           event.preventDefault();
-          handleTopologyNudge(0, step);
+          handleTopologyNudge(-f.x * step, -f.z * step);
           return;
         }
       }
@@ -11287,16 +11488,20 @@ export function SketchForgeEditor({
         raiseSelected(-step);
       } else if (event.key === "ArrowLeft") {
         event.preventDefault();
-        nudgeSelected(-step, 0);
+        const f = getCameraForwardSnapped();
+        nudgeSelected(f.z * step, -f.x * step);
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
-        nudgeSelected(step, 0);
+        const f = getCameraForwardSnapped();
+        nudgeSelected(-f.z * step, f.x * step);
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
-        nudgeSelected(0, -step);
+        const f = getCameraForwardSnapped();
+        nudgeSelected(f.x * step, f.z * step);
       } else if (event.key === "ArrowDown") {
         event.preventDefault();
-        nudgeSelected(0, step);
+        const f = getCameraForwardSnapped();
+        nudgeSelected(-f.x * step, -f.z * step);
       } else if (key === "d" && (hasSelection || topologySelection.length > 0)) {
         event.preventDefault();
         dropSelectedToWorkplane();
@@ -11366,6 +11571,7 @@ export function SketchForgeEditor({
       profile={sketchProfile}
       operation={sketchOperation}
       revolvePreviewPositions={sketchRevolvePreview?.positions ?? null}
+      sweepPreviewPositions={sketchSweepPreview?.positions ?? null}
       referenceShapes={shapes.filter((shape) => shape.id !== editingSketchShapeId)}
       tool={sketchTool}
       activePointId={sketchActivePointId}
@@ -11395,6 +11601,7 @@ export function SketchForgeEditor({
       onDeleteImage={deleteSketchImage}
       onDeletePoint={deleteSketchPoint}
       onDeleteSegment={deleteSketchSegment}
+      onTrimSegment={trimSketchSegment}
       onSetSegmentDimensions={setSketchSegmentDimensions}
       onMovePoint={moveSketchPoint}
       onMoveHandle={moveSketchHandle}
@@ -11531,6 +11738,8 @@ export function SketchForgeEditor({
         sketchCanRedo={sketchHistoryIndex < sketchHistory.length - 1}
         canEditSketch={selectedShapes.length === 1 && Boolean(selectedShape?.sketchProfile)}
         onNewSketch={() => beginSketch("extrude")}
+        onNewRevolveSketch={() => beginSketch("revolve")}
+        onNewSweepSketch={() => beginSketch("sweep")}
         geometryDrawTool={geometryDrawTool}
         hasGeometryProfile={Boolean(geometryProfileSection && capSectionHasUsableProfile(geometryProfileSection))}
         geometryPlaneMode={geometryPlaneMode}
@@ -11643,7 +11852,7 @@ export function SketchForgeEditor({
           onVertexPlacementChange={(active) => {
             setTopologyVertexPlacementActive(active);
             setNotice(active ? "Insertar vértices: haz clic sobre cualquier punto de una arista; pulsa Escape para terminar" : "Inserción de vértices finalizada");
-            console.log("[TopoInspector] vertex-placement", { active });
+            
           }}
           constructionEdgeCount={selectedShapes[0]?.constructionEdges?.filter((edge) => !edge.partition).length ?? 0}
           onConnectVertices={connectSelectedTopologyVertices}
@@ -11795,6 +12004,8 @@ const sketchReferenceIcons = {
   measure: "sketch-tool-measure.png",
   sketchTo3d: "sketch-tool-sketch-to-3d.png",
   editSketchTo3d: "sketch-tool-edit-sketch-to-3d.png",
+  revolveSketch: "revolve-sketch.png",
+  sweepSketch: "scribble.png",
 } as const;
 
 type SketchReferenceIconName = keyof typeof sketchReferenceIcons;
@@ -11834,6 +12045,8 @@ function SecondaryToolbar({
   sketchCanRedo,
   canEditSketch,
   onNewSketch,
+  onNewRevolveSketch,
+  onNewSweepSketch,
   geometryDrawTool,
   hasGeometryProfile,
   geometryPlaneMode,
@@ -11911,6 +12124,8 @@ function SecondaryToolbar({
   sketchCanRedo: boolean;
   canEditSketch: boolean;
   onNewSketch: () => void;
+  onNewRevolveSketch: () => void;
+  onNewSweepSketch: () => void;
   geometryDrawTool: Direct2DDrawTool | null;
   hasGeometryProfile: boolean;
   geometryPlaneMode: "auto" | "base" | "offset";
@@ -12108,6 +12323,9 @@ function SecondaryToolbar({
           </button>
           <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "erase" ? "active" : ""}`} type="button" aria-label="Borrar" title="Borrar" onClick={() => onSketchTool("erase")}>
             <SketchReferenceIcon name="erase" />
+          </button>
+          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "trim" ? "active" : ""}`} type="button" aria-label="Recortar" title="Recortar croquis (al cruce más cercano)" onClick={() => onSketchTool("trim")}>
+            <Scissors size={20} />
           </button>
         </div>
       </div>
@@ -12354,6 +12572,26 @@ function SecondaryToolbar({
                   >
                     <SketchReferenceIcon name="sketchTo3d" />
                     <span>Nuevo boceto</span>
+                  </button>
+                  <button
+                    className="sketch-command-button primary"
+                    type="button"
+                    aria-label="Nuevo boceto revolución"
+                    title="Crear un boceto de revolución (tipo SolidWorks)"
+                    onClick={onNewRevolveSketch}
+                  >
+                    <SketchReferenceIcon name="revolveSketch" />
+                    <span>Boceto revolución</span>
+                  </button>
+                  <button
+                    className="sketch-command-button primary"
+                    type="button"
+                    aria-label="Nuevo boceto tubería"
+                    title="Crear un boceto de tubería / barrido 3D"
+                    onClick={onNewSweepSketch}
+                  >
+                    <SketchReferenceIcon name="sweepSketch" />
+                    <span>Boceto tubería</span>
                   </button>
                   <button className={`sketch-command-button ${canEditSketch ? "" : "disabled"}`} type="button" aria-label="Editar boceto a 3D" title="Editar boceto a 3D" onClick={onEditSketch} disabled={!canEditSketch}>
                     <SketchReferenceIcon name="editSketchTo3d" />

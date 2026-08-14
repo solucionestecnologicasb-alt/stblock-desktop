@@ -44,7 +44,7 @@ const ClassroomConsole = ({isOpen, onClose, targets}) => {
             // panel estaba cerrado, useState conserva el estado viejo y sin esto
             // seguiría mostrando "Sin solicitudes en espera" aunque ya haya cola.
             const fresh = classroomController.getState();
-            console.log('[Classroom] Consola abierta — solicitudes en espera:', fresh.pendingQueue);
+            
             setState(fresh);
             const unsub = classroomController.subscribe(setState);
             return () => unsub();

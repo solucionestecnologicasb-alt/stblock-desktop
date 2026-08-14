@@ -174,6 +174,45 @@ test('renameSprite does not increment when renaming to the same name', t => {
     t.end();
 });
 
+test('setEditingTarget synchronizes Runtime before notifying UI listeners', t => {
+    const vm = new VirtualMachine();
+    const stageSprite = new Sprite(null, vm.runtime);
+    const stage = stageSprite.createClone();
+    stage.isStage = true;
+    const sprite = new Sprite(null, vm.runtime).createClone();
+    vm.runtime.targets = [stage, sprite];
+    vm.editingTarget = stage;
+    vm.runtime.setEditingTarget(stage);
+
+    vm.emitTargetsUpdate = () => t.equal(vm.runtime.getEditingTarget(), sprite);
+    vm.emitWorkspaceUpdate = () => t.equal(vm.runtime.getEditingTarget(), sprite);
+    vm.setEditingTarget(sprite.id);
+
+    t.equal(vm.editingTarget, sprite);
+    t.equal(vm.runtime.getEditingTarget(), sprite);
+    t.end();
+});
+
+test('setEditingTarget repairs a stale Runtime target when selecting the same sprite', t => {
+    const vm = new VirtualMachine();
+    const stageSprite = new Sprite(null, vm.runtime);
+    const stage = stageSprite.createClone();
+    stage.isStage = true;
+    const sprite = new Sprite(null, vm.runtime).createClone();
+    vm.runtime.targets = [stage, sprite];
+    vm.editingTarget = sprite;
+    vm.runtime.setEditingTarget(stage);
+    let updates = 0;
+    vm.emitTargetsUpdate = () => updates++;
+    vm.emitWorkspaceUpdate = () => updates++;
+
+    vm.setEditingTarget(sprite.id);
+
+    t.equal(vm.runtime.getEditingTarget(), sprite);
+    t.equal(updates, 2);
+    t.end();
+});
+
 test('deleteSprite throws when used on a non-sprite target', t => {
     const vm = new VirtualMachine();
     vm.runtime.targets = [{

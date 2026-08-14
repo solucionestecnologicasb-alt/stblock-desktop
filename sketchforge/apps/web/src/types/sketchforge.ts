@@ -136,7 +136,7 @@ export type SketchEntity =
 export type SketchTextFont = "Multilanguage" | "Sans" | "Serif" | "Script" | "Monospace" | "Rounded" | "Stencil";
 export type SketchVectorPoint = { x: number; z: number };
 export type SketchVectorLoop = SketchVectorPoint[];
-export type SketchOperation = "extrude" | "revolve";
+export type SketchOperation = "extrude" | "revolve" | "sweep";
 
 // Union behavior of a CAP section's generated piece against its host shape
 // (the shape owning the face work plane). "floating" keeps the piece
@@ -152,6 +152,12 @@ export type SketchRevolveSettings = {
   sides: number;
   quality: number;
   thickness: number;
+};
+
+export type SketchSweepSettings = {
+  radius: number;
+  thickness: number;
+  quality: number;
 };
 
 // Construction planes used by geometry profile operations. Face planes retain
@@ -189,6 +195,7 @@ export type CapSection = {
   // plane is a face work plane. Defaults to "floating" when absent.
   unionMode?: CapSectionUnionMode;
   revolveSettings?: SketchRevolveSettings;
+  sweepSettings?: SketchSweepSettings;
   resultShapeId?: string;
   createdAt: number;
 };
@@ -333,6 +340,9 @@ export type WorkplaneShape = {
     baseHeight: number;
     triangleCount: number;
     sourceFormat: "stl" | "obj" | "svg" | "json" | "step";
+    offsetX?: number;
+    offsetY?: number;
+    offsetZ?: number;
     // IndexedDB persistence uses this only in compact stored shape records.
     // Runtime editor shapes are hydrated with the full immutable mesh resource.
     storageResourceId?: string;
@@ -353,6 +363,7 @@ export type WorkplaneShape = {
   sketchProfile?: SketchProfile;
   sketchOperation?: SketchOperation;
   sketchRevolve?: SketchRevolveSettings;
+  sketchSweep?: SketchSweepSettings;
   edgeTreatments?: EdgeTreatmentFeature[];
   edgeTreatmentHistory?: EdgeTreatmentHistoryEntry[];
   cadDisplayEdges?: CadDisplayEdge[];

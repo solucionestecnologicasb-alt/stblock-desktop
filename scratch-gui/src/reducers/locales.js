@@ -10,6 +10,7 @@ Object.keys(editorMessagesSource).forEach(locale => {
 
 const customTranslations = {
     'gui.defaultProject.stblock.beep': 'Beep',
+    'gui.menuBar.saveSTBlockProject': 'Guardar Proyecto STBlock',
     'gui.menuBar.reducedMotion': 'Rendimiento (sin animaciones)',
     'gui.menuBar.installDrivers': 'Instalar drivers de dispositivo',
     'gui.menuBar.uploadFirmata': 'Cargar firmware tiempo real (Firmata)',

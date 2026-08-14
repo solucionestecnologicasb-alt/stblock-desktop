@@ -2,7 +2,7 @@
 
 import { EllipsisVertical, FileUp, Grid3X3, List, Pencil, Plus, RefreshCw, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SketchForgeEditor, importedShapeFromStl, importedShapeFromSvg } from "@/components/SketchForgeEditor";
+import dynamic from "next/dynamic";
 import { applyAppTheme, readStoredAppTheme, resolveAppTheme, storeAppTheme, type AppThemePreference, type ResolvedAppTheme } from "@/lib/appTheme";
 import { appAsset } from "@/lib/appBasePath";
 import { hydrateEditorHistoryState, type EditorHistoryEntry } from "@/lib/editorHistory";
@@ -10,9 +10,16 @@ import { createLocalId } from "@/lib/localIds";
 import { attachProjectAsset, dedupeProjectAssets, projectAssetFromBytes, sourceFormatForFileName } from "@/lib/projectAssets";
 import { hydrateProjectShapeState, type ImportedMeshResource } from "@/lib/projectShapePersistence";
 import { exportSkfProject, importSkfProject, SKF_CREATED_WITH_VERSION, SKF_MEDIA_TYPE } from "@/lib/skfProject";
-import { importExtensionSupported } from "@/lib/stlImport";
 import { DEFAULT_SNAP_GRID, DEFAULT_WORKPLANE_WORKSPACE, normalizeSnapGrid, normalizeWorkspaceSettings, workplaneSettingsFingerprint } from "@/lib/workplaneSettings";
 import type { CapDocument, GridSize, ProjectAsset, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
+
+// El editor CAD es el componente más pesado (~600 KB). Lo cargamos de forma
+// diferida para que el dashboard y el iframe de STBlock arranquen sin parsear
+// el bundle del editor. El skeleton se muestra mientras se descarga el chunk.
+const SketchForgeEditor = dynamic(
+  () => import("@/components/SketchForgeEditor").then((module) => module.SketchForgeEditor),
+  { ssr: false, loading: () => <EditorLoadingSkeleton /> },
+);
 
 type AppView = "dashboard" | "editor";
 type ViewMode = "grid" | "list";
@@ -996,7 +1003,13 @@ export default function Home() {
         const sourceFormat = sourceFormatForFileName(file.name) ?? (file.type === "image/svg+xml" ? "svg" : null);
         const isSvg = sourceFormat === "svg";
         const isStep = sourceFormat === "step";
-        if (!sourceFormat || sourceFormat === "obj" || (!isSvg && !isStep && !importExtensionSupported(file.name))) {
+        if (!sourceFormat || sourceFormat === "obj") {
+          failures.push({ fileName: file.name, reason: "Tipo de archivo no compatible" });
+          continue;
+        }
+        // Carga diferida para no arrastrar three.js al bundle inicial del dashboard.
+        const extensionOk = isSvg || isStep || (await import("@/lib/stlImport")).importExtensionSupported(file.name);
+        if (!extensionOk) {
           failures.push({ fileName: file.name, reason: "Tipo de archivo no compatible" });
           continue;
         }
@@ -1008,8 +1021,8 @@ export default function Home() {
           const parsedShape = isStep
             ? await import("@/lib/stepImport").then(({ importedShapeFromStep }) => importedShapeFromStep(file.name, buffer))
             : isSvg
-              ? importedShapeFromSvg(file.name, new TextDecoder().decode(bytes))
-              : importedShapeFromStl(file.name, buffer);
+              ? await import("@/lib/svgImport").then(({ importedShapeFromSvg }) => importedShapeFromSvg(file.name, new TextDecoder().decode(bytes)))
+              : await import("@/lib/stlImport").then(({ importedShapeFromStl }) => importedShapeFromStl(file.name, buffer));
           const asset = await projectAssetFromBytes(file.name, sourceFormat, bytes, file.type);
           importedShapes.push(attachProjectAsset(parsedShape, asset.id));
           importedAssets.push(asset);
@@ -1219,7 +1232,7 @@ export default function Home() {
           />
         </div>
       ) : null}
-      {view === "editor" && (editorLoading || !canRenderEditor) ? <EditorLoadingSkeleton /> : null}
+      {view === "editor" && !canRenderEditor ? <EditorLoadingSkeleton /> : null}
     </>
   );
 }

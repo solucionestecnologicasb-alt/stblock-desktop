@@ -12,7 +12,7 @@ import { mirrorSign, resizedImportedMeshPositions } from "@/lib/workplaneShapes"
 import { DEFAULT_SNAP_GRID, DEFAULT_WORKPLANE_WORKSPACE, normalizeSnapGrid, normalizeWorkspaceSettings } from "@/lib/workplaneSettings";
 import type { GridSize, SketchEntity, SketchImage, SketchOperation, SketchPoint, SketchProfile, SketchSegment, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
 
-export type SketchTool = "line" | "construction" | "bezier" | "smooth" | "select" | "refine" | "erase" | "measure" | "circle" | "semicircle" | "arc" | "rectangle" | "ellipse" | "polygon" | "slot";
+export type SketchTool = "line" | "construction" | "bezier" | "smooth" | "select" | "refine" | "erase" | "trim" | "measure" | "circle" | "semicircle" | "arc" | "rectangle" | "ellipse" | "polygon" | "slot";
 type DrawableSketchEntityKind = Extract<SketchEntity, { kind: "circle" | "semicircle" | "arc" | "rectangle" | "ellipse" | "polygon" | "slot" }>["kind"];
 export type SketchSelection =
   | { kind: "point"; id: string }
@@ -27,6 +27,7 @@ type SketchWorkspaceProps = {
   profile: SketchProfile;
   operation?: SketchOperation;
   revolvePreviewPositions?: number[] | null;
+  sweepPreviewPositions?: number[] | null;
   referenceShapes: WorkplaneShape[];
   tool: SketchTool;
   activePointId: string | null;
@@ -44,6 +45,7 @@ type SketchWorkspaceProps = {
   onDeleteImage: (id: string) => void;
   onDeletePoint: (id: string) => void;
   onDeleteSegment: (id: string) => void;
+  onTrimSegment?: (id: string, clickPoint: { x: number; z: number }) => void;
   onSetSegmentDimensions: (id: string, length: number, angle: number) => void;
   onMovePoint: (id: string, point: { x: number; z: number }) => void;
   onMoveHandle: (id: string, handle: "in" | "out", point: { x: number; z: number }) => void;
@@ -420,6 +422,7 @@ export function SketchWorkspace({
   profile,
   operation = "extrude",
   revolvePreviewPositions = null,
+  sweepPreviewPositions = null,
   referenceShapes,
   tool,
   activePointId,
@@ -437,6 +440,7 @@ export function SketchWorkspace({
   onDeleteImage,
   onDeletePoint,
   onDeleteSegment,
+  onTrimSegment,
   onSetSegmentDimensions,
   onMovePoint,
   onMoveHandle,
@@ -744,11 +748,18 @@ export function SketchWorkspace({
 
   return (
     <main className="sketch-workspace-stage">
-      <div className="sketch-mode-badge">{badgeLabel ?? (operation === "revolve" ? "Boceto de revolución" : "Vista de boceto")}</div>
-      <div className={`sketch-region-badge ${closedRegionCount ? "ready" : "open"}`}>
-        {closedRegionCount ? `${closedRegionCount} región${closedRegionCount === 1 ? "" : "es"} 3D lista${closedRegionCount === 1 ? "" : "s"}` : "Perfil abierto · cierra un contorno"}
-      </div>
+      <div className="sketch-mode-badge">{badgeLabel ?? (operation === "revolve" ? "Boceto de revolución" : operation === "sweep" ? "Boceto de tubería" : "Vista de boceto")}</div>
+      {operation !== "sweep" ? (
+        <div className={`sketch-region-badge ${closedRegionCount ? "ready" : "open"}`}>
+          {closedRegionCount ? `${closedRegionCount} región${closedRegionCount === 1 ? "" : "es"} 3D lista${closedRegionCount === 1 ? "" : "s"}` : "Perfil abierto · cierra un contorno"}
+        </div>
+      ) : (
+        <div className="sketch-region-badge ready">
+          Trayecto de tubería listo
+        </div>
+      )}
       {operation === "revolve" ? <SketchRevolvePreview positions={revolvePreviewPositions} /> : null}
+      {operation === "sweep" ? <SketchRevolvePreview positions={sweepPreviewPositions} /> : null}
       <div className="camera-controls sketch-camera-controls" aria-label="Controles de la vista de boceto">
         <button aria-label="Restablecer vista de boceto" onClick={() => { setZoom(1); setPan({ x: 0, z: 0 }); }}><Home size={28} /></button>
         <button aria-label="Acercar" onClick={() => setZoom((value) => clamp(value * 1.25, 0.75, 6))}><Plus size={33} /></button>
@@ -901,6 +912,7 @@ export function SketchWorkspace({
                   event.stopPropagation();
                   if (event.button === 1) beginPan(event);
                   else if (tool === "erase") onDeleteSegment(segment.id);
+                  else if (tool === "trim" && point) onTrimSegment?.(segment.id, point);
                   else if (event.button === 0 && tool === "refine" && point) onInsertPoint(segment.id, point);
                   else if (event.button === 0) onSelectSegment(segment.id);
                 }}

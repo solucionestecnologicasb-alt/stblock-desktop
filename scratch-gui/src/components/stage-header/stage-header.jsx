@@ -53,6 +53,7 @@ const StageHeaderComponent = function (props) {
         isPlayerOnly,
         isPythonEditMode,
         onKeyPress,
+        onSyncPythonToBlocks,
         onSetStageLarge,
         onSetStageSmall,
         onSetStageFull,
@@ -106,6 +107,7 @@ const StageHeaderComponent = function (props) {
                 >
                     <Controls
                         isPythonEditMode={isPythonEditMode}
+                        onSyncPythonToBlocks={onSyncPythonToBlocks}
                         pythonExecutor={pythonExecutor}
                         pythonCode={pythonCode}
                         vm={vm}
@@ -145,6 +147,7 @@ const StageHeaderComponent = function (props) {
                 <Box className={styles.stageMenuWrapper}>
                     <Controls
                         isPythonEditMode={isPythonEditMode}
+                        onSyncPythonToBlocks={onSyncPythonToBlocks}
                         pythonExecutor={pythonExecutor}
                         pythonCode={pythonCode}
                         vm={vm}
@@ -185,6 +188,7 @@ StageHeaderComponent.propTypes = {
     isPlayerOnly: PropTypes.bool.isRequired,
     isPythonEditMode: PropTypes.bool,
     onKeyPress: PropTypes.func.isRequired,
+    onSyncPythonToBlocks: PropTypes.func,
     onSetStageFull: PropTypes.func.isRequired,
     onSetStageLarge: PropTypes.func.isRequired,
     onSetStageSmall: PropTypes.func.isRequired,

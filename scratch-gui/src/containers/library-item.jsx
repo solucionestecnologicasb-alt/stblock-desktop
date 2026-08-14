@@ -33,9 +33,9 @@ class LibraryItem extends React.PureComponent {
         this.handleMouseLeave(id);
     }
     handleClick (e) {
-        console.log('[STBlock DEBUG] LibraryItem.handleClick called, id:', this.props.id, 'disabled:', this.props.disabled);
+        
         if (!this.props.disabled) {
-            console.log('[STBlock DEBUG] Calling onSelect with id:', this.props.id);
+            
             this.props.onSelect(this.props.id);
         }
         e.preventDefault();

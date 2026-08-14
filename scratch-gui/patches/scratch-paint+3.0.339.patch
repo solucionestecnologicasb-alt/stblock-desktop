@@ -478,10 +478,18 @@ index 6b34954..b8a4826 100644
          for (const child of layer.children) {
              // don't give guides back
 diff --git a/node_modules/scratch-paint/src/helper/view.js b/node_modules/scratch-paint/src/helper/view.js
-index 36affd8..3660c24 100644
+index 36affd8..9a8ae11 100644
 --- a/node_modules/scratch-paint/src/helper/view.js
 +++ b/node_modules/scratch-paint/src/helper/view.js
-@@ -143,6 +143,7 @@ const zoomOnSelection = deltaZoom => {
+@@ -2,7 +2,6 @@ import paper from '@scratch/paper';
+ import {CROSSHAIR_SIZE, getBackgroundGuideLayer, getDragCrosshairLayer, getRaster} from './layer';
+ import {getAllRootItems, getSelectedRootItems} from './selection';
+ import {getHitBounds} from './bitmap';
+-import log from '../log/log';
+ 
+ // Vectors are imported and exported at SVG_ART_BOARD size.
+ // Once they are imported however, both SVGs and bitmaps are on
+@@ -143,6 +142,7 @@ const zoomOnSelection = deltaZoom => {
  };
  
  const resetZoom = () => {
@@ -489,3 +497,16 @@ index 36affd8..3660c24 100644
      paper.project.view.zoom = .5;
      setWorkspaceBounds(true /* clipEmpty */);
      resizeCrosshair();
+@@ -196,8 +196,10 @@ const zoomToFit = isBitmap => {
+             resizeCrosshair();
+             clampViewBounds();
+         }
+-    } else {
+-        log.warn('No bounds!');
++    } else if (paper.view) {
++        // An empty costume is valid. Keep the empty artboard centered instead
++        // of reporting a warning while SVG contents are still being imported.
++        paper.view.center = CENTER;
+     }
+ };
+ 

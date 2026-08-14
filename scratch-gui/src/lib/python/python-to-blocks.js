@@ -75,17 +75,19 @@ const ERROR_TYPES = {
     SYNTAX_ERROR: 'syntax_error',
     MISSING_ARGUMENT: 'missing_argument',
     EXTRA_ARGUMENT: 'extra_argument',
-    INDENT_ERROR: 'indent_error'
+    INDENT_ERROR: 'indent_error',
+    EMPTY_BLOCK_WARNING: 'empty_block_warning'
 };
 
 // Clase para representar errores de código
 class CodeError {
-    constructor(type, message, line, column = 0, suggestion = null) {
+    constructor(type, message, line, column = 0, suggestion = null, severity = 'error') {
         this.type = type;
         this.message = message;
         this.line = line;
         this.column = column;
         this.suggestion = suggestion;
+        this.severity = severity;
     }
 }
 
@@ -1542,35 +1544,24 @@ function validatePythonLine(line, lineNumber, userDefinedFunctions = new Set()) 
 /**
  * ¿Un bloque terminado en ":" puede quedar VACÍO sin ser error?
  * - "def f():" → válido (Scratch permite procedimientos sin cuerpo).
- * - "por_siempre:" / "while true:" → válido (bloque "por siempre" acepta
- *   substack vacío).
- * - "while <condición constante>:" → válido. La condición es evaluable en
- *   tiempo de compilación y el bloque resultante ("por siempre" o "repetir
- *   hasta que" con condición constante) es válido en Scratch sin cuerpo.
- * Cualquier otro bloque (if, for, while con condición variable) SÍ exige cuerpo.
+ * Los procedimientos/eventos vacíos son válidos en Scratch. Los controles
+ * vacíos también se convierten, pero generan una advertencia educativa.
  */
 function isExemptEmptyBlock(blockText) {
     const text = blockText.trim();
     if (text.startsWith('def ')) return true;
-    if (/^por_siempre\s*:\s*$/.test(text)) return true;
-    const whileM = text.match(/^while\s+(.+)\s*:\s*$/);
-    // "while true:" → por siempre; "while not 1 == 0:" / "while 1 == 1:" →
-    // repetir-hasta-que con condición constante. Ninguno necesita cuerpo.
-    if (whileM && isConstantTrue(whileM[1]) !== null) return true;
     return false;
 }
 
-/**
- * ¿Es un bloque "por siempre"? ("while true:" / "por_siempre:")
- * El bloque "por siempre" es un bloque en C que NO admite código debajo de él
- * en el mismo nivel de indentación.
- */
-function isForeverBlock(blockText) {
-    const text = blockText.trim();
-    if (/^por_siempre\s*:\s*$/.test(text)) return true;
-    const whileM = text.match(/^while\s+(.+)\s*:\s*$/);
-    return !!(whileM && /^true$/i.test(whileM[1].trim()));
-}
+const createEmptyBlockWarning = (blockText, lineNumber) => new CodeError(
+    ERROR_TYPES.EMPTY_BLOCK_WARNING,
+    'Bloque vacío en la línea ' + lineNumber + ': "' + blockText +
+        '". STBlock creó la estructura, pero Python requiere al menos una instrucción dentro.',
+    lineNumber,
+    0,
+    'pass',
+    'warning'
+);
 
 /**
  * Valida código Python completo y retorna todos los errores
@@ -1617,21 +1608,11 @@ export function validatePythonCode(pythonCode) {
             // Caso 1: La línea anterior iniciaba un bloque (terminaba con ':')
             if (lastBlockLine !== null) {
                 if (currentIndent <= lastBlockIndent) {
-                    // 'def' vacío y "por siempre" vacío son válidos (bloques sin cuerpo)
-                    // No marcar error si la línea pendiente es uno de esos
-                    if (currentIndent === lastBlockIndent && isForeverBlock(lastBlockText)) {
-                        // El bloque "por siempre" no admite código debajo de él.
-                        allErrors.push(new CodeError(
-                            ERROR_TYPES.INDENT_ERROR,
-                            `IndentationError: el bloque "por siempre" no admite código debajo de él. Indenta el código que debe ir dentro del "por siempre".`,
-                            lineNumber
-                        ));
-                    } else if (!isExemptEmptyBlock(lastBlockText)) {
-                        allErrors.push(new CodeError(
-                            ERROR_TYPES.INDENT_ERROR,
-                            `IndentationError: se esperaba un bloque indentado después de la declaración en la línea ${lastBlockLine}: "${lastBlockText}"`,
-                            lineNumber
-                        ));
+                    // En el editor educativo los controles vacíos se representan
+                    // en bloques. Informar la diferencia con Python sin impedir
+                    // que aparezca la estructura en el workspace.
+                    if (!isExemptEmptyBlock(lastBlockText)) {
+                        allErrors.push(createEmptyBlockWarning(lastBlockText, lastBlockLine));
                     }
                     // Recuperar para seguir validando el resto del código
                     lastBlockLine = null;
@@ -1677,13 +1658,9 @@ export function validatePythonCode(pythonCode) {
         }
 
         // Caso especial: El archivo termina con una declaración de bloque vacía
-        // 'def' vacío y "por siempre" vacío no se marcan como error (válidos en Scratch)
+        // Los controles vacíos se crean y se notifican como advertencia.
         if (lastBlockLine !== null && !isExemptEmptyBlock(lastBlockText)) {
-            allErrors.push(new CodeError(
-                ERROR_TYPES.INDENT_ERROR,
-                `IndentationError: se esperaba un bloque indentado al final del archivo después de la línea ${lastBlockLine}: "${lastBlockText}"`,
-                lines.length
-            ));
+            allErrors.push(createEmptyBlockWarning(lastBlockText, lastBlockLine));
         }
     } catch (e) {
         console.warn('[Validation] Error validando indentación:', e);
@@ -3430,6 +3407,21 @@ class ControlStack {
         }
     }
 
+    // Para else/sino se eliminan solo controles internos. El if que está en el
+    // mismo nivel debe conservarse para poder transformarlo en if_else.
+    popAboveLevel(indentLevel) {
+        while (this.stack.length > 0 && this.stack[this.stack.length - 1].indentLevel > indentLevel) {
+            this.stack.pop();
+        }
+    }
+
+    peekAtLevel(indentLevel) {
+        for (let i = this.stack.length - 1; i >= 0; i--) {
+            if (this.stack[i].indentLevel === indentLevel) return this.stack[i];
+        }
+        return null;
+    }
+
     isEmpty() {
         return this.stack.length === 0;
     }
@@ -3440,7 +3432,7 @@ class ControlStack {
  * Respeta la indentación de Python para determinar la jerarquía de bloques
  * Soporta estructuras de control anidadas (while, for, if/else)
  */
-export function pythonToBlocks(pythonCode, startPosition = { x: -500, y: 30 }, deviceId = null) {
+export function pythonToBlocks(pythonCode, startPosition = { x: 80, y: 80 }, deviceId = null) {
     const lines = pythonCode.split('\n');
     const blockMap = {};
     const scripts = []; // Grupos de bloques conectados
@@ -3522,21 +3514,13 @@ export function pythonToBlocks(pythonCode, startPosition = { x: -500, y: 30 }, d
             }
         }
 
-        // Limpiar controles que ya no aplican (salimos de su nivel de indentación)
-        controlStack.popToLevel(indentLevel);
-
-        // Si salimos del nivel de else, resetear el flag
-        if (inElseBranch && indentLevel <= elseIndentLevel) {
-            inElseBranch = false;
-            elseIndentLevel = -1;
-        }
-
         // Calcular posición - cada script nuevo se mueve a la derecha
         const scriptY = startPosition.y;
 
         // Manejar else: convertir el if anterior a if_else
         if (parsed.isElse) {
-            const controlInfo = controlStack.peek();
+            controlStack.popAboveLevel(indentLevel);
+            const controlInfo = controlStack.peekAtLevel(indentLevel);
             if (controlInfo && (controlInfo.type === 'if' || controlInfo.type === 'if_else')) {
                 // Convertir a if_else si aún no lo es
                 const ifBlock = blockMap[controlInfo.blockId];
@@ -3551,6 +3535,15 @@ export function pythonToBlocks(pythonCode, startPosition = { x: -500, y: 30 }, d
                 delete lastBlockAtLevel[indentLevel + 1];
             }
             continue; // else: no genera un bloque, solo modifica el if
+        }
+
+        // Limpiar controles que ya no aplican (salimos de su nivel de indentación)
+        controlStack.popToLevel(indentLevel);
+
+        // Si salimos del nivel de else, resetear el flag
+        if (inElseBranch && indentLevel <= elseIndentLevel) {
+            inElseBranch = false;
+            elseIndentLevel = -1;
         }
 
         // Determinar el padre basándose en la indentación y contexto
@@ -3617,7 +3610,9 @@ export function pythonToBlocks(pythonCode, startPosition = { x: -500, y: 30 }, d
                 }
             }
         } else if (indentLevel === 0 && !parsed.isEvent) {
-            // Cualquier bloque a nivel 0 (sin indentar) siempre es un script independiente y no se conecta a nada
+            // La estructura visual sigue la indentación del editor: una línea
+            // sin tab es un script independiente; solo las líneas indentadas se
+            // conectan dentro del evento/control anterior.
             if (Object.keys(blockMap).length > 0) {
                 scriptCount++;
             }
@@ -3651,6 +3646,8 @@ export function pythonToBlocks(pythonCode, startPosition = { x: -500, y: 30 }, d
             // Si es evento o procedimiento, guardarlo como el bloque actual principal
             if (result.isEvent || result.isProcedure) {
                 currentEventBlockId = result.blockId;
+                scripts.push([result.blockId]);
+            } else if (indentLevel === 0 && !parentBlockId) {
                 scripts.push([result.blockId]);
             }
 
@@ -3748,9 +3745,6 @@ export function syncPythonToWorkspace(vm, pythonCode) {
     }
 
     try {
-        // PRIMERO: Limpiar bloques anteriores para evitar duplicados
-        clearPythonBlocks(vm);
-
         // Resolver el dispositivo actual para el hat de placa (arduino vs microbit)
         let deviceId = null;
         if (vm.runtime && typeof vm.runtime.getDeviceProfile === 'function') {
@@ -3760,13 +3754,80 @@ export function syncPythonToWorkspace(vm, pythonCode) {
             }
         }
 
-        const result = pythonToBlocks(pythonCode, { x: -500, y: 30 }, deviceId);
+        const result = pythonToBlocks(pythonCode, { x: 80, y: 80 }, deviceId);
+        const blockingErrors = result.errors.filter(error => error.severity !== 'warning');
 
-        if (result.total === 0 && result.errors.length === 0) {
+        // La edición produce estados intermedios inválidos (por ejemplo, justo
+        // después de escribir "if"). No destruir el último programa ejecutable
+        // hasta que el nuevo texto pueda convertirse por completo.
+        if (blockingErrors.length > 0) {
+            return {
+                success: false,
+                blocksCreated: 0,
+                scripts: 0,
+                topBlockIds: [],
+                errors: result.errors
+            };
+        }
+
+        // Python educativo permite escribir instrucciones directamente cuando
+        // no declaró ningún evento. En ese caso reciben una bandera implícita
+        // para conservar la ejecución con la bandera verde. Si ya existe un
+        // evento, los bloques sin indentación quedan sueltos, exactamente como
+        // se ven en el código.
+        // Los decoradores/eventos y las definiciones de procedimientos ya son
+        // raíces ejecutables y se conservan exactamente como fueron creados.
+        const hasExplicitEvent = result.scripts.some(script => {
+            const rootBlock = result.blockMap[script[0]];
+            return rootBlock && (
+                rootBlock.opcode.startsWith('event_') ||
+                rootBlock.opcode === 'control_start_as_clone' ||
+                rootBlock.opcode.includes('_when')
+            );
+        });
+        for (const script of result.scripts) {
+            const rootId = script[0];
+            const rootBlock = result.blockMap[rootId];
+            if (!rootBlock) continue;
+            const isEventHat = rootBlock.opcode.startsWith('event_') ||
+                rootBlock.opcode === 'control_start_as_clone' ||
+                rootBlock.opcode.includes('_when');
+            const isProcedure = rootBlock.opcode === 'procedures_definition' ||
+                rootBlock.opcode === 'procedures_prototype';
+            if (isEventHat || isProcedure || hasExplicitEvent) continue;
+
+            const hatId = generateBlockId();
+            result.blockMap[hatId] = {
+                id: hatId,
+                opcode: 'event_whenflagclicked',
+                inputs: {},
+                fields: {},
+                next: rootId,
+                parent: null,
+                topLevel: true,
+                shadow: false,
+                x: rootBlock.x,
+                y: rootBlock.y
+            };
+            rootBlock.parent = hatId;
+            rootBlock.topLevel = false;
+            delete rootBlock.x;
+            delete rootBlock.y;
+            script.unshift(hatId);
+        }
+        result.total = Object.keys(result.blockMap).length;
+
+        // La conversión ya terminó correctamente: ahora sí reemplazar solo los
+        // bloques sintetizados, conservando cualquier bloque manual del usuario.
+        // Esto también hace que borrar todo el texto limpie el programa Python.
+        clearPythonBlocks(vm, false);
+
+        if (result.total === 0) {
             return {
                 success: true,
                 message: 'No se encontraron comandos de STBlock',
                 blocksCreated: 0,
+                topBlockIds: [],
                 errors: []
             };
         }
@@ -3789,9 +3850,10 @@ export function syncPythonToWorkspace(vm, pythonCode) {
         }
 
         return {
-            success: result.errors.length === 0,
+            success: blockingErrors.length === 0,
             blocksCreated: result.total,
             scripts: result.scripts.length,
+            topBlockIds: result.scripts.map(script => script[0]),
             errors: result.errors // Incluir errores encontrados
         };
     } catch (error) {

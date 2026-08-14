@@ -35,21 +35,27 @@ const vmListenerHOC = function (WrappedComponent) {
             // mounts.
             // If the wrapped component uses the vm in componentDidMount, then
             // we need to start listening before mounting the wrapped component.
-            this.props.vm.on('targetsUpdate', this.handleTargetsUpdate);
-            this.props.vm.on('MONITORS_UPDATE', this.props.onMonitorsUpdate);
-            this.props.vm.on('BLOCK_DRAG_UPDATE', this.props.onBlockDragUpdate);
-            this.props.vm.on('TURBO_MODE_ON', this.props.onTurboModeOn);
-            this.props.vm.on('TURBO_MODE_OFF', this.props.onTurboModeOff);
-            this.props.vm.on('PROJECT_RUN_START', this.props.onProjectRunStart);
-            this.props.vm.on('PROJECT_RUN_STOP', this.props.onProjectRunStop);
-            this.props.vm.on('PROJECT_CHANGED', this.handleProjectChanged);
-            this.props.vm.on('RUNTIME_STARTED', this.props.onRuntimeStarted);
-            this.props.vm.on('PROJECT_START', this.props.onGreenFlag);
-            this.props.vm.on('PERIPHERAL_CONNECTION_LOST_ERROR', this.props.onShowExtensionAlert);
-            this.props.vm.on('MIC_LISTENING', this.props.onMicListeningUpdate);
-            this.props.vm.on('DEBUG_LINE_HIGHLIGHT', this.props.onDebugLineHighlight);
-            this.props.vm.on('DEBUG_MODE_DEACTIVATED', this.props.onDebugModeDeactivated);
-
+            // Guardamos todos los pares [evento, handler] para poder eliminarlos
+            // todos en componentWillUnmount (evita fugas de listeners por montaje).
+            this._vmListeners = [
+                ['targetsUpdate', this.handleTargetsUpdate],
+                ['MONITORS_UPDATE', this.props.onMonitorsUpdate],
+                ['BLOCK_DRAG_UPDATE', this.props.onBlockDragUpdate],
+                ['TURBO_MODE_ON', this.props.onTurboModeOn],
+                ['TURBO_MODE_OFF', this.props.onTurboModeOff],
+                ['PROJECT_RUN_START', this.props.onProjectRunStart],
+                ['PROJECT_RUN_STOP', this.props.onProjectRunStop],
+                ['PROJECT_CHANGED', this.handleProjectChanged],
+                ['RUNTIME_STARTED', this.props.onRuntimeStarted],
+                ['PROJECT_START', this.props.onGreenFlag],
+                ['PERIPHERAL_CONNECTION_LOST_ERROR', this.props.onShowExtensionAlert],
+                ['MIC_LISTENING', this.props.onMicListeningUpdate],
+                ['DEBUG_LINE_HIGHLIGHT', this.props.onDebugLineHighlight],
+                ['DEBUG_MODE_DEACTIVATED', this.props.onDebugModeDeactivated]
+            ];
+            this._vmListeners.forEach(([event, handler]) => {
+                this.props.vm.on(event, handler);
+            });
         }
         componentDidMount () {
             if (this.props.attachKeyboardEvents) {
@@ -70,7 +76,11 @@ const vmListenerHOC = function (WrappedComponent) {
             }
         }
         componentWillUnmount () {
-            this.props.vm.removeListener('PERIPHERAL_CONNECTION_LOST_ERROR', this.props.onShowExtensionAlert);
+            // Eliminar TODOS los listeners registrados en el constructor, no solo
+            // uno, para no dejar listeners huérfanos en cada montaje/desmontaje.
+            (this._vmListeners || []).forEach(([event, handler]) => {
+                this.props.vm.removeListener(event, handler);
+            });
             if (this.props.attachKeyboardEvents) {
                 document.removeEventListener('keydown', this.handleKeyDown);
                 document.removeEventListener('keyup', this.handleKeyUp);

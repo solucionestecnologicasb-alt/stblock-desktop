@@ -640,12 +640,12 @@ const SimulatorPanel = ({code, deviceId, active, onSerialOutput, onStatusChange}
 
     // Function to send code to Gearbot for execution
     const executeCode = useCallback(() => {
-        console.log('[SimulatorPanel] executeCode llamado');
-        console.log('[SimulatorPanel] iframeRef.current:', iframeRef.current);
-        console.log('[SimulatorPanel] contentWindow:', iframeRef.current?.contentWindow);
-        console.log('[SimulatorPanel] code:', code);
-        console.log('[SimulatorPanel] code length:', code ? code.length : 0);
-        console.log('[SimulatorPanel] deviceId:', deviceId);
+        
+        
+        
+        
+        
+        
 
         if (!iframeRef.current || !iframeRef.current.contentWindow) {
             console.error('[SimulatorPanel] ERROR: iframe no disponible');
@@ -665,9 +665,9 @@ const SimulatorPanel = ({code, deviceId, active, onSerialOutput, onStatusChange}
             boardType: deviceId || 'arduinoUno'
         };
 
-        console.log('[SimulatorPanel] Enviando mensaje a iframe:', message);
+        
         iframeRef.current.contentWindow.postMessage(message, '*');
-        console.log('[SimulatorPanel] postMessage enviado exitosamente');
+        
 
         setIsRunning(true);
 

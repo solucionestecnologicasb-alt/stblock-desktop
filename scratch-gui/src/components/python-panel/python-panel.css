@@ -1351,6 +1351,10 @@
     border-left: 3px solid #f1c40f;
 }
 
+.error-item.error-type-warning .error-line {
+    color: #9a7500;
+}
+
 .error-line {
     color: #c0392b;
     font-weight: 600;
@@ -1399,6 +1403,20 @@
     color: #e74c3c;
 }
 
+.errors-collapsed.warnings-only {
+    background: linear-gradient(90deg, #fff8d9 0%, #ffefad 100%);
+    border-top-color: #f1c40f;
+    color: #7d6500;
+}
+
+.errors-collapsed.warnings-only:hover {
+    background: linear-gradient(90deg, #ffefad 0%, #ffe681 100%);
+}
+
+.errors-collapsed.warnings-only svg {
+    color: #b58b00;
+}
+
 /* Scrollbar para lista de errores */
 .errors-list::-webkit-scrollbar {
     width: 6px;
@@ -1424,6 +1442,19 @@
 
 .code-line.has-error .line-number {
     color: #e74c3c;
+    font-weight: 600;
+}
+
+/* Línea con advertencia no bloqueante en el highlighter */
+.code-line.has-warning {
+    background: rgba(241, 196, 15, 0.12) !important;
+    border-left: 3px solid #f1c40f;
+    margin-left: -3px;
+    padding-left: 3px;
+}
+
+.code-line.has-warning .line-number {
+    color: #9a7500;
     font-weight: 600;
 }
 

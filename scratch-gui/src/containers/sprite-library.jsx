@@ -26,33 +26,31 @@ class SpriteLibrary extends React.PureComponent {
         ]);
     }
     handleItemSelect (item) {
-        console.log('[STBlock DEBUG] SpriteLibrary.handleItemSelect called');
-        console.log('[STBlock DEBUG] Item received:', item);
+        
+        
         if (!item) {
             console.error('[STBlock DEBUG] ERROR: item is null/undefined!');
             return;
         }
-        console.log('[STBlock DEBUG] Item name:', item.name);
-        console.log('[STBlock DEBUG] Item costumes:', item.costumes ? item.costumes.length : 'none');
+        
+        
 
         // Randomize position of library sprite
         randomizeSpritePosition(item);
-        console.log('[STBlock DEBUG] Position randomized, x:', item.x, 'y:', item.y);
+        
 
-        console.log('[STBlock DEBUG] VM exists:', !!this.props.vm);
-        console.log('[STBlock DEBUG] VM runtime exists:', !!this.props.vm?.runtime);
-        console.log('[STBlock DEBUG] VM storage exists:', !!this.props.vm?.runtime?.storage);
+        
+        
+        
 
-        console.error('[STBlock] Personajes antes:', this.props.vm.runtime.targets.map(target => target.getName()));
 
         const spriteJSON = JSON.stringify(item);
-        console.log('[STBlock DEBUG] Sprite JSON length:', spriteJSON.length);
-        console.log('[STBlock DEBUG] Calling vm.addSprite...');
+        
+        
 
         this.props.vm.addSprite(spriteJSON)
             .then(() => {
-                console.log('[STBlock DEBUG] vm.addSprite SUCCESS!');
-                console.error('[STBlock] Personajes despues:', this.props.vm.runtime.targets.map(target => target.getName()));
+                
                 this.props.onActivateBlocksTab();
             })
             .catch(error => {

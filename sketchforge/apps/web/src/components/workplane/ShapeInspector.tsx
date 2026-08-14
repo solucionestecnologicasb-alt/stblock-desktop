@@ -24,6 +24,7 @@ import {
 import { displayStepFromMillimeters, displayToMillimeters, formatMeasurementNumber, lengthDisplayUnit, millimetersToDisplay, parseMeasurementInput } from "@/lib/measurementUnits";
 import { fallbackSolidColor, resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { normalizeSketchRevolveSettings } from "@/lib/sketchRevolve";
+import { normalizeSketchSweepSettings } from "@/lib/sketchSweep";
 import type { GearType, GridSize, MeasurementAccuracy, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
 
 const GRID_SIZES: GridSize[] = ["Desactivado", "0.1 mm", "0.25 mm", "0.5 mm", "1.0 mm", "2.0 mm", "5.0 mm", "Ladrillo"];
@@ -130,6 +131,16 @@ function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdat
       { label: "Longitud", value: depth, min: MIN_SHAPE_SIZE, max: 160, onChange: setDepth },
       { label: "Ancho", value: width, min: MIN_SHAPE_SIZE, max: 160, onChange: setWidth },
       { label: "Alto", value: shape.height, min: MIN_SHAPE_SIZE, max: 160, onChange: setHeight },
+    ];
+  }
+
+  if (shape.sketchOperation === "sweep" || shape.sketchSweep) {
+    const settings = normalizeSketchSweepSettings(shape.sketchSweep);
+    const updateSweep = (patch: Partial<typeof settings>) => onUpdate({ sketchSweep: normalizeSketchSweepSettings({ ...settings, ...patch }) });
+    return [
+      { label: "Radio", value: settings.radius, min: 0.1, max: 50, step: 0.1, onChange: (radius) => updateSweep({ radius }) },
+      { label: "Grosor", value: settings.thickness, min: 0, max: Math.max(0, settings.radius - 0.1), step: 0.1, onChange: (thickness) => updateSweep({ thickness }) },
+      { label: "Lados", value: settings.quality, min: 8, max: 64, step: 1, onChange: (quality) => updateSweep({ quality }) },
     ];
   }
 
@@ -357,6 +368,7 @@ export function ShapeInspector({
     ? properties.filter((property) => ["Ángulo de hélice", "Calidad"].includes(property.label))
     : [];
   const isSketchRevolve = shape.sketchOperation === "revolve" || Boolean(shape.sketchRevolve);
+  const isSketchSweep = shape.sketchOperation === "sweep" || Boolean(shape.sketchSweep);
   const inspectorRef = useRef<HTMLElement>(null);
   const [propertiesOpen, setPropertiesOpen] = useState(true);
   const [gearTeethOpen, setGearTeethOpen] = useState(true);
@@ -386,7 +398,7 @@ export function ShapeInspector({
   }, [isSketchRevolve, shape.id]);
 
   return (
-    <aside ref={inspectorRef} className={`shape-inspector ${isSketchRevolve ? "sketch-revolve-inspector" : ""} ${shape.kind === "gear" ? "gear-inspector" : ""} ${minimized ? "minimized" : ""}`} aria-label={`${shape.name} configuración de forma`} onPointerDown={(event) => event.stopPropagation()}>
+    <aside ref={inspectorRef} className={`shape-inspector ${isSketchRevolve ? "sketch-revolve-inspector" : ""} ${isSketchSweep ? "sketch-sweep-inspector" : ""} ${shape.kind === "gear" ? "gear-inspector" : ""} ${minimized ? "minimized" : ""}`} aria-label={`${shape.name} configuración de forma`} onPointerDown={(event) => event.stopPropagation()}>
       <div className="shape-inspector-header">
         <button
           className="inspector-header-icon"

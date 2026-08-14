@@ -3,6 +3,12 @@
  *
  * Carga Pyodide desde CDN y proporciona un entorno de ejecución Python
  * que puede interactuar con los sprites de Scratch.
+ *
+ * LIMITACIÓN CONOCIDA (decisión del usuario, NO migrar a Web Worker):
+ * Pyodide corre en el hilo principal, por lo que un bucle infinito
+ * (`while True:`) en el modo Python congela la pestaña del navegador.
+ * La precarga (preload) ayuda a que la primera descarga (~25 MB WASM) no
+ * ocurra al pulsar la bandera verde, pero no evita el bloqueo del hilo.
  */
 
 // URL de Pyodide CDN
@@ -28,6 +34,9 @@ const STBLOCK_PYTHON_API = `
 import js
 from pyodide.ffi import create_proxy
 import asyncio
+import inspect
+import sys
+import types
 import time as _time
 
 def delta_tiempo():
@@ -744,9 +753,9 @@ class _IA:
 # Funciones globales
 # ═══════════════════════════════════════════════════════════
 
-def esperar(segundos):
-    """Esperar N segundos"""
-    _call_js('wait', segundos)
+async def esperar(segundos):
+    """Esperar N segundos sin bloquear la interfaz de STBlock."""
+    await _call_js('wait', segundos)
 
 def aleatorio(minimo, maximo):
     """Número aleatorio entre mínimo y máximo"""
@@ -1292,9 +1301,52 @@ def dato_evento(nombre):
     """Obtener dato de un evento personalizado"""
     return _call_js('getEventData', nombre) or None
 
+_stblock_green_flag_handlers = []
+_stblock_should_stop = False
+
+class _STBlockStopped(Exception):
+    """Interrupción interna solicitada por el botón detener."""
+    pass
+
+def cuando_bandera_verde(funcion):
+    """Registrar una función para ejecutarla al pulsar la bandera verde."""
+    _stblock_green_flag_handlers.append(funcion)
+    return funcion
+
+def _stblock_prepare_green_flag():
+    """Descartar handlers de ejecuciones anteriores antes de cargar el programa."""
+    global _stblock_should_stop
+    _stblock_should_stop = False
+    _stblock_green_flag_handlers.clear()
+
+async def _stblock_checkpoint():
+    """Ceder un turno al navegador y atender una solicitud de detención."""
+    if _stblock_should_stop:
+        raise _STBlockStopped()
+    await _call_js('yieldControl')
+    if _stblock_should_stop:
+        raise _STBlockStopped()
+
+async def _stblock_run_green_flag():
+    """Ejecutar, en orden, todos los handlers registrados por el programa."""
+    for funcion in list(_stblock_green_flag_handlers):
+        resultado = funcion()
+        if inspect.isawaitable(resultado):
+            await resultado
+
 def cuando_placa_inicie(funcion):
     """Decorador: la función se ejecuta al iniciar la placa"""
     return funcion
+
+# El generador produce imports "from stblock import ...". La API vive en el
+# namespace global de Pyodide, así que exponemos ese mismo namespace como un
+# módulo real para que tanto el código generado como el escrito a mano funcionen.
+_stblock_module = types.ModuleType('stblock')
+_stblock_module.__dict__.update({
+    nombre: valor for nombre, valor in globals().items()
+    if not nombre.startswith('_')
+})
+sys.modules['stblock'] = _stblock_module
 
 # Para compatibilidad con el generador
 print("✓ STBlock Python API cargada")
@@ -1337,7 +1389,7 @@ async function loadPyodide() {
             // Inyectar la API de STBlock
             await pyodideInstance.runPythonAsync(STBLOCK_PYTHON_API);
 
-            console.log('[PythonRuntime] Pyodide cargado correctamente');
+            
             isLoading = false;
             resolve(pyodideInstance);
 
@@ -1364,8 +1416,16 @@ function setRuntimeCallbacks(callbacks) {
             runtimeProxy[key] = fn;
         }
 
+        pyodideInstance.runPython('_set_runtime(None)');
+        pyodideInstance.globals.delete('_js_runtime');
         pyodideInstance.globals.set('_js_runtime', runtimeProxy);
         pyodideInstance.runPython('_set_runtime(_js_runtime)');
+    }
+}
+
+function requestPythonStop() {
+    if (pyodideInstance) {
+        pyodideInstance.globals.set('_stblock_should_stop', true);
     }
 }
 
@@ -1381,12 +1441,20 @@ async function runPython(code, callbacks = null) {
 
     try {
         // Capturar output
-        let output = [];
+        const output = [];
+        const maxOutputLines = 2000;
+        const appendOutput = text => {
+            if (output.length < maxOutputLines) {
+                output.push(text);
+            } else if (output.length === maxOutputLines) {
+                output.push('[STBlock] Salida truncada para proteger la memoria.');
+            }
+        };
         pyodide.setStdout({
-            batched: (text) => output.push(text)
+            batched: appendOutput
         });
         pyodide.setStderr({
-            batched: (text) => output.push(`Error: ${text}`)
+            batched: text => appendOutput(`Error: ${text}`)
         });
 
         // Ejecutar código
@@ -1432,6 +1500,7 @@ export {
     loadPyodide,
     runPython,
     setRuntimeCallbacks,
+    requestPythonStop,
     isReady,
     isLoadingPyodide,
     preload
@@ -1441,6 +1510,7 @@ export default {
     loadPyodide,
     runPython,
     setRuntimeCallbacks,
+    requestPythonStop,
     isReady,
     isLoadingPyodide,
     preload

@@ -36,17 +36,16 @@ class Controls extends React.Component {
                     this.props.vm.start();
                 }
 
-                // En modo edición Python, la bandera verde ejecuta el código Python
-                // (controla la placa en tiempo real) en lugar de ejecutar los bloques.
-                if (this.props.isPythonEditMode && this.props.pythonExecutor) {
-                    this.props.pythonExecutor.stop();
-                    this.props.pythonExecutor.execute(
-                        this.props.pythonCode || '',
-                        output => console.log('[STBlock] Python output:', output),
-                        error => console.warn('[STBlock] Python error:', error),
-                        result => console.log('[STBlock] Python finalizado:', result)
-                    );
-                    return;
+                // El editor Python representa el mismo proyecto Scratch en otra
+                // sintaxis. Sincronizar el último texto y ejecutar el VM mantiene
+                // el scheduler cooperativo, todos los sprites y todos los eventos.
+                if (this.props.isPythonEditMode && this.props.onSyncPythonToBlocks) {
+                    if (this.props.pythonExecutor) this.props.pythonExecutor.stop();
+                    const syncResult = this.props.onSyncPythonToBlocks(this.props.pythonCode || '');
+                    if (syncResult && syncResult.success === false) {
+                        console.warn('[STBlock] No se ejecutó Python por errores de sintaxis:', syncResult.errors);
+                        return;
+                    }
                 }
 
                 if (classroomState.active && classroomState.role === 'cliente') {
@@ -86,6 +85,11 @@ class Controls extends React.Component {
         if (classroomState.active && classroomState.role === 'servidor') {
             classroomController.stopClass();
         } else {
+            // Detener también la ejecución Python (modo edición Python), no solo
+            // los bloques. pythonExecutor se pasa desde stage-header.jsx.
+            if (this.props.pythonExecutor) {
+                this.props.pythonExecutor.stop();
+            }
             // stopAll() ya desactiva debug mode internamente
             // DEBUG_MODE_DEACTIVATED event limpia el estado Redux automáticamente
             this.props.vm.stopAll();
@@ -120,6 +124,7 @@ class Controls extends React.Component {
             onDebugArmed, // eslint-disable-line no-unused-vars
             onDebugActive, // eslint-disable-line no-unused-vars
             onDebugSpeed, // eslint-disable-line no-unused-vars
+            onSyncPythonToBlocks, // eslint-disable-line no-unused-vars
             ...props
         } = this.props;
         return (
@@ -152,7 +157,8 @@ Controls.propTypes = {
     debugSpeed: PropTypes.number,
     onDebugArmed: PropTypes.func,
     onDebugActive: PropTypes.func,
-    onDebugSpeed: PropTypes.func
+    onDebugSpeed: PropTypes.func,
+    onSyncPythonToBlocks: PropTypes.func
 };
 
 const mapStateToProps = state => ({

@@ -28,7 +28,7 @@ const logDiag = (msg) => {
         const text = msg && msg.length > MAX ?
             `${msg.slice(0, MAX)}… (${msg.length} chars)` :
             String(msg || '');
-        console.log(`[Classroom] ${text}`);
+        
     } catch (e) {
         // ignorar
     }
@@ -251,7 +251,7 @@ class ClassroomController {
             } catch (e) {
                 // ignorar
             }
-            console.log(`[Classroom DEBUG] HOST recibe TARGET_UPDATE clientId=${msg.clientId} inRoster=${inRoster} targets=[${names}] rosterIds=[${this.state.roster.map(c => c.id).join(', ')}]`);
+            
             if (!inRoster) break;
             const payload = {
                 sourceClientId: msg.clientId,
@@ -276,7 +276,7 @@ class ClassroomController {
     _handleClientMessage (msg) {
         switch (msg.type) {
         case MSG.REQUEST_ACCEPTED: {
-            console.log('[Classroom DEBUG] Cliente REQUEST_ACCEPTED msg:', msg);
+            
             this._set({
                 connectionState: 'connected',
                 color: msg.color,
@@ -298,7 +298,7 @@ class ClassroomController {
             } catch (e) {
                 // ignorar
             }
-            console.log(`[Classroom DEBUG] CLIENTE recibe PROJECT_SNAPSHOT (inicial). targets=[${names}]`);
+            
             if (this.config.onRemoteProjectUpdate) {
                 this.config.onRemoteProjectUpdate({
                     sourceClientId: null,
@@ -316,7 +316,7 @@ class ClassroomController {
             } catch (e) {
                 // ignorar
             }
-            console.log(`[Classroom DEBUG] CLIENTE recibe PROJECT_UPDATED sourceClientId=${msg.sourceClientId} (miId=${this.state.clientId}) targets=[${names}]`);
+            
             if (this.config.onRemoteProjectUpdate) {
                 this.config.onRemoteProjectUpdate({
                     sourceClientId: msg.sourceClientId,
@@ -330,7 +330,7 @@ class ClassroomController {
             this._set({roster: msg.roster || []});
             break;
         case MSG.ASSIGNMENTS_UPDATED:
-            console.log('[Classroom DEBUG] Cliente ASSIGNMENTS_UPDATED msg:', msg);
+            
             this._set({assignments: msg.assignments || {}});
             break;
         case MSG.SESSION_UPDATED:
@@ -410,7 +410,7 @@ class ClassroomController {
         } catch (e) {
             // ignorar
         }
-        console.log(`[Classroom DEBUG] sendProjectUpdate role=${this.state.role} targets=[${names}] pythonKeys=[${Object.keys(pythonCodes || {}).join(', ')}]`);
+        
         if (this.state.role === ROLES.SERVIDOR) {
             this._broadcast({
                 type: MSG.PROJECT_UPDATED,

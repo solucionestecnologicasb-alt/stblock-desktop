@@ -920,7 +920,10 @@ class Runtime extends EventEmitter {
     setDeviceProfile (device, programMode = null, emitProjectChanged = true) {
         this._deviceProfile = device ? JSON.parse(JSON.stringify(device)) : null;
         const manifest = this._deviceProfile ? deviceManifests[this._deviceProfile.deviceId] : null;
-        this._deviceBlockInfo = manifest ? manifest.categories : [];
+        // Deep-clone del manifiesto: los push de inyección de bloques (STBoardV2)
+        // se hacen sobre _deviceBlockInfo, así que cada setDeviceProfile trabaja
+        // sobre una copia y no acumula bloques en el manifiesto compartido.
+        this._deviceBlockInfo = manifest ? JSON.parse(JSON.stringify(manifest.categories)) : [];
 
         // === STBoard V2: Inyectar bloques ultrasónicos en categoría Puertos ===
         if (this._deviceProfile && this._deviceProfile.deviceId === 'stbBoardV2') {

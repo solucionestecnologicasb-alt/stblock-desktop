@@ -208,7 +208,7 @@ const activateDeviceExtension = (vm, extension) => {
         ci => ci.id === extension.extensionId
     );
     if (existingIndex >= 0) {
-        console.log('[DeviceExtActivator] Extension already active:', extension.extensionId);
+        
         return;
     }
 
@@ -221,8 +221,7 @@ const activateDeviceExtension = (vm, extension) => {
     // Emit BLOCKSINFO_UPDATE so blocks.jsx picks it up
     runtime.emit(runtime.constructor.BLOCKSINFO_UPDATE, categoryInfo);
 
-    console.log('[DeviceExtActivator] Activated extension:', extension.extensionId,
-        'with', categoryInfo.blocks.length, 'blocks');
+    
 };
 
 /**
@@ -241,7 +240,7 @@ const deactivateDeviceExtension = (vm, extension) => {
     );
 
     if (existingIndex < 0) {
-        console.log('[DeviceExtActivator] Extension not active:', extension.extensionId);
+        
         return;
     }
 
@@ -251,7 +250,7 @@ const deactivateDeviceExtension = (vm, extension) => {
     // Refresh workspace so the toolbox XML is regenerated without this extension
     vm.refreshWorkspace();
 
-    console.log('[DeviceExtActivator] Deactivated extension:', extension.extensionId);
+    
 };
 
 export {

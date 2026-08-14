@@ -282,6 +282,8 @@ type ThreeState = {
   requestRender: () => void;
   basePixelRatio: number;
   interactionQualityActive: boolean;
+  keyLight: THREE.DirectionalLight | null;
+  shadowQualityTimer: number;
   wasCameraMoving: boolean;
   lastOverlaySync: number;
   lastViewCubeSync: number;
@@ -514,7 +516,6 @@ type DragItem = {
   visual: THREE.Object3D | null;
   helper: THREE.Box3Helper | null;
   helperBox: THREE.Box3 | null;
-  hadPreviewSimplified: boolean;
 };
 
 function isVerticalMeasureHandleKind(kind: TransformHandleKind) {
@@ -696,10 +697,6 @@ function rotationPatchFromQuaternion(quaternion: THREE.Quaternion): Partial<Work
   };
 }
 
-function shouldPreserveDrawingBufferForLocalAutomation() {
-  return typeof window !== "undefined";
-}
-
 function viewportPixelRatioForHost(host: HTMLDivElement) {
   const capabilities = navigator as Navigator & { deviceMemory?: number };
   return preferredViewportPixelRatio({
@@ -711,6 +708,21 @@ function viewportPixelRatioForHost(host: HTMLDivElement) {
   });
 }
 
+function setShadowMapSize(state: ThreeState, light: THREE.DirectionalLight, size: number) {
+  if (light.shadow.mapSize.x === size) {
+    return;
+  }
+  light.shadow.map?.dispose();
+  light.shadow.map = null;
+  light.shadow.mapSize.set(size, size);
+  light.shadow.needsUpdate = true;
+  // Con renderer.shadowMap.autoUpdate=false, three.js omite el re-render del
+  // shadow map si shadowMap.needsUpdate es false (WebGLShadowMap.js:95). Sin
+  // esta marca, tras redimensionar light.shadow.map queda null y el sampler de
+  // sombra falla (GL_INVALID_OPERATION) haciendo desaparecer las piezas.
+  state.renderer.shadowMap.needsUpdate = true;
+}
+
 function setViewportInteractionQuality(state: ThreeState, active: boolean) {
   if (state.interactionQualityActive === active) return;
   state.interactionQualityActive = active;
@@ -718,6 +730,25 @@ function setViewportInteractionQuality(state: ThreeState, active: boolean) {
   if (Math.abs(state.renderer.getPixelRatio() - ratio) > 0.01) {
     state.renderer.setPixelRatio(ratio);
     state.renderer.setSize(Math.max(1, state.renderer.domElement.clientWidth), Math.max(1, state.renderer.domElement.clientHeight), false);
+  }
+  const light = state.keyLight;
+  if (light) {
+    if (active) {
+      // Diferimos la reducción del shadow map: un clic rápido (selección) no
+      // debería recrear el shadow map dos veces. Solo los arrastres largos
+      // bajan la resolución de sombras para aligerar cada frame.
+      if (state.shadowQualityTimer) window.clearTimeout(state.shadowQualityTimer);
+      state.shadowQualityTimer = window.setTimeout(() => {
+        state.shadowQualityTimer = 0;
+        if (state.interactionQualityActive) setShadowMapSize(state, light, 1024);
+      }, 150);
+    } else {
+      if (state.shadowQualityTimer) {
+        window.clearTimeout(state.shadowQualityTimer);
+        state.shadowQualityTimer = 0;
+      }
+      setShadowMapSize(state, light, 2048);
+    }
   }
   state.requestRender();
 }
@@ -2515,12 +2546,7 @@ function pickGeometrySurfacePlane(state: ThreeState, clientX: number, clientY: n
     .applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld))
     .normalize();
   const plane = direct2dPlaneFromSurface(shapeId, hit.point, normal);
-  console.log("[Direct2D] surface-detected", {
-    shapeId,
-    point: plane.center.map((value) => Number(value.toFixed(3))),
-    normal: plane.normal.map((value) => Number(value.toFixed(4))),
-    up: plane.up.map((value) => Number(value.toFixed(4))),
-  });
+  
   return plane;
 }
 
@@ -2693,6 +2719,11 @@ export function WorkplaneViewport({
   const dragRef = useRef<DragState | null>(null);
   const marqueeRef = useRef<MarqueeState | null>(null);
   const transformRef = useRef<TransformDragState | null>(null);
+  // Coalesce los movimientos del puntero durante un arrastre de transformación:
+  // acumulamos la última posición y ejecutamos `updateTransform` a lo sumo una
+  // vez por `requestAnimationFrame`, en vez de en cada evento `pointermove`.
+  const pendingTransformMoveRef = useRef<{ clientX: number; clientY: number; shiftKey: boolean; altKey: boolean } | null>(null);
+  const transformMoveRafRef = useRef(0);
   const lastResizeAnchorRef = useRef<ResizeAnchorMemory | null>(null);
   const suppressNextLiftEditRef = useRef(false);
   const snapRef = useRef(snap);
@@ -3098,17 +3129,44 @@ export function WorkplaneViewport({
     const state = createThreeScene(host);
     threeRef.current = state;
     rebuildWorkplane(state, workspaceRef.current, resolvedThemeRef.current);
+    // Las capturas se renderizan en un canvas offscreen con preserveDrawingBuffer
+    // para poder leerlas con toDataURL/toBlob sin penalizar el renderer principal.
+    let captureRenderer: THREE.WebGLRenderer | null = null;
+    const getCaptureRenderer = () => {
+      if (!captureRenderer) {
+        captureRenderer = new THREE.WebGLRenderer({
+          antialias: true,
+          powerPreference: "default",
+          preserveDrawingBuffer: true,
+        });
+        captureRenderer.setPixelRatio(state.basePixelRatio);
+        captureRenderer.shadowMap.type = THREE.PCFShadowMap;
+      }
+      captureRenderer.shadowMap.enabled = state.renderer.shadowMap.enabled;
+      const width = Math.max(1, host.clientWidth);
+      const height = Math.max(1, host.clientHeight);
+      if (
+        captureRenderer.domElement.width !== Math.floor(width * state.basePixelRatio) ||
+        captureRenderer.domElement.height !== Math.floor(height * state.basePixelRatio)
+      ) {
+        captureRenderer.setSize(width, height, false);
+      }
+      return captureRenderer;
+    };
     window.sketchforgeCaptureCanvas = () => {
+      const renderer = getCaptureRenderer();
       state.camera.updateMatrixWorld();
-      state.renderer.render(state.scene, state.camera);
-      return state.renderer.domElement.toDataURL("image/png");
+      renderer.render(state.scene, state.camera);
+      return renderer.domElement.toDataURL("image/png");
     };
     window.sketchforgeCaptureCanvasAsync = () => {
+      const renderer = getCaptureRenderer();
       state.camera.updateMatrixWorld();
-      state.renderer.render(state.scene, state.camera);
-      return canvasPngDataUrl(state.renderer.domElement);
+      renderer.render(state.scene, state.camera);
+      return canvasPngDataUrl(renderer.domElement);
     };
     window.sketchforgeCaptureView = (face = "current") => {
+      const renderer = getCaptureRenderer();
       if (face === "home") {
         resetCamera(state);
       } else if (face !== "current") {
@@ -3116,8 +3174,8 @@ export function WorkplaneViewport({
       }
       syncViewCube(state, viewCubeRef.current);
       state.camera.updateMatrixWorld();
-      state.renderer.render(state.scene, state.camera);
-      return state.renderer.domElement.toDataURL("image/png");
+      renderer.render(state.scene, state.camera);
+      return renderer.domElement.toDataURL("image/png");
     };
     perfRef.current.lastSample = performance.now();
     resetCamera(state);
@@ -3129,6 +3187,16 @@ export function WorkplaneViewport({
       const now = performance.now();
       const controlsChanged = state.controls.update();
       const cameraSettled = state.wasCameraMoving && !controlsChanged;
+
+      // Ensure camera forward vector is always up-to-date
+      const forwardVec = new THREE.Vector3(0, 0, -1).applyQuaternion(state.camera.quaternion);
+      const upVec = new THREE.Vector3(0, 1, 0).applyQuaternion(state.camera.quaternion);
+      const fDir = new THREE.Vector3(forwardVec.x + upVec.x, 0, forwardVec.z + upVec.z);
+      fDir.normalize();
+      if (typeof window !== "undefined") {
+        (window as any).__sketchforge_camera_forward = { x: fDir.x, z: fDir.z };
+      }
+
       if (!controlsChanged && !state.needsRender && !cameraSettled) {
         return;
       }
@@ -3204,6 +3272,11 @@ export function WorkplaneViewport({
       disposeChildren(state.modifierLayer);
       disposeChildren(state.topologyLayer);
       state.renderer.dispose();
+      if (captureRenderer) {
+        captureRenderer.dispose();
+        captureRenderer.forceContextLoss();
+        captureRenderer = null;
+      }
       host.replaceChildren();
       if (window.sketchforgeCaptureCanvas) {
         delete window.sketchforgeCaptureCanvas;
@@ -3652,7 +3725,7 @@ export function WorkplaneViewport({
       const yBounds = selectionWorldYBounds(frame);
       const handlesLowerSide = handleKey === "bottom-height" || handleKey === "lower-shape";
       const yStart = handlesLowerSide ? yBounds.min : yBounds.max;
-      const liftOffset = kind === "lift" ? Math.max(2, yBounds.height * 0.08) * (handlesLowerSide ? -1 : 1) : 0;
+      const liftOffset = kind === "lift" ? Math.max(12, yBounds.height * 0.2 + 4) * (handlesLowerSide ? -1 : 1) : 0;
       const startWorldY = yStart + liftOffset;
       const overlay = transformOverlayRef.current;
       const wheel = kind === "rotate" ? (overlay?.rotationWheels[rotationAxis] ?? overlay?.rotationWheel ?? undefined) : undefined;
@@ -3778,6 +3851,7 @@ export function WorkplaneViewport({
         if (kind !== "scale" && kind !== "height") {
           clearCutPreviewOverlays(state);
         }
+        setViewportInteractionQuality(state, true);
         state.requestRender();
         state.controls.enabled = false;
       }
@@ -4057,6 +4131,41 @@ export function WorkplaneViewport({
     [onUpdateShape, toPlanePoint, toRawPlanePoint],
   );
 
+  // Acumula la última posición del puntero y ejecuta `updateTransform` a lo
+  // sumo una vez por frame. Evita un re-render React por cada `pointermove`
+  // (que puede llegar a 120 Hz con ratones gaming).
+  const scheduleTransformMove = useCallback(
+    (clientX: number, clientY: number, shiftKey = false, altKey = false): boolean => {
+      if (!transformRef.current) return false;
+      pendingTransformMoveRef.current = { clientX, clientY, shiftKey, altKey };
+      if (transformMoveRafRef.current) return true;
+      transformMoveRafRef.current = window.requestAnimationFrame(() => {
+        transformMoveRafRef.current = 0;
+        const pending = pendingTransformMoveRef.current;
+        pendingTransformMoveRef.current = null;
+        if (pending) {
+          updateTransform(pending.clientX, pending.clientY, pending.shiftKey, pending.altKey);
+        }
+      });
+      return true;
+    },
+    [updateTransform],
+  );
+
+  // Aplica de forma síncrona el último movimiento pendiente antes de finalizar
+  // el arrastre, para que la posición final quede confirmada.
+  const flushPendingTransformMove = useCallback(() => {
+    if (transformMoveRafRef.current) {
+      window.cancelAnimationFrame(transformMoveRafRef.current);
+      transformMoveRafRef.current = 0;
+    }
+    const pending = pendingTransformMoveRef.current;
+    pendingTransformMoveRef.current = null;
+    if (pending && transformRef.current) {
+      updateTransform(pending.clientX, pending.clientY, pending.shiftKey, pending.altKey);
+    }
+  }, [updateTransform]);
+
   const suppressLiftEditAfterDrag = useCallback(() => {
     suppressNextLiftEditRef.current = true;
     window.setTimeout(() => {
@@ -4069,6 +4178,7 @@ export function WorkplaneViewport({
     if (!transform) {
       return;
     }
+    flushPendingTransformMove();
     if (event.currentTarget.hasPointerCapture(transform.pointerId)) {
       event.currentTarget.releasePointerCapture(transform.pointerId);
     }
@@ -4091,6 +4201,7 @@ export function WorkplaneViewport({
     setPinnedRotationWheelView(null);
     setRotationReadout(null);
     if (threeRef.current) {
+      setViewportInteractionQuality(threeRef.current, false);
       syncCutPreviewOverlays(threeRef.current, shapesRef.current);
       setSelectionHelpersVisible(threeRef.current, true);
       threeRef.current.controls.enabled = true;
@@ -4098,7 +4209,7 @@ export function WorkplaneViewport({
     }
     onInteractionActiveChange?.(false);
     bakeRotatedShapes.forEach((id) => onUpdateShape(id, { bakeTransform: true }));
-  }, [onInteractionActiveChange, onUpdateShape, suppressLiftEditAfterDrag]);
+  }, [flushPendingTransformMove, onInteractionActiveChange, onUpdateShape, suppressLiftEditAfterDrag]);
 
   const beginDimensionEdit = useCallback((mark: DimensionMark) => {
     const id = selectedIdsRef.current[0];
@@ -4317,7 +4428,7 @@ export function WorkplaneViewport({
     setHoverTopologyTarget({ kind: "vertex", id: vertexId });
     state.controls.enabled = false;
     onInteractionActiveChange?.(true);
-    console.log(`[TopoEdit] vertexDragStart: pieza=${shapeId} vertex=${vertexId} pivot=(${pivot.x.toFixed(3)},${pivot.y.toFixed(3)},${pivot.z.toFixed(3)})`);
+    
   }, [onInteractionActiveChange]);
 
   const updateVertexDrag = useCallback((clientX: number, clientY: number) => {
@@ -4377,7 +4488,7 @@ export function WorkplaneViewport({
     setHoverTopologyTarget({ kind: "edge", id: edgeId });
     state.controls.enabled = false;
     onInteractionActiveChange?.(true);
-    console.log(`[TopoEdit] edgeDragStart: pieza=${shapeId} edge=${edgeId} center=(${center.x.toFixed(3)},${center.y.toFixed(3)},${center.z.toFixed(3)})`);
+    
   }, [onInteractionActiveChange]);
 
   const updateEdgeDrag = useCallback((clientX: number, clientY: number) => {
@@ -4435,7 +4546,7 @@ export function WorkplaneViewport({
     };
     state.controls.enabled = false;
     onInteractionActiveChange?.(true);
-    console.log(`[TopoEdit] faceDragStart: pieza=${shapeId} face=${faceId} normal=(${normal.x.toFixed(3)},${normal.y.toFixed(3)},${normal.z.toFixed(3)})`);
+    
   }, [onInteractionActiveChange]);
 
   const updateFaceMoveDrag = useCallback((clientX: number, clientY: number) => {
@@ -4484,7 +4595,7 @@ export function WorkplaneViewport({
     const screen = projectToScreen(new THREE.Vector3(best.x, best.y, best.z), state);
     const distancePx = Math.hypot(screen.x - (clientX - rect.left), screen.y - (clientY - rect.top));
     if (distancePx > 10) return null;
-    console.log(`[TopoEdit] addVertexClick: pieza=${selectedShapeId} point=(${best.x.toFixed(3)},${best.y.toFixed(3)},${best.z.toFixed(3)}) edgeDist=${bestDistance.toFixed(4)} screenDist=${distancePx.toFixed(1)}px`);
+    
     return best;
   }, []);
 
@@ -4606,12 +4717,7 @@ export function WorkplaneViewport({
         const draft = { pointerId: event.pointerId, plane: activePlane, origin: point, current: point, trail: [point] };
         geometryDrawDraftRef.current = draft;
         setGeometryDrawDraft(draft);
-        console.log("[Direct2D] draw-start", {
-          tool: geometryDrawTool,
-          source: detectedPlane ? "surface" : activePlane.kind,
-          plane: activePlane,
-          localOrigin: point,
-        });
+        
         return;
       }
 
@@ -4730,7 +4836,7 @@ export function WorkplaneViewport({
         const yBounds = selectionWorldYBounds(frame);
         const handlesLowerSide = handle.handleKey === "bottom-height" || handle.handleKey === "lower-shape";
         const yStart = handlesLowerSide ? yBounds.min : yBounds.max;
-        const liftOffset = handle.kind === "lift" ? Math.max(2, yBounds.height * 0.08) * (handlesLowerSide ? -1 : 1) : 0;
+        const liftOffset = handle.kind === "lift" ? Math.max(12, yBounds.height * 0.2 + 4) * (handlesLowerSide ? -1 : 1) : 0;
         const startWorldY = yStart + liftOffset;
         const overlay = transformOverlayRef.current;
         const rotationAxis = rotationAxisForHandle(handle.handleKey);
@@ -4898,7 +5004,6 @@ export function WorkplaneViewport({
             visual: findShapeObject(state, dragId),
             helper,
             helperBox: helper ? helper.box.clone() : null,
-            hadPreviewSimplified: false,
           };
         })
         .filter((item): item is DragItem => Boolean(item));
@@ -4998,10 +5103,10 @@ export function WorkplaneViewport({
       if (rulerMoveModeRef.current) return;
       const transform = transformRef.current;
       if (transform) {
-        updateTransform(event.clientX, event.clientY, event.shiftKey, event.altKey);
-        if (threeRef.current) {
-          threeRef.current.requestRender();
-        }
+        // El movimiento se aplica vía `scheduleTransformMove` (una vez por
+        // frame); el re-render de la escena lo dispara el efecto de `shapes`,
+        // así que no hace falta pedir un render aquí (evita un draw obsoleto).
+        scheduleTransformMove(event.clientX, event.clientY, event.shiftKey, event.altKey);
         return;
       }
 
@@ -5056,7 +5161,7 @@ export function WorkplaneViewport({
         threeRef.current.requestRender();
       }
     },
-    [geometryDrawTool, setMarqueeFromState, toGeometryPlanePoint, toPlanePoint, updateEdgeDrag, updateFaceMoveDrag, updateModifierEdgeHover, updatePushPullDrag, updateRulerHover, updateTopologyHover, updateTransform, updateVertexDrag],
+    [geometryDrawTool, scheduleTransformMove, setMarqueeFromState, toGeometryPlanePoint, toPlanePoint, updateEdgeDrag, updateFaceMoveDrag, updateModifierEdgeHover, updatePushPullDrag, updateRulerHover, updateTopologyHover, updateVertexDrag],
   );
 
   const handlePointerLeave = useCallback(() => {
@@ -5087,13 +5192,7 @@ export function WorkplaneViewport({
             ? geometryDraft.trail
             : [...geometryDraft.trail, geometryDraft.current];
           const profile = direct2dProfileFromGesture(geometryDrawTool, geometryDraft.origin, geometryDraft.current, trail);
-          console.log("[Direct2D] draw-commit", {
-            tool: geometryDrawTool,
-            points: profile.points.length,
-            segments: profile.segments.length,
-            entities: profile.entities?.map((entity) => entity.kind) ?? [],
-            plane: geometryDraft.plane,
-          });
+          
           onGeometryDrawCommit?.(profile, geometryDraft.plane, geometryDrawTool);
         }
         return;
@@ -5109,7 +5208,7 @@ export function WorkplaneViewport({
           state.requestRender();
         }
         onInteractionActiveChange?.(false);
-        console.log(`[TopoEdit] vertexDragEnd: vertex=${vertexDrag.vertexId} moved=${vertexDrag.hasMoved} from=(${vertexDrag.pivot.x.toFixed(3)},${vertexDrag.pivot.y.toFixed(3)},${vertexDrag.pivot.z.toFixed(3)}) to=(${vertexDrag.current.x.toFixed(3)},${vertexDrag.current.y.toFixed(3)},${vertexDrag.current.z.toFixed(3)})`);
+        
         if (vertexDrag.hasMoved) {
           onTopologyVertexMoveApply?.({ x: vertexDrag.pivot.x, y: vertexDrag.pivot.y, z: vertexDrag.pivot.z }, { x: vertexDrag.current.x, y: vertexDrag.current.y, z: vertexDrag.current.z });
         }
@@ -5138,7 +5237,7 @@ export function WorkplaneViewport({
           state.requestRender();
         }
         onInteractionActiveChange?.(false);
-        console.log(`[TopoEdit] edgeDragEnd: edge=${edgeDrag.edgeId} moved=${edgeDrag.hasMoved} offset=(${edgeDrag.offset.x.toFixed(3)},${edgeDrag.offset.y.toFixed(3)},${edgeDrag.offset.z.toFixed(3)})`);
+        
         if (edgeDrag.hasMoved) {
           const updates = edgeDrag.endpoints.map((endpoint) => ({
             from: { x: endpoint.x, y: endpoint.y, z: endpoint.z },
@@ -5171,7 +5270,7 @@ export function WorkplaneViewport({
           state.requestRender();
         }
         onInteractionActiveChange?.(false);
-        console.log(`[TopoEdit] faceDragEnd: face=${faceMoveDrag.faceId} moved=${faceMoveDrag.hasMoved} offset=(${faceMoveDrag.offset.x.toFixed(3)},${faceMoveDrag.offset.y.toFixed(3)},${faceMoveDrag.offset.z.toFixed(3)})`);
+        
         if (faceMoveDrag.hasMoved) {
           onTopologyFaceMoveApply?.({ x: faceMoveDrag.center.x, y: faceMoveDrag.center.y, z: faceMoveDrag.center.z }, { x: faceMoveDrag.offset.x, y: faceMoveDrag.offset.y, z: faceMoveDrag.offset.z });
         }
@@ -5198,6 +5297,7 @@ export function WorkplaneViewport({
       }
       const transform = transformRef.current;
       if (transform) {
+        flushPendingTransformMove();
         if (event.currentTarget.hasPointerCapture(transform.pointerId)) {
           event.currentTarget.releasePointerCapture(transform.pointerId);
         }
@@ -5215,6 +5315,7 @@ export function WorkplaneViewport({
         setActiveTransformKind(null);
         setRotationReadout(null);
         if (state) {
+          setViewportInteractionQuality(state, false);
           syncCutPreviewOverlays(state, shapesRef.current);
           setSelectionHelpersVisible(state, true);
           state.controls.enabled = true;
@@ -5263,6 +5364,7 @@ export function WorkplaneViewport({
           }
         }
         if (state) {
+          setViewportInteractionQuality(state, false);
           state.controls.enabled = true;
         }
         onInteractionActiveChange?.(false);
@@ -5280,9 +5382,6 @@ export function WorkplaneViewport({
 
       let movedShape = false;
       drag.items.forEach((item) => {
-        if (item.visual && item.hadPreviewSimplified) {
-          setComplexEdgeVisibility(item.visual, true);
-        }
         const shape = shapesRef.current.find((entry) => entry.id === item.id);
         if (shape && (shape.x !== item.nextX || shape.z !== item.nextZ)) {
           movedShape = true;
@@ -5297,12 +5396,13 @@ export function WorkplaneViewport({
         if (!movedShape) {
           syncCutPreviewOverlays(state, shapesRef.current);
         }
+        setViewportInteractionQuality(state, false);
         state.controls.enabled = true;
         state.requestRender();
       }
       onInteractionActiveChange?.(false);
     },
-    [geometryDrawTool, onGeometryDrawCommit, onInteractionActiveChange, onPushPullApply, onSelectShape, onTopologyEdgeMoveApply, onTopologyFaceMoveApply, onTopologyPick, onTopologyPickMany, onTopologyVertexMoveApply, onUpdateShape, rememberResizeAnchor, setMarqueeFromState, shapesInMarquee, suppressLiftEditAfterDrag, topologyInMarquee],
+    [flushPendingTransformMove, geometryDrawTool, onGeometryDrawCommit, onInteractionActiveChange, onPushPullApply, onSelectShape, onTopologyEdgeMoveApply, onTopologyFaceMoveApply, onTopologyPick, onTopologyPickMany, onTopologyVertexMoveApply, onUpdateShape, rememberResizeAnchor, setMarqueeFromState, shapesInMarquee, suppressLiftEditAfterDrag, topologyInMarquee],
   );
 
   const handleDrop = useCallback(
@@ -5665,7 +5765,7 @@ export function WorkplaneViewport({
               onBeginCameraDrag={beginCameraDragFromOverlay}
               onCameraWheel={forwardCameraWheelFromOverlay}
               onBeginTransform={beginTransform}
-              onMoveTransform={updateTransform}
+              onMoveTransform={scheduleTransformMove}
               onFinishTransform={finishTransform}
               onHoverMeasure={setHoverMeasureKey}
               onPinMeasure={setPinnedMeasureKey}
@@ -5737,7 +5837,10 @@ export function WorkplaneViewport({
 }
 
 function createThreeScene(host: HTMLDivElement): ThreeState {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: shouldPreserveDrawingBufferForLocalAutomation() });
+  // preserveDrawingBuffer=false (default): el navegador puede descartar el buffer
+  // tras el composite, evitando una copia completa del framebuffer en cada frame.
+  // Las capturas (thumbnail, MCP) se renderizan en un renderer offscreen aparte.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "default", preserveDrawingBuffer: false });
   const basePixelRatio = viewportPixelRatioForHost(host);
   renderer.setPixelRatio(basePixelRatio);
   renderer.setSize(host.clientWidth, host.clientHeight);
@@ -5775,10 +5878,13 @@ function createThreeScene(host: HTMLDivElement): ThreeState {
   controls.maxPolarAngle = Math.PI - 0.06;
   controls.target.copy(CAMERA_TARGET);
 
-  const ambient = new THREE.HemisphereLight("#ffffff", "#d6edf5", 2.1);
+  // Intensidades moderadas para que el color del material se lea más sólido
+  // (menos lavado por la luz) manteniendo sombreado 3D. Solo cambia uniforms:
+  // no añade pases de render ni coste de shader.
+  const ambient = new THREE.HemisphereLight("#ffffff", "#d6edf5", 1.8);
   scene.add(ambient);
 
-  const key = new THREE.DirectionalLight("#ffffff", 3.1);
+  const key = new THREE.DirectionalLight("#ffffff", 2.4);
   key.position.set(70, 130, 75);
   key.castShadow = true;
   key.shadow.camera.left = -130;
@@ -5790,7 +5896,7 @@ function createThreeScene(host: HTMLDivElement): ThreeState {
   key.shadow.normalBias = 0.045;
   scene.add(key);
 
-  const fill = new THREE.DirectionalLight("#c8f4ff", 1.2);
+  const fill = new THREE.DirectionalLight("#c8f4ff", 0.9);
   fill.position.set(-95, 45, -60);
   scene.add(fill);
 
@@ -5851,6 +5957,8 @@ function createThreeScene(host: HTMLDivElement): ThreeState {
     requestRender: () => {},
     basePixelRatio,
     interactionQualityActive: false,
+    keyLight: key,
+    shadowQualityTimer: 0,
     wasCameraMoving: false,
     lastOverlaySync: 0,
     lastViewCubeSync: 0,
@@ -5880,7 +5988,23 @@ function createThreeScene(host: HTMLDivElement): ThreeState {
   const preventContextMenu = (event: MouseEvent) => {
     event.preventDefault();
   };
-  controls.addEventListener("change", requestRender);
+  const updateCameraForward = () => {
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+    const dir = new THREE.Vector3(forward.x + up.x, 0, forward.z + up.z);
+    dir.normalize();
+    if (typeof window !== "undefined") {
+      (window as any).__sketchforge_camera_forward = { x: dir.x, z: dir.z };
+    }
+  };
+  updateCameraForward();
+
+  const handleControlsChange = () => {
+    requestRender();
+    updateCameraForward();
+  };
+
+  controls.addEventListener("change", handleControlsChange);
   renderer.domElement.addEventListener("pointerdown", configureSketchForgeMouseButtons, { capture: true });
   renderer.domElement.addEventListener("pointerup", resetSketchForgeMouseButtons);
   renderer.domElement.addEventListener("pointercancel", resetSketchForgeMouseButtons);
@@ -5888,7 +6012,7 @@ function createThreeScene(host: HTMLDivElement): ThreeState {
   renderer.domElement.addEventListener("wheel", requestRender, { passive: true });
   renderer.domElement.addEventListener("pointerdown", requestRender);
   state.disposeInteractionListeners = () => {
-    controls.removeEventListener("change", requestRender);
+    controls.removeEventListener("change", handleControlsChange);
     renderer.domElement.removeEventListener("pointerdown", configureSketchForgeMouseButtons, { capture: true });
     renderer.domElement.removeEventListener("pointerup", resetSketchForgeMouseButtons);
     renderer.domElement.removeEventListener("pointercancel", resetSketchForgeMouseButtons);
@@ -6702,7 +6826,7 @@ function syncTransformOverlay(
   const worldCenterZ = (worldMinZ + worldMaxZ) / 2;
   const worldCenter = new THREE.Vector3(worldCenterX, worldCenterY, worldCenterZ);
   const worldHeight = Math.max(MIN_SHAPE_SIZE, worldMaxY - worldMinY);
-  const liftOffset = Math.max(2, worldHeight * 0.08);
+  const liftOffset = Math.max(12, worldHeight * 0.2 + 4);
   const verticalBase = new THREE.Vector3(worldCenterX, worldMinY, worldCenterZ);
   const verticalTop = new THREE.Vector3(worldCenterX, worldMaxY, worldCenterZ);
   const showLowerHandles = state.camera.position.y < frame.center.y;
@@ -6824,9 +6948,9 @@ function syncTransformOverlay(
     }
     return new THREE.Vector3(worldCenterX, y, worldMinZ);
   };
-  const rotateLeft = screenOffsetFromCenter(project(sidePoint(rotationSides.x, worldMaxY)), 24);
-  const rotateRight = screenOffsetFromCenter(project(sidePoint(rotationSides.z, worldMaxY)), 28);
-  const rotateBottom = screenOffsetFromCenter(project(sidePoint(rotationSides.y, worldMinY)), 34);
+  const rotateLeft = screenOffsetFromCenter(project(sidePoint(rotationSides.x, worldMaxY)), 54);
+  const rotateRight = screenOffsetFromCenter(project(sidePoint(rotationSides.z, worldMaxY)), 58);
+  const rotateBottom = screenOffsetFromCenter(project(sidePoint(rotationSides.y, worldMinY)), 64);
   const xFaceCenter = sidePoint(rotationSides.x, worldCenterY);
   const zFaceCenter = sidePoint(rotationSides.z, worldCenterY);
   const yFaceCenter = verticalBase;
@@ -7332,10 +7456,6 @@ function applyDragItemPreview(state: ThreeState, item: DragItem) {
   }
 
   if (item.visual) {
-    if (!item.hadPreviewSimplified) {
-      setComplexEdgeVisibility(item.visual, false);
-      item.hadPreviewSimplified = true;
-    }
     item.visual.position.x = item.nextX;
     item.visual.position.z = item.nextZ;
     refreshFrozenObjectMatrix(item.visual);
@@ -7599,7 +7719,7 @@ function sharedShapeMaterial(shape: WorkplaneShape) {
     color: shape.hole ? "#b7c0c9" : shape.color,
     transparent: Boolean(shape.hole),
     opacity: shape.hole ? (shape.importedMesh ? 0.34 : 0.52) : 1,
-    roughness: shape.hole ? 0.88 : 0.57,
+    roughness: shape.hole ? 0.9 : 0.7,
     side: shape.importedMesh?.sourceFormat === "json" || mirroredAxisCount(shape) % 2 === 1 ? "double" : "front",
   });
   const cached = sharedShapeMaterialCache.get(key);
@@ -7612,8 +7732,8 @@ function sharedShapeMaterial(shape: WorkplaneShape) {
     color: shape.hole ? "#b7c0c9" : shape.color,
     transparent: Boolean(shape.hole),
     opacity: shape.hole ? (shape.importedMesh ? 0.34 : 0.52) : 1,
-    roughness: shape.hole ? 0.88 : 0.57,
-    metalness: 0.02,
+    roughness: shape.hole ? 0.9 : 0.7,
+    metalness: 0,
     side: shape.importedMesh?.sourceFormat === "json" || mirroredAxisCount(shape) % 2 === 1 ? THREE.DoubleSide : THREE.FrontSide,
   });
   material.userData.cached = true;
@@ -8139,14 +8259,6 @@ function getEdgesGeometry(shape: WorkplaneShape, geometry: THREE.BufferGeometry,
   edges.userData.cached = true;
   cache.set(threshold, edges);
   return edges;
-}
-
-function setComplexEdgeVisibility(object: THREE.Object3D, visible: boolean) {
-  object.traverse((child) => {
-    if (child.userData.complexEdge) {
-      child.visible = visible;
-    }
-  });
 }
 
 function addTextShape(group: THREE.Group, material: THREE.MeshStandardMaterial, shape: WorkplaneShape, geometryCacheKey: string) {

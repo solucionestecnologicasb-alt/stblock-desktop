@@ -66,7 +66,7 @@ const StudentEvaluacionPlayer = ({onSetDeviceMode}) => {
                 reglaSalida: evalData.reglaSalida || 'continuar',
                 running: true
             };
-            console.log('[StudentEvaluacionPlayer] Regla de salida configurada:', window.stblockActiveEvaluation);
+            
         } else {
             window.stblockActiveEvaluation = null;
         }
@@ -79,7 +79,7 @@ const StudentEvaluacionPlayer = ({onSetDeviceMode}) => {
     useEffect(() => {
         const handleMessage = (event) => {
             if (event.data && event.data.type === 'student-evaluacion-finished') {
-                console.log('[StudentEvaluacionPlayer] Recibida señal de salida de evaluación');
+                
                 onSetDeviceMode('game');
             }
         };
@@ -90,7 +90,7 @@ const StudentEvaluacionPlayer = ({onSetDeviceMode}) => {
     // Transmitir los datos cargados al iframe Gears cuando este cargue
     const handleIframeLoad = () => {
         if (iframeRef.current && evalData) {
-            console.log('[StudentEvaluacionPlayer] Enviando evaluación al iframe del alumno...');
+            
             iframeRef.current.contentWindow.postMessage({
                 type: 'load-student-evaluation',
                 evaluation: evalData

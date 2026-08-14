@@ -20,6 +20,9 @@ export type SketchRevolveMesh = {
   depth: number;
   height: number;
   triangleCount: number;
+  offsetX: number;
+  offsetY: number;
+  offsetZ: number;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -314,6 +317,9 @@ export function buildSketchRevolveMesh(runtime: ManifoldToplevel, profile: Sketc
       depth: Math.max(0.01, maxZ - minZ),
       height: Math.max(0.01, maxY - minY),
       triangleCount: Math.floor(positions.length / 9),
+      offsetX: centerX,
+      offsetY: minY,
+      offsetZ: centerZ,
     };
   } finally {
     [...new Set(disposable)].reverse().forEach(dispose);
