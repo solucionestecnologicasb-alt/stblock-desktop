@@ -1,4 +1,5 @@
 const UPDATE_TARGET_LIST = 'scratch-gui/targets/UPDATE_TARGET_LIST';
+const UPDATE_TARGET_STATES = 'scratch-gui/targets/UPDATE_TARGET_STATES';
 const HIGHLIGHT_TARGET = 'scratch-gui/targets/HIGHLIGHT_TARGET';
 
 const initialState = {
@@ -26,6 +27,24 @@ const reducer = function (state, action) {
                 .filter(target => target.isStage)[0] || {},
             editingTarget: action.editingTarget
         });
+    case UPDATE_TARGET_STATES: {
+        let sprites = state.sprites;
+        let stage = state.stage;
+        let changed = false;
+        action.targets.forEach(target => {
+            if (target.isStage) {
+                if (stage.id !== target.id) return;
+                stage = {...stage, ...target};
+                changed = true;
+                return;
+            }
+            if (!Object.prototype.hasOwnProperty.call(sprites, target.id)) return;
+            if (sprites === state.sprites) sprites = {...state.sprites};
+            sprites[target.id] = {...sprites[target.id], ...target};
+            changed = true;
+        });
+        return changed ? {...state, sprites, stage} : state;
+    }
     case HIGHLIGHT_TARGET:
         return Object.assign({}, state, {
             highlightedTargetId: action.targetId,
@@ -42,6 +61,12 @@ const updateTargets = function (targetList, editingTarget) {
         editingTarget: editingTarget
     };
 };
+const updateTargetStates = function (targetList) {
+    return {
+        type: UPDATE_TARGET_STATES,
+        targets: targetList
+    };
+};
 const highlightTarget = function (targetId) {
     return {
         type: HIGHLIGHT_TARGET,
@@ -53,5 +78,6 @@ export {
     reducer as default,
     initialState as targetsInitialState,
     updateTargets,
+    updateTargetStates,
     highlightTarget
 };

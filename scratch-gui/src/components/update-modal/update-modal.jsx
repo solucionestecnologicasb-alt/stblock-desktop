@@ -3,7 +3,7 @@ import React from 'react';
 
 import styles from './update-modal.css';
 
-const UpdateModal = ({info, installing, onInstall, onDismiss, onRetry}) => {
+const UpdateModal = ({info, installing, onInstall, onDismiss, onExit, onRetry}) => {
     if (!info) return null;
     const status = info.status || 'available';
     const mandatory = Boolean(info.mandatory);
@@ -60,12 +60,17 @@ const UpdateModal = ({info, installing, onInstall, onDismiss, onRetry}) => {
                     ) : null}
                 </div>
                 <div className={styles.actions}>
+                    {available && mandatory ? (
+                        <button className={styles.secondaryButton} disabled={installing} onClick={onExit}>
+                            Salir
+                        </button>
+                    ) : null}
                     {available && !mandatory ? (
                         <button className={styles.secondaryButton} disabled={installing} onClick={onDismiss}>
                             Más tarde
                         </button>
                     ) : null}
-                    {available || error ? (
+                    {error || (available && !mandatory) || (available && mandatory && !info.canInstall) ? (
                         <button className={styles.secondaryButton} disabled={installing} onClick={onRetry}>
                             Reintentar
                         </button>
@@ -73,6 +78,10 @@ const UpdateModal = ({info, installing, onInstall, onDismiss, onRetry}) => {
                     {available ? (
                         <button className={styles.primaryButton} disabled={installing || !info.canInstall} onClick={onInstall}>
                             {installing ? 'Instalando...' : mainActionText}
+                        </button>
+                    ) : error && mandatory ? (
+                        <button className={styles.primaryButton} disabled={installing} onClick={onExit}>
+                            Salir
                         </button>
                     ) : (
                         <button className={styles.primaryButton} disabled={installing} onClick={onDismiss}>
@@ -89,6 +98,7 @@ UpdateModal.propTypes = {
     info: PropTypes.object,
     installing: PropTypes.bool,
     onDismiss: PropTypes.func,
+    onExit: PropTypes.func,
     onInstall: PropTypes.func,
     onRetry: PropTypes.func
 };
@@ -97,6 +107,7 @@ UpdateModal.defaultProps = {
     info: null,
     installing: false,
     onDismiss: () => {},
+    onExit: () => {},
     onInstall: () => {},
     onRetry: () => {}
 };

@@ -80,8 +80,17 @@ class TargetPane extends React.Component {
     }
     handleDeleteSprite (id) {
         if (this.props.classroomCanDeleteSprite === false) return;
+        const deletedPythonCode = this.props.onDeleteTargetPythonCode ?
+            this.props.onDeleteTargetPythonCode(id) : null;
         const restoreSprite = this.props.vm.deleteSprite(id);
-        const restoreFun = () => restoreSprite().then(this.handleActivateBlocksTab);
+        const restoreFun = () => restoreSprite().then(() => {
+            if (this.props.onRestoreTargetPythonCode) {
+                const restoredTargetId = this.props.vm.editingTarget ?
+                    this.props.vm.editingTarget.id : id;
+                this.props.onRestoreTargetPythonCode(restoredTargetId, deletedPythonCode);
+            }
+            this.handleActivateBlocksTab();
+        });
 
         this.props.dispatchUpdateRestore({
             restoreFun: restoreFun,
@@ -253,8 +262,10 @@ class TargetPane extends React.Component {
             isRtl,
             onActivateTab,
             onCloseImporting,
+            onDeleteTargetPythonCode,
             onHighlightTarget,
             onReceivedBlocks,
+            onRestoreTargetPythonCode,
             onShowImporting,
             workspaceMetrics,
             ...componentProps
@@ -300,6 +311,8 @@ TargetPane.propTypes = {
     classroomCanEditTargetId: PropTypes.func,
     intl: intlShape.isRequired,
     onCloseImporting: PropTypes.func,
+    onDeleteTargetPythonCode: PropTypes.func,
+    onRestoreTargetPythonCode: PropTypes.func,
     onShowImporting: PropTypes.func,
     ...targetPaneProps
 };

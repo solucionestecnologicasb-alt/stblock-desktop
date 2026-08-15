@@ -30,6 +30,7 @@ test('interface', t => {
     t.type(vm.setEditingTarget, 'function');
 
     t.type(vm.emitTargetsUpdate, 'function');
+    t.type(vm.emitTargetStateUpdate, 'function');
     t.type(vm.emitWorkspaceUpdate, 'function');
     t.type(vm.postSpriteInfo, 'function');
     t.end();

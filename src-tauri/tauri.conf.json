@@ -1,7 +1,7 @@
 {
     "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName":  "STBlock",
-    "version":  "0.1.26",
+    "version":  "0.1.27",
     "identifier":  "com.stbacademy.stblock",
     "build":  {
                   "frontendDist":  "../scratch-gui/build",
@@ -20,7 +20,8 @@
                                     "minHeight":  700,
                                     "center":  true,
                                     "resizable":  true,
-                                    "fullscreen":  false
+                                    "fullscreen":  false,
+                                    "additionalBrowserArgs":  "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-renderer-backgrounding --enable-gpu-rasterization --enable-zero-copy"
                                 }
                             ],
                 "security":  {

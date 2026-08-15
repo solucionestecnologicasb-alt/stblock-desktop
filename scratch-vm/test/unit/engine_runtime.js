@@ -25,6 +25,35 @@ test('spec', t => {
     t.end();
 });
 
+test('incremental target state updates are rate limited without losing the final update', t => {
+    const runtime = new Runtime();
+    const target = {isOriginal: true};
+    const updates = [];
+    let fullUpdates = 0;
+    runtime.on(Runtime.TARGET_STATE_UPDATE, targets => updates.push(targets));
+    runtime.on(Runtime.TARGETS_UPDATE, () => fullUpdates++);
+
+    runtime.currentMSecs = 100;
+    runtime.requestTargetsUpdate(target);
+    runtime._emitTargetsUpdateIfDue();
+    t.equal(updates.length, 1, 'the first requested update is immediate');
+    t.same(updates[0], [target], 'only the changed target is included');
+
+    runtime.currentMSecs = 110;
+    runtime.requestTargetsUpdate(target);
+    runtime._emitTargetsUpdateIfDue();
+    t.equal(updates.length, 1, 'updates inside the throttle window are deferred');
+    t.equal(runtime._refreshTargets, true, 'the deferred update remains pending');
+
+    runtime.currentMSecs = 100 + Runtime.TARGETS_UPDATE_INTERVAL;
+    runtime._emitTargetsUpdateIfDue();
+    t.equal(updates.length, 2, 'the pending final update is eventually emitted');
+    t.same(updates[1], [target], 'repeated changes are coalesced to one target');
+    t.equal(fullUpdates, 0, 'movement does not request a complete target list');
+    t.equal(runtime._refreshTargets, false, 'the pending flag is cleared after emission');
+    t.end();
+});
+
 test('monitorStateEquals', t => {
     const r = new Runtime();
     const id = 'xklj4#!';

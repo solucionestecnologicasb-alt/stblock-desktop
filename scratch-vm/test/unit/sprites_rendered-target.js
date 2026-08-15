@@ -293,6 +293,34 @@ test('isTouchingSprite', t => {
     t.end();
 });
 
+test('isTouchingSprite caches pixel scans until renderer state changes', t => {
+    const r = new Runtime();
+    const renderer = new FakeRenderer();
+    let collisionScans = 0;
+    renderer.isTouchingDrawables = (drawableId, candidates) => {
+        collisionScans++;
+        t.equal(candidates.length, 1, 'passes the target drawable');
+        return true;
+    };
+    r.attachRenderer(renderer);
+
+    const sourceSprite = new Sprite(null, r);
+    sourceSprite.name = 'Source';
+    const source = sourceSprite.createClone();
+    const targetSprite = new Sprite(null, r);
+    targetSprite.name = 'Target';
+    targetSprite.createClone();
+
+    t.equal(source.isTouchingSprite('Target'), true);
+    t.equal(source.isTouchingSprite('Target'), true);
+    t.equal(collisionScans, 1, 'reuses a collision result in unchanged state');
+
+    r.requestRedraw();
+    t.equal(source.isTouchingSprite('Target'), true);
+    t.equal(collisionScans, 2, 'visible state changes invalidate the cache');
+    t.end();
+});
+
 test('isTouchingColor', t => {
     const r = new Runtime();
     const s = new Sprite(null, r);

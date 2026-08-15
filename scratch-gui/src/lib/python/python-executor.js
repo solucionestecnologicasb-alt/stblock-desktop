@@ -394,9 +394,16 @@ class PythonExecutor {
                 });
             },
 
-            // Ceder el hilo principal para que React, Blockly y el escenario
-            // procesen pintura, teclado y el botón detener.
-            yieldControl: () => new Promise(resolve => setTimeout(resolve, 0)),
+            // Ceder hasta el próximo cuadro visual. setTimeout(0) permitía que
+            // un while/for Python ejecutara cientos de iteraciones entre
+            // pinturas, saturando el hilo principal y haciendo lento el juego.
+            yieldControl: () => new Promise(resolve => {
+                if (typeof requestAnimationFrame === 'function') {
+                    requestAnimationFrame(() => resolve());
+                } else {
+                    setTimeout(resolve, 1000 / 60);
+                }
+            }),
 
             stopAll: () => {
                 runtime.stopAll();

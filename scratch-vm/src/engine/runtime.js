@@ -293,6 +293,22 @@ class Runtime extends EventEmitter {
         this._refreshTargets = false;
 
         /**
+         * Original targets whose editor-facing state changed during the current
+         * update window. Keeping the targets themselves avoids serializing the
+         * complete project target list for every sprite movement.
+         * @type {Set<Target>}
+         */
+        this._targetsToRefresh = new Set();
+
+        /**
+         * Timestamp of the last UI target metadata refresh. Sprite rendering
+         * remains at the normal frame rate; only the editor metadata is capped
+         * to avoid serializing every target on every movement frame.
+         * @type {number}
+         */
+        this._lastTargetsUpdateMSecs = -Infinity;
+
+        /**
          * Map to look up all monitor block information by opcode.
          * @type {object}
          * @private
@@ -378,6 +394,13 @@ class Runtime extends EventEmitter {
          * @type {boolean}
          */
         this.redrawRequested = false;
+
+        /**
+         * Monotonic version used to invalidate collision results. It advances
+         * once per VM tick and whenever visible renderer state changes.
+         * @type {number}
+         */
+        this._collisionCacheEpoch = 0;
 
         // Register all given block packages.
         this._registerBlockPackages();
@@ -640,6 +663,14 @@ class Runtime extends EventEmitter {
     }
 
     /**
+     * Event name for incremental target state updates.
+     * @const {string}
+     */
+    static get TARGET_STATE_UPDATE () {
+        return 'TARGET_STATE_UPDATE';
+    }
+
+    /**
      * Event name for monitors update.
      * @const {string}
      */
@@ -819,6 +850,14 @@ class Runtime extends EventEmitter {
      */
     static get THREAD_STEP_INTERVAL_COMPATIBILITY () {
         return 1000 / 30;
+    }
+
+    /**
+     * Maximum frequency for target metadata updates consumed by the GUI.
+     * Stage drawing is independent and can continue at 60 FPS.
+     */
+    static get TARGETS_UPDATE_INTERVAL () {
+        return 1000 / 10;
     }
 
     /**
@@ -2096,6 +2135,7 @@ class Runtime extends EventEmitter {
     attachRenderer (renderer) {
         this.renderer = renderer;
         this.renderer.setLayerGroupOrdering(StageLayering.LAYER_GROUPS);
+        this.requestRedraw();
     }
 
     /**
@@ -2708,7 +2748,11 @@ class Runtime extends EventEmitter {
                 }
             }
         }
+        // Preserve renderer work requested between VM ticks. redrawRequested
+        // is reset for the sequencer because it also controls thread yielding.
+        const redrawPending = this.redrawRequested;
         this.redrawRequested = false;
+        this.invalidateCollisionCache();
         this._pushMonitors();
         if (this.profiler !== null) {
             if (stepThreadsProfilerId === -1) {
@@ -2736,8 +2780,7 @@ class Runtime extends EventEmitter {
         // Store threads that completed this iteration for testing and other
         // internal purposes.
         this._lastStepDoneThreads = doneThreads;
-        if (this.renderer) {
-            // @todo: Only render when this.redrawRequested or clones rendered.
+        if (this.renderer && (redrawPending || this.redrawRequested)) {
             if (this.profiler !== null) {
                 if (rendererDrawProfilerId === -1) {
                     rendererDrawProfilerId =
@@ -2750,14 +2793,11 @@ class Runtime extends EventEmitter {
                 this.profiler.stop();
             }
         }
+        // The pending state has now been drawn, or there is no renderer to
+        // consume it. Do not redraw the same state on the following tick.
+        this.redrawRequested = false;
 
-        if (this._refreshTargets) {
-            this.emit(
-                Runtime.TARGETS_UPDATE,
-                false /* Don't emit project changed */
-            );
-            this._refreshTargets = false;
-        }
+        this._emitTargetsUpdateIfDue();
 
         if (!this._prevMonitorState.equals(this._monitorState)) {
             this.emit(Runtime.MONITORS_UPDATE, this._monitorState);
@@ -3224,6 +3264,14 @@ class Runtime extends EventEmitter {
      */
     requestRedraw () {
         this.redrawRequested = true;
+        this.invalidateCollisionCache();
+    }
+
+    /**
+     * Invalidate collision reporter results after renderer state changes.
+     */
+    invalidateCollisionCache () {
+        this._collisionCacheEpoch++;
     }
 
     /**
@@ -3232,8 +3280,27 @@ class Runtime extends EventEmitter {
      * @param {!Target} target Target requesting the targets update
      */
     requestTargetsUpdate (target) {
-        if (!target.isOriginal) return;
+        if (!target || !target.isOriginal) return;
+        this._targetsToRefresh.add(target);
         this._refreshTargets = true;
+    }
+
+    /**
+     * Emit pending editor metadata at a bounded rate. Keeping the request
+     * pending guarantees that the final position is delivered even if motion
+     * stops between two metadata refreshes.
+     * @private
+     */
+    _emitTargetsUpdateIfDue () {
+        if (!this._refreshTargets ||
+            this.currentMSecs - this._lastTargetsUpdateMSecs < Runtime.TARGETS_UPDATE_INTERVAL) {
+            return;
+        }
+        const changedTargets = Array.from(this._targetsToRefresh);
+        this._targetsToRefresh.clear();
+        this.emit(Runtime.TARGET_STATE_UPDATE, changedTargets);
+        this._refreshTargets = false;
+        this._lastTargetsUpdateMSecs = this.currentMSecs;
     }
 
     /**

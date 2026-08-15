@@ -13,14 +13,16 @@ class TargetHighlight extends React.Component {
         ]);
     }
 
-    // Transform scratch coordinates into page coordinates
+    // Transform Scratch coordinates into percentages of the rendered stage.
+    // The stage is responsive in the editor, so pixel coordinates calculated
+    // from the nominal stage size drift when CSS resizes the canvas.
     getPageCoords (x, y) {
-        const {stageWidth, stageHeight, vm} = this.props;
+        const {vm} = this.props;
         // The renderers "nativeSize" is the [width, height] of the stage in scratch-units
         const nativeSize = vm.renderer.getNativeSize();
         return [
-            ((stageWidth / nativeSize[0]) * x) + (stageWidth / 2),
-            -((stageHeight / nativeSize[1]) * y) + (stageHeight / 2)
+            ((x / nativeSize[0]) * 100) + 50,
+            -((y / nativeSize[1]) * 100) + 50
         ];
     }
 
@@ -49,10 +51,10 @@ class TargetHighlight extends React.Component {
                 key={highlightedTargetTime}
                 style={{
                     position: 'absolute',
-                    top: `${top - pad}px`,
-                    left: `${left - pad}px`,
-                    width: `${(right - left) + (2 * pad)}px`,
-                    height: `${(bottom - top) + (2 * pad)}px`
+                    top: `calc(${top}% - ${pad}px)`,
+                    left: `calc(${left}% - ${pad}px)`,
+                    width: `calc(${right - left}% + ${2 * pad}px)`,
+                    height: `calc(${bottom - top}% + ${2 * pad}px)`
                 }}
             />
         );
@@ -63,8 +65,6 @@ TargetHighlight.propTypes = {
     className: PropTypes.string,
     highlightedTargetId: PropTypes.string,
     highlightedTargetTime: PropTypes.number,
-    stageHeight: PropTypes.number,
-    stageWidth: PropTypes.number,
     vm: PropTypes.instanceOf(VM)
 };
 

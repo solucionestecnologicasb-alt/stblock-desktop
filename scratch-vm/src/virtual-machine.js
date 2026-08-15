@@ -108,6 +108,9 @@ class VirtualMachine extends EventEmitter {
         this.runtime.on(Runtime.TARGETS_UPDATE, emitProjectChanged => {
             this.emitTargetsUpdate(emitProjectChanged);
         });
+        this.runtime.on(Runtime.TARGET_STATE_UPDATE, targets => {
+            this.emitTargetStateUpdate(targets);
+        });
         this.runtime.on(Runtime.MONITORS_UPDATE, monitorList => {
             this.emit(Runtime.MONITORS_UPDATE, monitorList);
         });
@@ -1178,6 +1181,7 @@ class VirtualMachine extends EventEmitter {
             bitmapResolution,
             [rotationCenterX / bitmapResolution, rotationCenterY / bitmapResolution]
         );
+        this.runtime.requestRedraw();
 
         // @todo there should be a better way to get from ImageData to a decodable storage format
         canvas.toBlob(blob => {
@@ -1220,6 +1224,7 @@ class VirtualMachine extends EventEmitter {
             costume.rotationCenterY = rotationCenterY;
             this.runtime.renderer.updateSVGSkin(costume.skinId, svg, [rotationCenterX, rotationCenterY]);
             costume.size = this.runtime.renderer.getSkinSize(costume.skinId);
+            this.runtime.requestRedraw();
         }
         const storage = this.runtime.storage;
         // If we're in here, we've edited an svg in the vector editor,
@@ -1626,6 +1631,23 @@ class VirtualMachine extends EventEmitter {
         if (triggerProjectChange) {
             this.runtime.emitProjectChanged();
         }
+    }
+
+    /**
+     * Emit metadata only for original targets whose runtime state changed.
+     * Structural updates continue to use emitTargetsUpdate and its complete
+     * target list.
+     * @param {Array<object>} targets Runtime targets changed in this frame window.
+     */
+    emitTargetStateUpdate (targets) {
+        const liveTargets = (targets || []).filter(target =>
+            this.runtime.targets.indexOf(target) !== -1 &&
+            (!Object.prototype.hasOwnProperty.call(target, 'isOriginal') || target.isOriginal)
+        );
+        if (liveTargets.length === 0) return;
+        this.emit('targetStateUpdate', {
+            targetList: liveTargets.map(target => target.toJSON())
+        });
     }
 
     /**

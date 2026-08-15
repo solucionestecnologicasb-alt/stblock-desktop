@@ -32,7 +32,10 @@ const vmManagerHOC = function (WrappedComponent) {
             if (!this.props.vm.initialized) {
                 this.audioEngine = new AudioEngine();
                 this.props.vm.attachAudioEngine(this.audioEngine);
-                this.props.vm.setCompatibilityMode(true);
+                // Desactivar compatibility mode para correr el runtime a 60 TPS
+                // (THREAD_STEP_INTERVAL = 1000/60). Scratch normal usa 30; con el
+                // render por dirty-state el costo extra de CPU es moderado.
+                this.props.vm.setCompatibilityMode(false);
                 this.props.vm.initialized = true;
                 this.props.vm.setLocale(this.props.locale, this.props.messages);
             }

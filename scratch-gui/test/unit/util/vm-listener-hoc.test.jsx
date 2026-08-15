@@ -92,6 +92,22 @@ describe('VMListenerHOC', () => {
         expect(actions.length).toEqual(0);
     });
 
+    test('targetStateUpdate dispatches an incremental targets action', () => {
+        const Component = () => (<div />);
+        const WrappedComponent = vmListenerHOC(Component);
+        mount(
+            <WrappedComponent
+                store={store}
+                vm={vm}
+            />
+        );
+        const targetList = [{id: 'sprite', x: 10, y: 20}];
+        vm.emit('targetStateUpdate', {targetList});
+        const actions = store.getActions();
+        expect(actions[0].type).toEqual('scratch-gui/targets/UPDATE_TARGET_STATES');
+        expect(actions[0].targets).toEqual(targetList);
+    });
+
     test('PROJECT_CHANGED does dispatch if the sound recorder is visible', () => {
         const Component = () => (<div />);
         const WrappedComponent = vmListenerHOC(Component);

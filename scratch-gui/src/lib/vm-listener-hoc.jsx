@@ -5,7 +5,7 @@ import VM from 'scratch-vm';
 
 import {connect} from 'react-redux';
 
-import {updateTargets} from '../reducers/targets';
+import {updateTargets, updateTargetStates} from '../reducers/targets';
 import {updateBlockDrag} from '../reducers/block-drag';
 import {updateMonitors} from '../reducers/monitors';
 import {setProjectChanged, setProjectUnchanged} from '../reducers/project-changed';
@@ -27,7 +27,8 @@ const vmListenerHOC = function (WrappedComponent) {
                 'handleKeyDown',
                 'handleKeyUp',
                 'handleProjectChanged',
-                'handleTargetsUpdate'
+                'handleTargetsUpdate',
+                'handleTargetStateUpdate'
             ]);
             // We have to start listening to the vm here rather than in
             // componentDidMount because the HOC mounts the wrapped component,
@@ -39,6 +40,7 @@ const vmListenerHOC = function (WrappedComponent) {
             // todos en componentWillUnmount (evita fugas de listeners por montaje).
             this._vmListeners = [
                 ['targetsUpdate', this.handleTargetsUpdate],
+                ['targetStateUpdate', this.handleTargetStateUpdate],
                 ['MONITORS_UPDATE', this.props.onMonitorsUpdate],
                 ['BLOCK_DRAG_UPDATE', this.props.onBlockDragUpdate],
                 ['TURBO_MODE_ON', this.props.onTurboModeOn],
@@ -96,6 +98,11 @@ const vmListenerHOC = function (WrappedComponent) {
                 this.props.onTargetsUpdate(data);
             }
         }
+        handleTargetStateUpdate (data) {
+            if (this.props.shouldUpdateTargets) {
+                this.props.onTargetStateUpdate(data);
+            }
+        }
         handleKeyDown (e) {
             // Don't capture keys intended for Blockly inputs.
             if (e.target !== document && e.target !== document.body) return;
@@ -150,6 +157,7 @@ const vmListenerHOC = function (WrappedComponent) {
                 onMicListeningUpdate,
                 onMonitorsUpdate,
                 onTargetsUpdate,
+                onTargetStateUpdate,
                 onProjectChanged,
                 onProjectRunStart,
                 onProjectRunStop,
@@ -181,6 +189,7 @@ const vmListenerHOC = function (WrappedComponent) {
         onRuntimeStarted: PropTypes.func.isRequired,
         onShowExtensionAlert: PropTypes.func.isRequired,
         onTargetsUpdate: PropTypes.func.isRequired,
+        onTargetStateUpdate: PropTypes.func.isRequired,
         onTurboModeOff: PropTypes.func.isRequired,
         onTurboModeOn: PropTypes.func.isRequired,
         projectChanged: PropTypes.shape({changed: PropTypes.bool, hasBeenSaved: PropTypes.bool}),
@@ -208,6 +217,9 @@ const vmListenerHOC = function (WrappedComponent) {
     const mapDispatchToProps = dispatch => ({
         onTargetsUpdate: data => {
             dispatch(updateTargets(data.targetList, data.editingTarget));
+        },
+        onTargetStateUpdate: data => {
+            dispatch(updateTargetStates(data.targetList));
         },
         onMonitorsUpdate: monitorList => {
             dispatch(updateMonitors(monitorList));

@@ -146,7 +146,12 @@ const buildConfig = baseConfig.clone()
         },
         output: {
             path: path.resolve(__dirname, 'build')
-        }
+        },
+        // En dev el devtool por defecto ('cheap-module-source-map') mantiene en
+        // memoria todos los source maps del bundle (Scratch + Blockly + Monaco),
+        // lo que dispara el consumo del dev server a varios GB. 'eval-cheap-module-
+        // source-map' conserva buen trazado de errores con mucha menos memoria.
+        ...(process.env.NODE_ENV !== 'production' ? {devtool: 'eval-cheap-module-source-map'} : {})
     })
     .addPlugin(new HtmlWebpackPlugin({
         ...commonHtmlWebpackPluginOptions,

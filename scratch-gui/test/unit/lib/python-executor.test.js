@@ -18,4 +18,26 @@ describe('PythonExecutor green flag program', () => {
         expect(program).toContain(code);
         expect(program).toContain('await _stblock_run_green_flag()');
     });
+
+    test('cooperative Python loops yield until the next animation frame', async () => {
+        const executor = new PythonExecutor({
+            editingTarget: {},
+            runtime: {peripheralExtensions: {}}
+        });
+        const originalRequestAnimationFrame = global.requestAnimationFrame;
+        let frameCallback;
+        global.requestAnimationFrame = jest.fn(callback => {
+            frameCallback = callback;
+            return 1;
+        });
+
+        try {
+            const yielded = executor.createCallbacks().yieldControl();
+            expect(global.requestAnimationFrame).toHaveBeenCalledTimes(1);
+            frameCallback();
+            await yielded;
+        } finally {
+            global.requestAnimationFrame = originalRequestAnimationFrame;
+        }
+    });
 });

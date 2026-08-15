@@ -159,5 +159,16 @@ export const installPendingSTBlockUpdate = async () => {
     await process.relaunch();
 };
 
+/**
+ * Cierra la aplicación. Se usa cuando hay una actualización obligatoria y el
+ * usuario decide no instalarla: la app no debe seguir usándose en una versión
+ * por debajo del mínimo permitido.
+ */
+export const exitSTBlockApp = async () => {
+    if (!isDesktopApp()) return;
+    const process = await import('@tauri-apps/plugin-process');
+    await process.exit(0);
+};
+
 export const getUpdatePolicyUrl = getPolicyUrl;
 export const UPDATE_POLICY_URL_STORAGE_KEY = POLICY_URL_STORAGE_KEY;

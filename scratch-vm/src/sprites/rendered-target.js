@@ -38,6 +38,21 @@ class RenderedTarget extends Target {
         this.drawableID = null;
 
         /**
+         * Cached sprite-to-sprite collision results for the current renderer
+         * state. This prevents repeated pixel scans inside forever loops.
+         * @type {Map<string, boolean>}
+         */
+        this._touchingSpriteCache = new Map();
+        this._touchingSpriteCacheEpoch = -1;
+
+        /**
+         * Reused renderer input buffer to avoid filter/map allocations on each
+         * collision query.
+         * @type {Array<number>}
+         */
+        this._touchingDrawableCandidates = [];
+
+        /**
          * Drag state of this rendered target. If true, x/y position can't be
          * changed by blocks.
          * @type {boolean}
@@ -170,6 +185,7 @@ class RenderedTarget extends Target {
     initDrawable (layerGroup) {
         if (this.renderer) {
             this.drawableID = this.renderer.createDrawable(layerGroup);
+            this.runtime.requestRedraw();
         }
         // If we're a clone, start the hats.
         if (!this.isOriginal) {
@@ -353,8 +369,10 @@ class RenderedTarget extends Target {
             this.renderer.updateDrawableVisible(this.drawableID, this.visible);
             if (this.visible) {
                 this.emit(RenderedTarget.EVENT_TARGET_VISUAL_CHANGE, this);
-                this.runtime.requestRedraw();
             }
+            // Hiding also changes the frame and must invalidate the previous
+            // canvas contents when rendering is dirty-state driven.
+            this.runtime.requestRedraw();
         }
         this.runtime.requestTargetsUpdate(this);
     }
@@ -795,13 +813,27 @@ class RenderedTarget extends Target {
         if (!firstClone || !this.renderer) {
             return false;
         }
+        const collisionEpoch = this.runtime._collisionCacheEpoch;
+        if (this._touchingSpriteCacheEpoch !== collisionEpoch) {
+            this._touchingSpriteCache.clear();
+            this._touchingSpriteCacheEpoch = collisionEpoch;
+        } else if (this._touchingSpriteCache.has(spriteName)) {
+            return this._touchingSpriteCache.get(spriteName);
+        }
         // Filter out dragging targets. This means a sprite that is being dragged
         // can detect other sprites using touching <sprite>, but cannot be detected
         // by other sprites while it is being dragged. This matches Scratch 2.0 behavior.
-        const drawableCandidates = firstClone.sprite.clones.filter(clone => !clone.dragging)
-            .map(clone => clone.drawableID);
-        return this.renderer.isTouchingDrawables(
-            this.drawableID, drawableCandidates);
+        const drawableCandidates = this._touchingDrawableCandidates;
+        drawableCandidates.length = 0;
+        const clones = firstClone.sprite.clones;
+        for (let i = 0; i < clones.length; i++) {
+            if (!clones[i].dragging) {
+                drawableCandidates.push(clones[i].drawableID);
+            }
+        }
+        const touching = this.renderer.isTouchingDrawables(this.drawableID, drawableCandidates);
+        this._touchingSpriteCache.set(spriteName, touching);
+        return touching;
     }
 
     /**
@@ -848,6 +880,7 @@ class RenderedTarget extends Target {
             // Let the renderer re-order the sprite based on its knowledge
             // of what layers are present
             this.renderer.setDrawableOrder(this.drawableID, Infinity, StageLayering.SPRITE_LAYER);
+            this.runtime.requestRedraw();
         }
 
         this.runtime.setExecutablePosition(this, Infinity);
@@ -861,6 +894,7 @@ class RenderedTarget extends Target {
             // Let the renderer re-order the sprite based on its knowledge
             // of what layers are present
             this.renderer.setDrawableOrder(this.drawableID, -Infinity, StageLayering.SPRITE_LAYER, false);
+            this.runtime.requestRedraw();
         }
 
         this.runtime.setExecutablePosition(this, -Infinity);
@@ -873,6 +907,7 @@ class RenderedTarget extends Target {
     goForwardLayers (nLayers) {
         if (this.renderer) {
             this.renderer.setDrawableOrder(this.drawableID, nLayers, StageLayering.SPRITE_LAYER, true);
+            this.runtime.requestRedraw();
         }
 
         this.runtime.moveExecutable(this, nLayers);
@@ -885,6 +920,7 @@ class RenderedTarget extends Target {
     goBackwardLayers (nLayers) {
         if (this.renderer) {
             this.renderer.setDrawableOrder(this.drawableID, -nLayers, StageLayering.SPRITE_LAYER, true);
+            this.runtime.requestRedraw();
         }
 
         this.runtime.moveExecutable(this, -nLayers);
@@ -899,6 +935,7 @@ class RenderedTarget extends Target {
             const otherLayer = this.renderer.setDrawableOrder(
                 other.drawableID, 0, StageLayering.SPRITE_LAYER, true);
             this.renderer.setDrawableOrder(this.drawableID, otherLayer, StageLayering.SPRITE_LAYER);
+            this.runtime.requestRedraw();
         }
 
         const executionPosition = this.runtime.executableTargets.indexOf(other);
@@ -1048,6 +1085,7 @@ class RenderedTarget extends Target {
      */
     startDrag () {
         this.dragging = true;
+        if (this.runtime) this.runtime.invalidateCollisionCache();
     }
 
     /**
@@ -1055,6 +1093,7 @@ class RenderedTarget extends Target {
      */
     stopDrag () {
         this.dragging = false;
+        if (this.runtime) this.runtime.invalidateCollisionCache();
     }
 
 

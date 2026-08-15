@@ -38,6 +38,7 @@ import {themeMap} from '../../lib/themes';
 import {
     checkForSTBlockUpdates,
     dismissRecommendedUpdate,
+    exitSTBlockApp,
     installPendingSTBlockUpdate
 } from '../../lib/stblock-updater';
 import {STBLOCK_SKETCHFORGE_URL} from '../../lib/sketchforge-url';
@@ -1031,7 +1032,7 @@ const GUIComponent = props => {
     }, [vm]);
 
     useEffect(() => {
-        if (!vm || !vm.runtime) return;
+        if (!vm || !vm.runtime || !classroomState.active) return;
         // 'targetsUpdate' se emite en el VM tanto por cambios estructurales
         // (crear/borrar/renombrar sprites, interacción real del usuario) como por
         // MOVIMIENTO de sprites durante la ejecución (class-run), que se dispara a
@@ -1099,7 +1100,7 @@ const GUIComponent = props => {
                 workspace.removeChangeListener(handleBlocksChange);
             }
         };
-    }, [vm, workspaceHandle, queueClassroomSnapshot, markInteraction]);
+    }, [vm, workspaceHandle, queueClassroomSnapshot, markInteraction, classroomState.active]);
 
     // Red de seguridad: sincronización por sondeo. Aunque ningún listener de
     // eventos dispare (workspace, targetsUpdate...), si la firma del proyecto
@@ -1204,6 +1205,27 @@ const GUIComponent = props => {
 
     const [classroomTargets, setClassroomTargets] = useState([]);
 
+    const removePythonCodeForTarget = useCallback(targetId => {
+        const removedCode = pythonCodePerTargetRef.current[targetId];
+        setPythonCodePerTarget(previousCodes => {
+            if (!Object.prototype.hasOwnProperty.call(previousCodes, targetId)) {
+                return previousCodes;
+            }
+            const nextCodes = {...previousCodes};
+            delete nextCodes[targetId];
+            return nextCodes;
+        });
+        return removedCode;
+    }, []);
+
+    const restorePythonCodeForTarget = useCallback((targetId, code) => {
+        if (typeof code !== 'string') return;
+        setPythonCodePerTarget(previousCodes => ({
+            ...previousCodes,
+            [targetId]: code
+        }));
+    }, []);
+
     // Sincronizar la lista de recursos vivos (personajes/fondos) con el VM.
     // Se usan los targets reales (tienen .id/.isStage/.getName()) y se
     // actualiza al crear/borrar sprites o cargar proyecto.
@@ -1212,24 +1234,49 @@ const GUIComponent = props => {
     //  - 'targetsUpdate' se emite en el *VM* (no en runtime) al cargar proyecto
     //    y al crear/borrar/renombrar sprites (virtual-machine.js emitTargetsUpdate).
     //  - 'PROJECT_LOADED' se emite en el runtime cuando termina de cargarse un proyecto.
-    //  - 'PROJECT_CHANGED' se emite en el runtime al modificar el proyecto.
+    // Los cambios de posición también emiten targetsUpdate; syncTargets compara
+    // una firma estructural antes de actualizar React.
     useEffect(() => {
         if (!vm || !vm.runtime) return;
+        let lastTargetSignature = '';
         const syncTargets = () => {
             // Excluir clones: solo se pueden asignar personajes/fondos originales.
             const originalTargets = (vm.runtime.targets || []).filter(
                 t => !Object.prototype.hasOwnProperty.call(t, 'isOriginal') || t.isOriginal
             );
+            const signature = originalTargets.map(target =>
+                `${target.id}:${target.isStage ? 'stage' : 'sprite'}:${target.getName()}`
+            ).join('|');
+            if (signature === lastTargetSignature) return;
+            lastTargetSignature = signature;
             setClassroomTargets([...originalTargets]);
+        };
+        const pruneOrphanedPythonCodes = () => {
+            const liveTargetIds = new Set((vm.runtime.targets || [])
+                .filter(target => !Object.prototype.hasOwnProperty.call(target, 'isOriginal') || target.isOriginal)
+                .map(target => target.id));
+            if (liveTargetIds.size === 0) return;
+            setPythonCodePerTarget(previousCodes => {
+                const nextCodes = {};
+                let changed = false;
+                for (const [targetId, code] of Object.entries(previousCodes)) {
+                    if (liveTargetIds.has(targetId)) {
+                        nextCodes[targetId] = code;
+                    } else {
+                        changed = true;
+                    }
+                }
+                return changed ? nextCodes : previousCodes;
+            });
         };
         syncTargets();
         vm.on('targetsUpdate', syncTargets);
         vm.runtime.on('PROJECT_LOADED', syncTargets);
-        vm.runtime.on('PROJECT_CHANGED', syncTargets);
+        vm.runtime.on('PROJECT_LOADED', pruneOrphanedPythonCodes);
         return () => {
             vm.removeListener('targetsUpdate', syncTargets);
             vm.runtime.removeListener('PROJECT_LOADED', syncTargets);
-            vm.runtime.removeListener('PROJECT_CHANGED', syncTargets);
+            vm.runtime.removeListener('PROJECT_LOADED', pruneOrphanedPythonCodes);
         };
     }, [vm]);
 
@@ -1462,6 +1509,7 @@ const GUIComponent = props => {
             setUpdateInstalling(false);
             setUpdateInfo({
                 status: 'error',
+                mandatory: Boolean(updateInfo && updateInfo.mandatory),
                 title: 'No se pudo instalar la actualización',
                 message: e.message || String(e),
                 currentVersion: updateInfo && updateInfo.currentVersion ? updateInfo.currentVersion : 'Actual',
@@ -1469,6 +1517,16 @@ const GUIComponent = props => {
             });
         }
     }, [updateInfo]);
+
+    // En actualizaciones obligatorias, si el usuario decide no instalar, la
+    // app se cierra: no debe seguir usándose una versión por debajo del mínimo.
+    const handleExitApp = useCallback(async () => {
+        try {
+            await exitSTBlockApp();
+        } catch (e) {
+            console.warn('[GUI] No se pudo cerrar la aplicación:', e);
+        }
+    }, []);
 
     useEffect(() => {
         const handleCheckUpdates = event => {
@@ -3083,6 +3141,8 @@ const GUIComponent = props => {
                         <TargetPane
                             stageSize={stageSize}
                             vm={vm}
+                            onDeleteTargetPythonCode={removePythonCodeForTarget}
+                            onRestoreTargetPythonCode={restorePythonCodeForTarget}
                             classroomCanAddSprite={classroomCanAdd}
                             classroomCanDeleteSprite={classroomCanDelete}
                             classroomCanRenameSprite={classroomCanRename}
@@ -3393,6 +3453,7 @@ const GUIComponent = props => {
                 info={updateInfo}
                 installing={updateInstalling}
                 onDismiss={handleDismissUpdate}
+                onExit={handleExitApp}
                 onInstall={handleInstallUpdate}
                 onRetry={() => runUpdateCheck({manual: true})}
             />
