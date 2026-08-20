@@ -61,11 +61,19 @@ const ClassroomSetupModal = ({isOpen, onClose}) => {
     const [joinPort, setJoinPort] = useState(DEFAULT_PORT);
     const [joinCode, setJoinCode] = useState('');
 
+    // Estado de la detección de IP local: 'loading' | 'ok' | 'none'
+    const [ipStatus, setIpStatus] = useState('loading');
+
     const busyRef = useRef(false);
 
     useEffect(() => {
         if (isOpen) {
             const unsub = classroomController.subscribe(setState);
+            // Detectar la IP LAN del anfitrión para mostrarla automáticamente.
+            classroomController.getLocalIPs().then(() => {
+                const ips = classroomController.getState().localIPs;
+                setIpStatus(Array.isArray(ips) && ips.length > 0 ? 'ok' : 'none');
+            });
             return () => unsub();
         }
         return undefined;
@@ -154,7 +162,9 @@ const ClassroomSetupModal = ({isOpen, onClose}) => {
         return null;
     };
 
-    const renderCreateForm = () => (
+    const renderCreateForm = () => {
+        const primaryIP = classroomController.primaryIP();
+        return (
         <React.Fragment>
             <div className={styles['classroom-field']}>
                 <label className={styles['classroom-label']}>
@@ -168,6 +178,35 @@ const ClassroomSetupModal = ({isOpen, onClose}) => {
                     onChange={e => setHostName(e.target.value)}
                     maxLength={40}
                 />
+            </div>
+
+            <div className={styles['classroom-code-box']}>
+                <div className={styles['classroom-code-label']}>
+                    <span>🌐</span> IP para los alumnos (haz clic para copiarla)
+                </div>
+                {ipStatus === 'ok' && primaryIP ? (
+                    <div className={styles['classroom-ip-value']} title="Haz clic para copiar">
+                        {primaryIP}
+                    </div>
+                ) : ipStatus === 'loading' ? (
+                    <div className={styles['classroom-ip-loading']}>
+                        <span className={styles['classroom-spinner']} />
+                        Detectando IP…
+                    </div>
+                ) : (
+                    <div className={styles['classroom-ip-loading']}>
+                        No se pudo detectar la IP automáticamente.
+                    </div>
+                )}
+                {ipStatus === 'ok' && state.localIPs.length > 1 && (
+                    <div className={styles['classroom-ip-alt']}>
+                        Otras: {state.localIPs.join(' · ')}
+                    </div>
+                )}
+                <p className={styles['classroom-hint']}>
+                    Los alumnos deben estar en la misma red Wi-Fi y escribir esta IP en
+                    “Unirse a sesión”.
+                </p>
             </div>
 
             <div className={styles['classroom-code-box']}>
@@ -247,7 +286,8 @@ const ClassroomSetupModal = ({isOpen, onClose}) => {
                 Crear sesión
             </button>
         </React.Fragment>
-    );
+        );
+    };
 
     const renderJoinForm = () => (
         <React.Fragment>

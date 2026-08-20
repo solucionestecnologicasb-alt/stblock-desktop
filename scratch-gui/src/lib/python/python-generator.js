@@ -115,6 +115,17 @@ class PythonGenerator {
                         this.variableIdToName[list.getId()] = list.name;
                     }
                 }
+
+                // Mensajes de difusión (broadcast_msg): se usan como nombre de
+                // mensaje en enviar_mensaje(...) / @cuando_reciba(...), NO se
+                // declaran como variables (no deben inicializarse a 0).
+                const allBroadcast = variableMap.getVariablesOfType('broadcast_msg') || [];
+                for (const broadcastVar of allBroadcast) {
+                    if (broadcastVar && broadcastVar.name) {
+                        this.variableIdToName = this.variableIdToName || {};
+                        this.variableIdToName[broadcastVar.getId()] = broadcastVar.name;
+                    }
+                }
             }
 
             // Bloques personalizados
@@ -150,6 +161,19 @@ class PythonGenerator {
             return varIdOrName;
         }
         return 'variable';
+    }
+
+    /**
+     * Obtiene el nombre real de un mensaje de difusión dado su ID.
+     * A diferencia de las variables, el nombre del mensaje NO se sanitiza:
+     * es un literal de cadena (enviar_mensaje("mi mensaje")).
+     */
+    getBroadcastMessageName(value) {
+        if (!value) return '';
+        if (this.variableIdToName && this.variableIdToName[value]) {
+            return this.variableIdToName[value];
+        }
+        return value;
     }
 
     /**
@@ -476,6 +500,11 @@ class PythonGenerator {
                         if (field.name === 'VARIABLE' || field.name === 'LIST') {
                             value = this.getVariableName(value);
                             value = this.sanitizeVariableName(value);
+                        } else if (field.name === 'BROADCAST_OPTION') {
+                            // Los mensajes de difusión se guardan como ID de
+                            // variable (broadcast_msg); traducir ID → nombre
+                            // (sin sanitizar, es un literal de cadena).
+                            value = this.getBroadcastMessageName(value);
                         }
 
                         args[field.name] = value;
@@ -544,7 +573,13 @@ class PythonGenerator {
             if (input.fieldRow) {
                 for (const field of input.fieldRow) {
                     if (field.getValue) {
-                        return field.getValue();
+                        let val = field.getValue();
+                        // El menú de difusión (event_broadcast_menu) guarda el
+                        // ID de la variable broadcast_msg; traducir a nombre.
+                        if (field.name === 'BROADCAST_OPTION') {
+                            val = this.getBroadcastMessageName(val);
+                        }
+                        return val;
                     }
                 }
             }

@@ -558,10 +558,11 @@ class VirtualMachine extends EventEmitter {
      * @param {object} sketchforgeData Optional 3D SketchForge project: {bytes: ArrayBuffer|Uint8Array}
      * @param {string|object} programmingProjectData Optional Programación project JSON.
      * @param {Blob|ArrayBuffer|Uint8Array} programmingProjectArchive Optional complete Programación SB3.
+     * @param {object} pythonData Optional Python editor data: {pythonCodes: {targetName: code}}.
      * @return {!Promise} Promise that resolves with a Blob of the .flynt zip.
      */
     async saveProjectFlynt (aiData, deviceData, circuitData, sketchforgeData,
-        programmingProjectData, programmingProjectArchive) {
+        programmingProjectData, programmingProjectArchive, pythonData) {
         const zip = new JSZip();
         let importedProgrammingArchive = false;
 
@@ -602,7 +603,7 @@ class VirtualMachine extends EventEmitter {
             format: 'flynt',
             created: new Date().toISOString(),
             generator: 'scratch-vm',
-            features: ['ai', 'device-projects', 'circuit-state']
+            features: ['ai', 'device-projects', 'circuit-state', 'python-data']
         }, null, 2));
 
         // AI data
@@ -655,6 +656,13 @@ class VirtualMachine extends EventEmitter {
         // inside the .flynt bundle and can be restored on another machine.
         if (sketchforgeData && sketchforgeData.bytes) {
             zip.file('sketchforge/project.skf', sketchforgeData.bytes);
+        }
+
+        // Python editor data (code per target name) so the text editor can be
+        // restored on load. Keyed by target NAME because target ids are
+        // randomized each time a project is deserialized.
+        if (pythonData && pythonData.pythonCodes && Object.keys(pythonData.pythonCodes).length > 0) {
+            zip.file('python/python-data.json', JSON.stringify(pythonData, null, 2));
         }
 
         return zip.generateAsync({
@@ -1222,7 +1230,15 @@ class VirtualMachine extends EventEmitter {
         if (costume && this.runtime && this.runtime.renderer) {
             costume.rotationCenterX = rotationCenterX;
             costume.rotationCenterY = rotationCenterY;
+            // La actualización del skin SVG es asíncrona: el navegador decodifica
+            // la imagen y solo entonces el skin emite 'WasAltered'. Con el gate de
+            // dibujo por dirty-state, ese evento no vuelve a pedir un redraw, así
+            // que el personaje no muestra el cambio hasta ocultarlo/mostrarlo.
+            // Nos suscribimos para pedir un redraw cuando el skin termine de cargar.
+            this._trackSkinRedraw(this.runtime.renderer._allSkins[costume.skinId]);
             this.runtime.renderer.updateSVGSkin(costume.skinId, svg, [rotationCenterX, rotationCenterY]);
+            // updateSVGSkin pudo reemplazar el skin por uno nuevo (cambio de tipo).
+            this._trackSkinRedraw(this.runtime.renderer._allSkins[costume.skinId]);
             costume.size = this.runtime.renderer.getSkinSize(costume.skinId);
             this.runtime.requestRedraw();
         }
@@ -1241,6 +1257,23 @@ class VirtualMachine extends EventEmitter {
         costume.assetId = costume.asset.assetId;
         costume.md5 = `${costume.assetId}.${costume.dataFormat}`;
         this.emitTargetsUpdate();
+    }
+
+    /**
+     * Suscribe el evento 'WasAltered' de un skin para pedir un redraw cuando su
+     * textura cambie de forma asíncrona (p. ej. al editar un disfraz vectorial).
+     * Se suscribe una sola vez por objeto de skin (WeakSet) para no acumular
+     * listeners durante ediciones repetidas.
+     * @param {object} skin - el skin del renderer (scratch-render) o null.
+     */
+    _trackSkinRedraw (skin) {
+        if (!skin || typeof skin.on !== 'function') return;
+        if (!this._skinRedrawTracked) this._skinRedrawTracked = new WeakSet();
+        if (this._skinRedrawTracked.has(skin)) return;
+        this._skinRedrawTracked.add(skin);
+        skin.on('WasAltered', () => {
+            if (this.runtime) this.runtime.requestRedraw();
+        });
     }
 
     /**
@@ -1973,6 +2006,29 @@ class VirtualMachine extends EventEmitter {
             if (file && !file.dir) {
                 return file.async('arraybuffer').then(function (arrayBuffer) {
                     return {bytes: arrayBuffer};
+                });
+            }
+            return null;
+        }).catch(function () {
+            return null;
+        });
+    }
+
+    /**
+     * Extract Python editor data from a .flynt zip.
+     * @param {ArrayBuffer} buffer The .flynt zip content.
+     * @return {!Promise<object|null>} {pythonCodes: {targetName: code}} or null.
+     */
+    static extractFlyntPythonData (buffer) {
+        return JSZip.loadAsync(buffer).then(function (zip) {
+            var file = zip.files['python/python-data.json'];
+            if (file && !file.dir) {
+                return file.async('string').then(function (text) {
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        return null;
+                    }
                 });
             }
             return null;

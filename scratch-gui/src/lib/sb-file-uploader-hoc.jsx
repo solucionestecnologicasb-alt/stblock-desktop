@@ -179,10 +179,12 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                     return;
                 }
 
-                // Check if .flynt format and extract AI, device and 3D data before loading project
+                // Check if .flynt format and extract AI, device, 3D and Python data
+                // before loading project.
                 var aiDataPromise = Promise.resolve(null);
                 var deviceDataPromise = Promise.resolve(null);
                 var sketchforgeDataPromise = Promise.resolve(null);
+                var pythonDataPromise = Promise.resolve(null);
                 if (buffer && typeof buffer === 'object') {
                     var VMClass = self.props.vm && self.props.vm.constructor;
                     if (VMClass && VMClass.isFlynt) {
@@ -204,15 +206,40 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                             }
                             return null;
                         });
+                        pythonDataPromise = VMClass.isFlynt(buffer).then(function (isFlynt) {
+                            if (isFlynt && VMClass.extractFlyntPythonData) {
+                                return VMClass.extractFlyntPythonData(buffer);
+                            }
+                            return null;
+                        });
                     }
                 }
 
-                Promise.all([aiDataPromise, deviceDataPromise, sketchforgeDataPromise]).then(function (results) {
+                Promise.all([
+                    aiDataPromise,
+                    deviceDataPromise,
+                    sketchforgeDataPromise,
+                    pythonDataPromise
+                ]).then(function (results) {
                     var aiData = results[0];
                     var deviceData = results[1];
                     var sketchforgeData = results[2];
+                    var pythonData = results[3];
                     self.props.onLoadingStarted();
                     try { localStorage.removeItem('ai_messages'); } catch (e) {}
+                    // Guardar los códigos Python ANTES de loadProject: el handler de
+                    // PROJECT_LOADED en gui.jsx los lee para restaurar el editor de
+                    // texto (los ids de target cambian al recargar).
+                    if (pythonData && pythonData.pythonCodes) {
+                        try {
+                            localStorage.setItem('stblock_python_project_codes',
+                                JSON.stringify(pythonData.pythonCodes));
+                        } catch (_) {}
+                    } else {
+                        // No es un .flynt con datos Python: descartar códigos
+                        // antiguos para no restaurarlos en otro proyecto.
+                        try { localStorage.removeItem('stblock_python_project_codes'); } catch (_) {}
+                    }
                     var loadingSuccess = false;
                     self.props.vm.loadProject(buffer)
                         .then(function () {
@@ -299,6 +326,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                         })
                         .catch(function (error) {
                             log.warn(error);
+                            try { localStorage.removeItem('stblock_python_project_codes'); } catch (_) {}
                             alert(self.props.intl.formatMessage(messages.loadError)); // eslint-disable-line no-alert
                         })
                         .then(function () {

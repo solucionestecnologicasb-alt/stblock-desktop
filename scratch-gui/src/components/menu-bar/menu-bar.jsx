@@ -318,7 +318,8 @@ class MenuBar extends React.Component {
                 circuitData,
                 sketchforgeData,
                 workspaceState && workspaceState.programmingProject,
-                workspaceState && workspaceState.programmingProjectArchive
+                workspaceState && workspaceState.programmingProjectArchive,
+                workspaceState && {pythonCodes: workspaceState.pythonCodes}
             );
             const contentBytes = await getFlyntBytes(content);
             console.info('[Flynt] Proyecto listo para guardar', { // eslint-disable-line no-console

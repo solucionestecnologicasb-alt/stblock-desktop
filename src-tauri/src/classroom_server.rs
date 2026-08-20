@@ -24,12 +24,30 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 type ConnMap = Mutex<HashMap<u64, mpsc::UnboundedSender<WsMessage>>>;
 type ClientIdMap = Mutex<HashMap<String, u64>>;
 
+// Ruta portable del log: %TEMP%/stblock_classroom.log (funciona en cualquier
+// máquina con la app instalada, no depende de la ruta de desarrollo).
+static LOG_PATH: Lazy<std::path::PathBuf> = Lazy::new(|| {
+    std::env::temp_dir().join("stblock_classroom.log")
+});
+
+fn now_ms() -> u128 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
 fn log_to_file(msg: &str) {
+    println!("[Rust Classroom] {}", msg);
     use std::fs::OpenOptions;
     use std::io::Write;
-    let path = "C:\\Users\\bello\\.gemini\\antigravity-cli\\brain\\d2e47e50-b88d-41eb-bd40-b84ba8464866\\scratch\\classroom_rust.log";
+    let path = LOG_PATH.as_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
-        let _ = writeln!(file, "{}", msg);
+        let _ = writeln!(file, "[{}] {}", now_ms(), msg);
     }
 }
 
@@ -104,9 +122,12 @@ async fn accept_loop(listener: TcpListener, mut shutdown_rx: watch::Receiver<boo
             _ = shutdown_rx.changed() => break,
             res = listener.accept() => {
                 match res {
-                    Ok((stream, _)) => {
+                    Ok((stream, addr)) => {
                         let id = NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                        log_to_file(&format!("[Rust Classroom] Connection accepted, id={}", id));
+                        log_to_file(&format!(
+                            "[Rust Classroom] Connection accepted, id={}, peer={}",
+                            id, addr
+                        ));
                         tokio::spawn(handle_conn(id, stream));
                     }
                     Err(_) => break,
@@ -195,21 +216,28 @@ async fn handle_incoming(
             if role == "servidor" {
                 let mut host = HOST_ID.lock().await;
                 if host.is_some() {
+                    log_to_file(&format!("[Rust Classroom] id={} identify servidor RECHAZADO (ya hay host)", id));
                     return HandleResult::CloseConn; // solo un host por sesión
                 }
                 *host = Some(id);
                 *is_host = true;
+                log_to_file(&format!("[Rust Classroom] id={} registrado como HOST (servidor)", id));
             } else if !cid.is_empty() {
                 CLIENT_IDS.lock().await.insert(cid.clone(), id);
-                *client_id = Some(cid);
+                *client_id = Some(cid.clone());
+                log_to_file(&format!("[Rust Classroom] id={} registrado como CLIENTE clientId={}", id, cid));
             }
             HandleResult::Continue
         }
         "broadcast" => {
             if *is_host {
                 if let Some(payload) = value.get("payload") {
+                    let ptype = payload.get("type").and_then(|t| t.as_str()).unwrap_or("?");
+                    log_to_file(&format!("[Rust Classroom] id={} BROADCAST type={}", id, ptype));
                     broadcast_to_clients(&payload.to_string()).await;
                 }
+            } else {
+                log_to_file(&format!("[Rust Classroom] id={} broadcast ignorado (no es host)", id));
             }
             HandleResult::Continue
         }
@@ -221,13 +249,18 @@ async fn handle_incoming(
                     .unwrap_or("")
                     .to_string();
                 if let Some(payload) = value.get("payload") {
+                    let ptype = payload.get("type").and_then(|t| t.as_str()).unwrap_or("?");
+                    log_to_file(&format!("[Rust Classroom] id={} TO_CLIENT target={} type={}", id, target, ptype));
                     send_to_client(&target, &payload.to_string()).await;
                 }
+            } else {
+                log_to_file(&format!("[Rust Classroom] id={} to-client ignorado (no es host)", id));
             }
             HandleResult::Continue
         }
         "close-session" => {
             if *is_host {
+                log_to_file(&format!("[Rust Classroom] id={} CLOSE_SESSION: difundiendo session-closed", id));
                 broadcast_to_clients(&json!({ "type": "session-closed" }).to_string()).await;
                 let conns = CONNECTIONS.lock().await;
                 let to_close: Vec<u64> = conns
@@ -248,6 +281,7 @@ async fn handle_incoming(
             // Mensaje de cliente → reenviar al host. Los mensajes del host de
             // tipo desconocido se ignoran.
             if !*is_host {
+                log_to_file(&format!("[Rust Classroom] id={} REENVÍO al host: type={}", id, mtype));
                 send_to_host(text).await;
             }
             HandleResult::Continue
@@ -284,4 +318,50 @@ async fn send_to_host(text: &str) {
             let _ = tx.send(WsMessage::Text(text.to_string().into()));
         }
     }
+}
+
+fn is_private_v4(ip: &std::net::Ipv4Addr) -> bool {
+    let o = ip.octets();
+    o[0] == 10
+        || (o[0] == 172 && (16..=31).contains(&o[1]))
+        || (o[0] == 192 && o[1] == 168)
+}
+
+/// Devuelve las direcciones IPv4 locales (no loopback) a las que los alumnos
+/// deben conectarse para entrar a la sesión del Modo Aula.
+///
+/// Las direcciones de red privada (LAN: 10.x / 172.16-31.x / 192.168.x) se
+/// listan primero; el frontend muestra la primera como IP recomendada.
+pub fn local_ipv4_addresses() -> Vec<String> {
+    let mut ips: Vec<String> = Vec::new();
+    if let Ok(interfaces) = local_ip_address::list_afinet_netifas() {
+        for (_name, ip) in interfaces {
+            if let std::net::IpAddr::V4(v4) = ip {
+                if !v4.is_loopback() {
+                    ips.push(v4.to_string());
+                }
+            }
+        }
+    }
+    // Fallback: IP de la ruta por defecto vía socket UDP (no envía paquetes).
+    if ips.is_empty() {
+        if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+            if socket.connect("8.8.8.8:80").is_ok() {
+                if let Ok(local) = socket.local_addr() {
+                    if let std::net::IpAddr::V4(v4) = local.ip() {
+                        ips.push(v4.to_string());
+                    }
+                }
+            }
+        }
+    }
+    // Estable: las IPs privadas (LAN) primero.
+    ips.sort_by_key(|ip| {
+        if ip.parse::<std::net::Ipv4Addr>().map(|v| is_private_v4(&v)).unwrap_or(false) {
+            0
+        } else {
+            1
+        }
+    });
+    ips
 }

@@ -45,6 +45,12 @@ const ClassroomBanner = ({onOpenConsole, onOpenRoster, onOpenSimulator, onLeave}
             '⏳ En espera de aprobación' :
             '🔵 Sesión activa';
 
+    const hostPort = state.config && state.config.port;
+    // El anfitrión ve la IP LAN que los alumnos deben usar (no 127.0.0.1).
+    const metaText = isHost
+        ? `Código ${state.code} · IP ${state.hostIP || '127.0.0.1'}${hostPort ? `:${hostPort}` : ''}`
+        : `Código ${state.code} · ${(state.serverAddress || '').replace(/^ws:\/\//, '')}`;
+
     return (
         <div className={styles['classroom-banner']}>
             <span className={styles['classroom-banner-logo']}>🏫</span>
@@ -53,7 +59,7 @@ const ClassroomBanner = ({onOpenConsole, onOpenRoster, onOpenSimulator, onLeave}
                     {(state.config && state.config.name) || 'Sesión'}
                 </span>
                 <span className={styles['classroom-banner-meta']}>
-                    Código {state.code} · {state.serverAddress || ''}
+                    {metaText}
                 </span>
             </div>
             <div className={styles['classroom-banner-divider']} />

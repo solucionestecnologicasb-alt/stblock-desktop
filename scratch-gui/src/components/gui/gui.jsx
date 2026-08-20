@@ -453,6 +453,10 @@ const GUIComponent = props => {
     const sketchforgeLatestReduxRef = useRef(sketchforgeSkf);
     sketchforgeLatestReduxRef.current = sketchforgeSkf;
     const [workspaceHandle, setWorkspaceHandle] = useState(null);
+    const workspaceHandleRef = useRef(null);
+    useEffect(() => {
+        workspaceHandleRef.current = workspaceHandle;
+    }, [workspaceHandle]);
     const [mentorGuidanceMsg, setMentorGuidanceMsg] = useState();
     const [showSTBlockLinkPrompt, setShowSTBlockLinkPrompt] = useState(false);
     const [stbBoardPinoutVisible, setStbBoardPinoutVisible] = useState(false);
@@ -1269,14 +1273,117 @@ const GUIComponent = props => {
                 return changed ? nextCodes : previousCodes;
             });
         };
+
+        // Regenera Python desde los bloques py_block_* del target tras cargar un
+        // proyecto. Reintenta porque el workspace de Blockly se puebla de forma
+        // asíncrona después de PROJECT_LOADED (workspaceUpdate llega más tarde).
+        const tryRegeneratePythonFromBlocks = targetId => {
+            let attempts = 0;
+            const maxAttempts = 40;
+            const attempt = () => {
+                attempts++;
+                // Si el usuario ya escribió código para este target, no pisotearlo.
+                if (pythonCodePerTargetRef.current[targetId]) return;
+                // Si el target editado cambió (el usuario lo cambió), abortar:
+                // el workspace mostraría los bloques de OTRO target y generaríamos
+                // código incorrecto para el target original.
+                if (vm.editingTarget && vm.editingTarget.id !== targetId) return;
+                try {
+                    const workspace = workspaceHandleRef.current && workspaceHandleRef.current.workspace;
+                    const target = vm.runtime.getTargetById(targetId);
+                    const vmBlocks = target && target.blocks && target.blocks._blocks;
+                    const hasVMPyBlocks = vmBlocks &&
+                        Object.keys(vmBlocks).some(id => id.startsWith('py_block_'));
+                    const wsHasPyBlocks = workspace && workspace.getAllBlocks(false)
+                        .some(b => b.id && b.id.startsWith('py_block_'));
+                    if (!hasVMPyBlocks || !wsHasPyBlocks) {
+                        if (attempts < maxAttempts) setTimeout(attempt, 100);
+                        return;
+                    }
+                    // Re-chequear justo antes de escribir: si el usuario ya escribió
+                    // código mientras esperábamos al workspace, no pisotearlo.
+                    if (pythonCodePerTargetRef.current[targetId]) return;
+                    const result = generatePythonCodeWithMap(workspace);
+                    if (vm && vm.runtime) vm.runtime.blockLineMap = result.blockLineMap;
+                    setPythonCodePerTarget(prev => ({
+                        ...prev,
+                        [targetId]: result.code
+                    }));
+                } catch (e) {
+                    if (attempts < maxAttempts) {
+                        setTimeout(attempt, 100);
+                    } else {
+                        console.warn('[GUI] Error regenerando Python tras cargar:', e);
+                    }
+                }
+            };
+            setTimeout(attempt, 100);
+        };
+
+        // Restaurar códigos Python tras cargar un proyecto. Los ids de target se
+        // regeneran en cada carga (sb3.deserialize crea ids nuevos), así que los
+        // códigos viajan indexados por NOMBRE de recurso (guardados en el .flynt
+        // por sb-file-uploader en localStorage antes de loadProject). Si no hay
+        // código guardado (proyectos antiguos), se regenera desde los bloques.
+        const restorePythonAfterLoad = () => {
+            if (!vm || !vm.runtime) return;
+            let storedCodes = null;
+            try {
+                const raw = localStorage.getItem('stblock_python_project_codes');
+                if (raw) {
+                    storedCodes = JSON.parse(raw);
+                    localStorage.removeItem('stblock_python_project_codes');
+                }
+            } catch (_) {}
+
+            const liveTargets = (vm.runtime.targets || []).filter(
+                t => !Object.prototype.hasOwnProperty.call(t, 'isOriginal') || t.isOriginal
+            );
+            let restoredCurrent = false;
+
+            if (storedCodes && typeof storedCodes === 'object') {
+                const hasAny = Object.keys(storedCodes)
+                    .some(k => typeof storedCodes[k] === 'string');
+                if (hasAny) {
+                    setPythonCodePerTarget(prev => {
+                        const next = {...prev};
+                        let changed = false;
+                        for (const target of liveTargets) {
+                            const name = target.getName();
+                            if (typeof storedCodes[name] === 'string' &&
+                                next[target.id] !== storedCodes[name]) {
+                                next[target.id] = storedCodes[name];
+                                changed = true;
+                            }
+                        }
+                        return changed ? next : prev;
+                    });
+                    const editingTarget = vm.editingTarget;
+                    if (editingTarget && typeof storedCodes[editingTarget.getName()] === 'string') {
+                        restoredCurrent = true;
+                    }
+                }
+            }
+
+            // Fallback: si el target actual no tiene código (ni restaurado ni
+            // previo), regenerarlo desde los bloques py_block_*. Esto cubre los
+            // proyectos .flynt guardados antes de persistir el texto y las cargas
+            // por Modo Aula (que no pasan por sb-file-uploader).
+            const editingId = vm.editingTarget && vm.editingTarget.id;
+            if (editingId && !restoredCurrent && !pythonCodePerTargetRef.current[editingId]) {
+                tryRegeneratePythonFromBlocks(editingId);
+            }
+        };
         syncTargets();
         vm.on('targetsUpdate', syncTargets);
         vm.runtime.on('PROJECT_LOADED', syncTargets);
         vm.runtime.on('PROJECT_LOADED', pruneOrphanedPythonCodes);
+        vm.runtime.on('PROJECT_LOADED', restorePythonAfterLoad);
         return () => {
             vm.removeListener('targetsUpdate', syncTargets);
             vm.runtime.removeListener('PROJECT_LOADED', syncTargets);
             vm.runtime.removeListener('PROJECT_LOADED', pruneOrphanedPythonCodes);
+            vm.runtime.removeListener('PROJECT_LOADED', restorePythonAfterLoad);
         };
     }, [vm]);
 
@@ -1329,9 +1436,12 @@ const GUIComponent = props => {
         false :
         (isPythonKeyLocked || pythonPanelOpen || classroomForcePython);
 
-    const effectivePanelLocked = (isPythonKeyLocked || classroomForcePython) ?
-        true :
-        (classroomForceBlocks ? false : pythonPanelLocked);
+    // El candado con clave y el modo Aula "Python" FUERZAN el modo solo texto:
+    // panel abierto, edición habilitada y toolbox oculto (isPythonEditMode=true).
+    // Aquí "bloqueado" significa "no puedes salir a bloques", NO "solo lectura".
+    const effectivePanelLocked = classroomForceBlocks ?
+        false :
+        (isPythonKeyLocked || classroomForcePython ? false : pythonPanelLocked);
 
     const pythonPanelIsLocked = effectivePanelLocked || classroomReadOnlyBlocks;
 
@@ -1807,7 +1917,10 @@ const GUIComponent = props => {
         return {
             programmingProject: programmingProject || vm.toJSON(),
             programmingProjectArchive: resolvedArchive,
-            deviceProjects
+            deviceProjects,
+            // Códigos Python indexados por NOMBRE de target para persistir en el
+            // .flynt (los ids de target cambian al recargar el proyecto).
+            pythonCodes: pythonCodesByName(vm, pythonCodePerTargetRef.current)
         };
     }, [deviceMode, deviceModeDevice, deviceModeProjects, hasBlocksInWorkspace, vm]);
 

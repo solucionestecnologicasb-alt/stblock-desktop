@@ -518,6 +518,42 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
+   IP DEL ANFITRIÓN (detectada automáticamente)
+   ═══════════════════════════════════════════════════════════ */
+
+.classroom-ip-value {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #19663d;
+    font-family: monospace;
+    cursor: pointer;
+    user-select: all;
+    transition: transform 0.15s;
+}
+
+.classroom-ip-value:hover {
+    transform: scale(1.03);
+}
+
+.classroom-ip-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #19663d;
+    min-height: 28px;
+}
+
+.classroom-ip-alt {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #666;
+    line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════════════════
    INFO / AYUDA
    ═══════════════════════════════════════════════════════════ */
 

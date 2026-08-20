@@ -202,10 +202,10 @@ export const BLOCK_TO_PYTHON = {
         `escenario.siguiente_fondo()`,
 
     'looks_changesizeby': (args) =>
-        `sprite.cambiar_tamano(${formatNumberOrExpr(args.CHANGE, args, 'CHANGE')})`,
+        `sprite.cambiar_tamaño(${formatNumberOrExpr(args.CHANGE, args, 'CHANGE')})`,
 
     'looks_setsizeto': (args) =>
-        `sprite.fijar_tamano(${formatNumberOrExpr(args.SIZE, args, 'SIZE')})`,
+        `sprite.fijar_tamaño(${formatNumberOrExpr(args.SIZE, args, 'SIZE')})`,
 
     'looks_changeeffectby': (args) =>
         `sprite.cambiar_efecto("${escapeString(args.EFFECT)}", ${formatNumberOrExpr(args.CHANGE, args, 'CHANGE')})`,
@@ -235,7 +235,7 @@ export const BLOCK_TO_PYTHON = {
         `escenario.fondo_${args.NUMBER_NAME === 'number' ? 'numero' : 'nombre'}`,
 
     'looks_size': () =>
-        `sprite.tamano`,
+        `sprite.tamaño`,
 
     // ═══════════════════════════════════════════════════════════════
     // SONIDO

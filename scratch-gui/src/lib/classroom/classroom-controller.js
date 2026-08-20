@@ -20,15 +20,29 @@ import {ROLES} from './classroom-access';
 const COLORS = ['#00b359', '#0ea5e9', '#f97316', '#8b5cf6', '#eab308', '#3b82f6', '#ec4899', '#14b8a6'];
 const DEFAULT_PORT = 8870;
 
-// Diagnóstico temporal: traza por consola (visible en DevTools del webview).
+// Diagnóstico: traza por consola (visible en DevTools del webview).
 // Se trunca para no volcar el JSON completo de los snapshots en cada sync.
+const MAX_LOG = 800;
 const logDiag = (msg) => {
     try {
-        const MAX = 600;
-        const text = msg && msg.length > MAX ?
-            `${msg.slice(0, MAX)}… (${msg.length} chars)` :
-            String(msg || '');
-        
+        const s = String(msg || '');
+        const text = s.length > MAX_LOG ?
+            `${s.slice(0, MAX_LOG)}… (${s.length} chars)` :
+            s;
+        console.log(`[Classroom] ${text}`);
+    } catch (e) {
+        // ignorar
+    }
+};
+
+// Traza con etiqueta de rol para distinguir el flujo del servidor (host) y del cliente.
+const trace = (role, ...args) => {
+    try {
+        const parts = args.map(a => {
+            const s = typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch (e) { return String(a); } })();
+            return s.length > MAX_LOG ? `${s.slice(0, MAX_LOG)}… (${s.length} chars)` : s;
+        });
+        console.log(`[Classroom][${role}]`, ...parts);
     } catch (e) {
         // ignorar
     }
@@ -41,6 +55,7 @@ class ClassroomController {
         this.config = {};
         this.listeners = new Set();
         this.hostAddress = null;
+        this._localIPs = null; // caché de IPs locales detectadas
         this.state = {
             active: false,
             role: null,
@@ -55,6 +70,8 @@ class ClassroomController {
             assignments: {},
             pendingQueue: [],
             serverAddress: null,
+            localIPs: [],   // IPs IPv4 de la máquina (no loopback), privadas primero
+            hostIP: null,   // IP principal que los alumnos deben usar para conectarse
             classRunning: false
         };
     }
@@ -93,22 +110,76 @@ class ClassroomController {
         this._emit();
     }
 
+    // Elige la IP principal para los alumnos: preferir la de red privada (LAN).
+    static pickPrimaryIP (ips) {
+        if (!Array.isArray(ips) || ips.length === 0) return null;
+        const isPrivate = ip =>
+            /^10\./.test(ip) ||
+            /^192\.168\./.test(ip) ||
+            /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip);
+        return ips.find(isPrivate) || ips[0];
+    }
+
+    // Método de instancia: IP principal recomendada para los alumnos.
+    primaryIP () {
+        return ClassroomController.pickPrimaryIP(this.state.localIPs);
+    }
+
+    // Consulta las IPs IPv4 locales al backend Tauri (con caché).
+    async getLocalIPs () {
+        if (this._localIPs) return this._localIPs;
+        try {
+            if (typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core) {
+                const ips = await window.__TAURI__.core.invoke('classroom_local_ip');
+                this._localIPs = Array.isArray(ips) ? ips.filter(ip => typeof ip === 'string') : [];
+            } else {
+                // Sin Tauri (dev en navegador): no hay red LAN real.
+                this._localIPs = [];
+            }
+        } catch (e) {
+            trace('Sistema', 'getLocalIPs ERROR →', String(e));
+            this._localIPs = [];
+        }
+        this._set({localIPs: this._localIPs, hostIP: ClassroomController.pickPrimaryIP(this._localIPs)});
+        return this._localIPs;
+    }
+
     // ───────────────────────────────────────────────────────────
     //  Host: iniciar servidor (Tauri) y conectar como servidor
     // ───────────────────────────────────────────────────────────
     async startHosting ({name, code, scope, maxConnections, purpose = 'programacion', port = DEFAULT_PORT}) {
+        trace('Servidor', 'INICIAR SESIÓN', {name, code, scope, maxConnections, purpose, port});
         try {
             if (typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core) {
-                await window.__TAURI__.core.invoke('classroom_start_server', {port});
+                try {
+                    const result = await window.__TAURI__.core.invoke('classroom_start_server', {port});
+                    trace('Servidor', 'relay classroom_start_server OK →', result);
+                } catch (e) {
+                    trace('Servidor', 'relay classroom_start_server ERROR →', String(e));
+                    if (String(e).includes('ya está en ejecución')) {
+                        // Relay obsoleto de una sesión anterior: detener y reintentar.
+                        trace('Servidor', 'Relay obsoleto detectado: classroom_stop_server + reintento...');
+                        await window.__TAURI__.core.invoke('classroom_stop_server');
+                        const result2 = await window.__TAURI__.core.invoke('classroom_start_server', {port});
+                        trace('Servidor', 'relay classroom_start_server (reintento) OK →', result2);
+                    } else {
+                        console.warn('[Classroom] Error iniciando servidor:', e);
+                    }
+                }
             } else {
                 console.warn('[Classroom] Sin Tauri: no se puede iniciar el servidor local.');
+                trace('Servidor', 'relay classroom_start_server NO EJECUTADO (sin Tauri)');
             }
         } catch (e) {
-            console.warn('[Classroom] Error iniciando servidor:', e);
+            console.warn('[Classroom] Error iniciando servidor (final):', e);
+            trace('Servidor', 'relay classroom_start_server ERROR FINAL →', String(e));
         }
 
         this.hostAddress = `127.0.0.1:${port}`;
         const clientId = this._genId();
+        await this.getLocalIPs(); // pobla localIPs y hostIP en el estado
+        const hostIP = this.state.hostIP;
+        trace('Servidor', 'Configurando estado host, clientId=', clientId, 'hostAddress=', this.hostAddress, 'hostIP=', hostIP);
         this._set({
             active: true,
             role: ROLES.SERVIDOR,
@@ -119,6 +190,7 @@ class ClassroomController {
             config: {name, purpose, scope, maxConnections, port},
             connectionState: 'hosting',
             serverAddress: `ws://${this.hostAddress}`,
+            hostIP,
             roster: [{
                 id: clientId,
                 name: `${name} (servidor)`,
@@ -139,6 +211,7 @@ class ClassroomController {
     joinSession ({host, port, code, name}) {
         this.hostAddress = `${host}:${port}`;
         const clientId = this._genId();
+        trace('Cliente', 'UNIRSE A SESIÓN', {host, port, code, name, clientId});
         this._set({
             active: true,
             role: ROLES.CLIENTE,
@@ -160,10 +233,12 @@ class ClassroomController {
     }
 
     _connect (url, identify) {
+        trace(identify.role === ROLES.SERVIDOR ? 'Servidor' : 'Cliente', `WebSocket conectando a ${url} (role=${identify.role})`);
         let ws;
         try {
             ws = new WebSocket(url);
         } catch (e) {
+            console.warn('[Classroom] Error creando WebSocket:', e);
             this._set({connectionState: 'closed', error: `No se pudo conectar: ${e.message}`});
             return;
         }
@@ -171,7 +246,7 @@ class ClassroomController {
         this._closing = false;
 
         ws.onopen = () => {
-            logDiag(`OPEN ${url} role=${identify.role} clientId=${identify.clientId}`);
+            trace(identify.role === ROLES.SERVIDOR ? 'Servidor' : 'Cliente', 'WebSocket ABIERTO', `url=${url} readyState=${ws.readyState}`);
             this._send({type: MSG.IDENTIFY, role: identify.role, clientId: identify.clientId, name: identify.name});
             if (identify.role === ROLES.CLIENTE) {
                 this._set({connectionState: 'pending'});
@@ -188,19 +263,40 @@ class ClassroomController {
 
         ws.onmessage = e => this._handleMessage(e.data);
 
-        ws.onclose = () => this._handleClose();
+        ws.onclose = (ev) => {
+            trace(
+                identify.role === ROLES.SERVIDOR ? 'Servidor' : 'Cliente',
+                'WebSocket CERRADO',
+                `code=${ev && ev.code} reason=${ev && ev.reason} wasClean=${ev && ev.wasClean}`
+            );
+            this._handleClose();
+        };
 
-        ws.onerror = () => {
+        ws.onerror = (ev) => {
+            console.warn(
+                '[Classroom] WebSocket ERROR',
+                identify.role,
+                'url=', url,
+                'readyState=', ws.readyState,
+                'event=', ev && ev.type
+            );
             if (!this._closing) this._set({error: 'Error de conexión.'});
         };
     }
 
     _send (obj) {
+        const roleLabel = this.state.role === ROLES.SERVIDOR ? 'Servidor' : 'Cliente';
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            logDiag(`SEND role=${this.state.role} ${JSON.stringify(obj)}`);
+            trace(roleLabel, 'ENVIAR', JSON.stringify(obj));
             this.ws.send(JSON.stringify(obj));
         } else {
-            logDiag(`SEND-FALLIDO role=${this.state.role} ws=${!!this.ws} ready=${this.ws && this.ws.readyState} ${JSON.stringify(obj)}`);
+            console.warn(
+                '[Classroom] ENVÍO FALLIDO (socket no abierto)',
+                `role=${this.state.role}`,
+                `ws=${!!this.ws}`,
+                `readyState=${this.ws ? this.ws.readyState : 'n/a'}`,
+                JSON.stringify(obj)
+            );
         }
     }
 
@@ -215,7 +311,8 @@ class ClassroomController {
             return;
         }
         if (!msg || !msg.type) return;
-        logDiag(`RECV role=${this.state.role} state=${this.state.connectionState} ${raw}`);
+        const roleLabel = this.state.role === ROLES.SERVIDOR ? 'Servidor' : 'Cliente';
+        trace(roleLabel, 'RECIBIDO', `type=${msg.type} state=${this.state.connectionState}`, raw);
         if (this.state.role === ROLES.SERVIDOR) {
             this._handleHostMessage(msg);
         } else {
@@ -227,17 +324,26 @@ class ClassroomController {
     _handleHostMessage (msg) {
         switch (msg.type) {
         case MSG.JOIN_REQUEST: {
-            logDiag(`HOST_JOIN_REQUEST role=${this.state.role} roster=${this.state.roster.length} max=${(this.state.config || {}).maxConnections} ${JSON.stringify(msg)}`);
             const config = this.state.config || {};
+            const codeOK = !config || !config.code || msg.code === config.code;
+            trace('Servidor',
+                '📥 SOLICITUD DE INGRESO',
+                `name="${msg.name}"`,
+                `clientId=${msg.clientId}`,
+                `code="${msg.code}" (esperado="${config.code}", coincide=${codeOK})`,
+                `roster=${this.state.roster.length}/${config.maxConnections}`);
             if (this.state.roster.length >= config.maxConnections) {
+                trace('Servidor', 'Solicitud RECHAZADA: sesión llena.');
                 this._toClient(msg.clientId, {type: MSG.REQUEST_REJECTED, reason: 'Sesión llena.'});
                 return;
             }
             const req = {id: msg.clientId, name: msg.name, requestedAt: Date.now()};
+            trace('Servidor', 'Solicitud encolada en pendingQueue, total=', this.state.pendingQueue.length + 1);
             this._set({pendingQueue: [...this.state.pendingQueue, req]});
             break;
         }
         case MSG.LEAVE: {
+            trace('Servidor', 'Cliente abandonó la sesión clientId=', msg.clientId);
             this._removeClient(msg.clientId);
             break;
         }
@@ -251,7 +357,7 @@ class ClassroomController {
             } catch (e) {
                 // ignorar
             }
-            
+            trace('Servidor', 'TARGET_UPDATE recibido', `clientId=${msg.clientId} inRoster=${inRoster} targets=${names}`);
             if (!inRoster) break;
             const payload = {
                 sourceClientId: msg.clientId,
@@ -276,7 +382,7 @@ class ClassroomController {
     _handleClientMessage (msg) {
         switch (msg.type) {
         case MSG.REQUEST_ACCEPTED: {
-            
+            trace('Cliente', '✅ SOLICITUD ACEPTADA por el servidor', `color=${msg.color} roster=${(msg.roster || []).length}`);
             this._set({
                 connectionState: 'connected',
                 color: msg.color,
@@ -287,6 +393,7 @@ class ClassroomController {
             break;
         }
         case MSG.REQUEST_REJECTED: {
+            trace('Cliente', '❌ SOLICITUD RECHAZADA por el servidor', msg.reason);
             this._set({connectionState: 'rejected', error: msg.reason || 'Solicitud rechazada.'});
             this._teardownSocket();
             break;
@@ -298,7 +405,7 @@ class ClassroomController {
             } catch (e) {
                 // ignorar
             }
-            
+            trace('Cliente', 'PROJECT_SNAPSHOT recibido del servidor', `targets=${names}`);
             if (this.config.onRemoteProjectUpdate) {
                 this.config.onRemoteProjectUpdate({
                     sourceClientId: null,
@@ -357,11 +464,16 @@ class ClassroomController {
     // ───────────────────────────────────────────────────────────
     acceptRequest (requestId) {
         const req = this.state.pendingQueue.find(r => r.id === requestId);
-        if (!req) return;
+        if (!req) {
+            trace('Servidor', 'Aceptar solicitud ignorada: no está en pendingQueue requestId=', requestId);
+            return;
+        }
+        trace('Servidor', '✅ ACEPTAR solicitud', `name="${req.name}"`, `clientId=${req.id}`);
         const color = COLORS[this.state.roster.length % COLORS.length];
         const client = {id: req.id, name: req.name, role: ROLES.CLIENTE, color, connected: true};
         const roster = [...this.state.roster, client];
         this._set({roster, pendingQueue: this.state.pendingQueue.filter(r => r.id !== requestId)});
+        trace('Servidor', 'Enviando REQUEST_ACCEPTED a', req.id, 'roster=', roster.length);
         this._toClient(req.id, {
             type: MSG.REQUEST_ACCEPTED,
             clientId: req.id,
@@ -370,15 +482,21 @@ class ClassroomController {
             roster,
             assignments: this.state.assignments
         });
+        trace('Servidor', 'Difundiendo ROSTER_UPDATED (', roster.length, 'participantes )');
         this._broadcast({type: MSG.ROSTER_UPDATED, roster});
         if (this.config.onClientAccepted) {
+            trace('Servidor', 'Notificando onClientAccepted');
             this.config.onClientAccepted(client);
         }
     }
 
     rejectRequest (requestId) {
         const req = this.state.pendingQueue.find(r => r.id === requestId);
-        if (!req) return;
+        if (!req) {
+            trace('Servidor', 'Rechazar solicitud ignorada: no está en pendingQueue requestId=', requestId);
+            return;
+        }
+        trace('Servidor', '❌ RECHAZAR solicitud', `name="${req.name}"`, `clientId=${req.id}`);
         this._set({pendingQueue: this.state.pendingQueue.filter(r => r.id !== requestId)});
         this._toClient(req.id, {type: MSG.REQUEST_REJECTED, reason: 'Solicitud rechazada por el servidor.'});
     }
@@ -410,7 +528,7 @@ class ClassroomController {
         } catch (e) {
             // ignorar
         }
-        
+        trace(this.state.role === ROLES.SERVIDOR ? 'Servidor' : 'Cliente', 'sendProjectUpdate', `role=${this.state.role} targets=${names} pyCodes=${Object.keys(pythonCodes || {}).length}`);
         if (this.state.role === ROLES.SERVIDOR) {
             this._broadcast({
                 type: MSG.PROJECT_UPDATED,
@@ -429,6 +547,7 @@ class ClassroomController {
     }
 
     sendSnapshotToClient (clientId, {projectJSON, pythonCodes}) {
+        trace('Servidor', 'sendSnapshotToClient →', clientId, `pyCodes=${Object.keys(pythonCodes || {}).length}`);
         this._toClient(clientId, {
             type: MSG.PROJECT_SNAPSHOT,
             projectJSON,
@@ -452,6 +571,7 @@ class ClassroomController {
     //  Cierre / salida
     // ───────────────────────────────────────────────────────────
     leave () {
+        trace(this.state.role === ROLES.SERVIDOR ? 'Servidor' : 'Cliente', 'Salir de la sesión');
         if (this.state.role === ROLES.SERVIDOR) {
             this._send({type: MSG.CLOSE_SESSION});
         } else if (this.state.clientId) {
@@ -476,8 +596,18 @@ class ClassroomController {
     }
 
     _closeSession (message) {
+        const wasServer = this.state.role === ROLES.SERVIDOR;
+        trace(wasServer ? 'Servidor' : 'Cliente', 'Sesión cerrada', message || '(por el usuario)');
         this._closing = true;
         this._teardownSocket();
+        if (wasServer && typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core) {
+            // El relay es del host: detenerlo al terminar la sesión para que el
+            // puerto quede libre y no quede un "relay fantasma" (bug: "ya está en ejecución").
+            window.__TAURI__.core.invoke('classroom_stop_server').then(
+                r => trace('Servidor', 'relay classroom_stop_server OK →', r),
+                e => trace('Servidor', 'relay classroom_stop_server ERROR →', String(e))
+            );
+        }
         this._set({
             active: false,
             role: null,
@@ -499,12 +629,14 @@ class ClassroomController {
     }
 
     _handleClose () {
-        logDiag(`WS_CLOSE role=${this.state.role} state=${this.state.connectionState} closing=${this._closing}`);
+        const roleLabel = this.state.role === ROLES.SERVIDOR ? 'Servidor' : 'Cliente';
+        trace(roleLabel, 'WS_CLOSE', `state=${this.state.connectionState} closing=${this._closing}`);
         if (this._closing) {
             this._closing = false;
             return;
         }
         if (this.state.active && this.state.connectionState !== 'closed') {
+            trace(roleLabel, 'Cerrando sesión por conexión perdida.');
             this._closeSession('Conexión perdida.');
         }
     }
@@ -528,10 +660,12 @@ class ClassroomController {
     //  Utils
     // ───────────────────────────────────────────────────────────
     _broadcast (payload) {
+        trace('Servidor', 'BROADCAST → todos los clientes', payload && payload.type);
         this._send({type: MSG.BROADCAST, payload});
     }
 
     _toClient (clientId, payload) {
+        trace('Servidor', 'TO_CLIENT →', clientId, payload && payload.type);
         this._send({type: MSG.TO_CLIENT, clientId, payload});
     }
 

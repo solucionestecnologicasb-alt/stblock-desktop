@@ -331,6 +331,11 @@ async fn classroom_is_running() -> bool {
     is_classroom_running().await
 }
 
+#[tauri::command]
+fn classroom_local_ip() -> Vec<String> {
+    local_ipv4_addresses()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -360,7 +365,8 @@ pub fn run() {
             // Modo Aula
             classroom_start_server,
             classroom_stop_server,
-            classroom_is_running
+            classroom_is_running,
+            classroom_local_ip
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

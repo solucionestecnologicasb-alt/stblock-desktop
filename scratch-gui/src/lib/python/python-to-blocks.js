@@ -68,6 +68,10 @@ const FIELD_MENUS = {
 let blockIdCounter = 0;
 const generateBlockId = () => `py_block_${Date.now()}_${blockIdCounter++}`;
 
+// Generador de IDs para variables (mensajes de difusión) creados desde Python
+let varIdCounter = 0;
+const generateVarId = () => `stb_msg_${Date.now()}_${varIdCounter++}`;
+
 // Tipos de errores
 const ERROR_TYPES = {
     UNKNOWN_FUNCTION: 'unknown_function',
@@ -1383,7 +1387,7 @@ function validateCondition(conditionStr, lineNumber) {
 
     // Buscar llamadas a métodos de objetos en la condición
     // Patrones como sprite.tocando("..."), sprite.en_suelo(), etc.
-    const methodCallPattern = /(\w+)\.(\w+)\s*\(/g;
+    const methodCallPattern = /([\wáéíóúüñÁÉÍÓÚÜÑ]+)\.([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\(/g;
     let methodMatch;
     while ((methodMatch = methodCallPattern.exec(cond)) !== null) {
         const objName = methodMatch[1];
@@ -1395,7 +1399,7 @@ function validateCondition(conditionStr, lineNumber) {
     }
 
     // Buscar funciones simples como tecla_presionada("...")
-    const funcPattern = /^(\w+)\s*\(/;
+    const funcPattern = /^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\(/;
     const funcMatch = cond.match(funcPattern);
     if (funcMatch && !funcMatch[1].includes('.')) {
         const funcName = funcMatch[1];
@@ -1453,7 +1457,7 @@ function validatePythonLine(line, lineNumber, userDefinedFunctions = new Set()) 
 
     // ===== VALIDAR LLAMADAS A FUNCIONES =====
     // Patrón: objeto.metodo(args) o funcion(args)
-    const funcPattern = /^(\w+)\.(\w+)\s*\((.*)\)\s*$/;
+    const funcPattern = /^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\.([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\((.*)\)\s*$/;
     const objMethodMatch = trimmed.match(funcPattern);
 
     if (objMethodMatch) {
@@ -1474,7 +1478,7 @@ function validatePythonLine(line, lineNumber, userDefinedFunctions = new Set()) 
         }
     } else {
         // Verificar funciones simples (sin objeto)
-        const simpleFuncPattern = /^(\w+)\s*\((.*)\)\s*$/;
+        const simpleFuncPattern = /^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\((.*)\)\s*$/;
         const simpleFuncMatch = trimmed.match(simpleFuncPattern);
 
         if (simpleFuncMatch) {
@@ -1572,7 +1576,7 @@ export function validatePythonCode(pythonCode) {
 
     // Primera pasada: recolectar nombres de funciones definidas por el usuario (def nombre(...))
     const userDefinedFunctions = new Set();
-    const defPattern = /^\s*def\s+(\w+)\s*\(/;
+    const defPattern = /^\s*def\s+([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\(/;
     for (let i = 0; i < lines.length; i++) {
         const defMatch = lines[i].match(defPattern);
         if (defMatch) {
@@ -1713,7 +1717,7 @@ function parsePythonLine(line) {
     }
 
     // Detectar "for _ in range(N):" o "repetir(N):" → control_repeat
-    const forRangeMatch = trimmed.match(/^for\s+\w+\s+in\s+range\s*\(\s*(\d+)\s*\)\s*:\s*$/);
+    const forRangeMatch = trimmed.match(/^for\s+[\wáéíóúüñÁÉÍÓÚÜÑ]+\s+in\s+range\s*\(\s*(\d+)\s*\)\s*:\s*$/);
     if (forRangeMatch) {
         return {
             function: '__control_repeat__',
@@ -1873,7 +1877,7 @@ function parsePythonLine(line) {
     // ===== VARIABLES =====
 
     // Detectar asignación de variable: variable = valor
-    const assignMatch = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
+    const assignMatch = trimmed.match(/^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*=\s*(.+)$/);
     if (assignMatch && !trimmed.includes('==')) {
         const varName = assignMatch[1];
         const value = assignMatch[2].trim();
@@ -1891,7 +1895,7 @@ function parsePythonLine(line) {
     }
 
     // Detectar cambio de variable: variable += valor o variable -= valor
-    const changeMatch = trimmed.match(/^(\w+)\s*(\+|-)\s*=\s*(.+)$/);
+    const changeMatch = trimmed.match(/^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*(\+|-)\s*=\s*(.+)$/);
     if (changeMatch) {
         const varName = changeMatch[1];
         const operator = changeMatch[2];
@@ -1910,7 +1914,7 @@ function parsePythonLine(line) {
     // ===== LISTAS =====
 
     // Detectar lista.agregar(item)
-    const listAddMatch = trimmed.match(/^(\w+)\.agregar\s*\((.*)\)\s*$/);
+    const listAddMatch = trimmed.match(/^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\.agregar\s*\((.*)\)\s*$/);
     if (listAddMatch) {
         return {
             function: '__list_add__',
@@ -1923,7 +1927,7 @@ function parsePythonLine(line) {
     }
 
     // Detectar lista.eliminar(index)
-    const listDeleteMatch = trimmed.match(/^(\w+)\.eliminar\s*\((.*)\)\s*$/);
+    const listDeleteMatch = trimmed.match(/^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\.eliminar\s*\((.*)\)\s*$/);
     if (listDeleteMatch) {
         return {
             function: '__list_delete__',
@@ -1936,7 +1940,7 @@ function parsePythonLine(line) {
     }
 
     // Detectar lista.limpiar()
-    const listClearMatch = trimmed.match(/^(\w+)\.limpiar\s*\(\s*\)\s*$/);
+    const listClearMatch = trimmed.match(/^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\.limpiar\s*\(\s*\)\s*$/);
     if (listClearMatch) {
         return {
             function: '__list_clear__',
@@ -1946,7 +1950,7 @@ function parsePythonLine(line) {
     }
 
     // Detectar lista.insertar(index, item)
-    const listInsertMatch = trimmed.match(/^(\w+)\.insertar\s*\(\s*(\d+)\s*,\s*(.*)\)\s*$/);
+    const listInsertMatch = trimmed.match(/^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\.insertar\s*\(\s*(\d+)\s*,\s*(.*)\)\s*$/);
     if (listInsertMatch) {
         return {
             function: '__list_insert__',
@@ -1960,7 +1964,7 @@ function parsePythonLine(line) {
     }
 
     // Detectar lista[index] = valor
-    const listReplaceMatch = trimmed.match(/^(\w+)\s*\[\s*(\d+)\s*\]\s*=\s*(.+)$/);
+    const listReplaceMatch = trimmed.match(/^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\[\s*(\d+)\s*\]\s*=\s*(.+)$/);
     if (listReplaceMatch) {
         return {
             function: '__list_replace__',
@@ -1978,7 +1982,7 @@ function parsePythonLine(line) {
     // Detectar definiciones de funciones especiales (eventos)
     // def inicio(): → cuando bandera verde
     // def al_presionar_espacio(): → cuando se presiona tecla
-    const defPattern = /^def\s+(\w+)\s*\((.*)\)\s*:\s*$/;
+    const defPattern = /^def\s+([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\((.*)\)\s*:\s*$/;
     const defMatch = trimmed.match(defPattern);
     if (defMatch) {
         const funcName = defMatch[1];
@@ -1994,7 +1998,7 @@ function parsePythonLine(line) {
             };
         }
         // al_presionar_X → evento de tecla
-        const keyMatch = funcName.match(/^al_presionar_(\w+)$/);
+        const keyMatch = funcName.match(/^al_presionar_([\wáéíóúüñÁÉÍÓÚÜÑ]+)$/);
         if (keyMatch) {
             return {
                 function: '__event_key__',
@@ -2013,11 +2017,21 @@ function parsePythonLine(line) {
             };
         }
         // al_recibir_X → evento de mensaje
-        const receiveMatch = funcName.match(/^al_recibir_(\w+)$/);
+        const receiveMatch = funcName.match(/^al_recibir_([\wáéíóúüñÁÉÍÓÚÜÑ]+)$/);
         if (receiveMatch) {
             return {
                 function: '__event_broadcast_received__',
                 arguments: [{ type: 'string', value: receiveMatch[1] }],
+                raw: trimmed,
+                isEvent: true
+            };
+        }
+        // al_cambiar_fondo → evento de cambio de fondo (el decorador
+        // @cuando_fondo_cambia_a(...) aporta el nombre del fondo).
+        if (funcName === 'al_cambiar_fondo') {
+            return {
+                function: '__event_backdrop__',
+                arguments: [],
                 raw: trimmed,
                 isEvent: true
             };
@@ -2031,12 +2045,13 @@ function parsePythonLine(line) {
                 isEvent: true
             };
         }
-        // al_colisionar_X → evento de colisión
-        const collisionMatch = funcName.match(/^al_colisionar_(\w+)$/);
-        if (collisionMatch) {
+        // al_colisionar_X o al_colisionar → evento de colisión (el decorador
+        // @cuando_colisiona(...) aporta el sprite objetivo).
+        const collisionMatch = funcName.match(/^al_colisionar_([\wáéíóúüñÁÉÍÓÚÜÑ]+)$/);
+        if (collisionMatch || funcName === 'al_colisionar') {
             return {
                 function: '__event_collision__',
-                arguments: [{ type: 'string', value: collisionMatch[1] }],
+                arguments: [{ type: 'string', value: collisionMatch ? collisionMatch[1] : '' }],
                 raw: trimmed,
                 isEvent: true
             };
@@ -2066,7 +2081,7 @@ function parsePythonLine(line) {
     // ===== LLAMADAS A FUNCIONES =====
 
     // Detectar patrones de función: objeto.metodo(args) o funcion(args)
-    const funcPattern = /^(\w+(?:\.\w+)?)\s*\((.*)\)\s*$/;
+    const funcPattern = /^([\wáéíóúüñÁÉÍÓÚÜÑ]+(?:\.[\wáéíóúüñÁÉÍÓÚÜÑ]+)?)\s*\((.*)\)\s*$/;
     const match = trimmed.match(funcPattern);
 
     if (!match) {
@@ -2863,8 +2878,12 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
     const fields = {};
     const shadowBlocks = []; // Bloques shadow que necesitan ser creados
 
-    // Los eventos (hat blocks) siempre son topLevel y no tienen parent
-    const isEvent = parsedCall.isEvent || opcode.startsWith('event_') || opcode === 'control_start_as_clone';
+    // Los eventos (hat blocks) siempre son topLevel y no tienen parent.
+    // event_broadcast / event_broadcastandwait NO son hats aunque su opcode
+    // empiece por "event_": son bloques de acción con un menú de mensaje.
+    const isEvent = parsedCall.isEvent ||
+        (opcode.startsWith('event_') && opcode !== 'event_broadcast' && opcode !== 'event_broadcastandwait') ||
+        opcode === 'control_start_as_clone';
     const isControl = parsedCall.isControl || false;
     const isProcedure = parsedCall.isProcedure || false;
     let blockMutation = null; // Para mutaciones que deben aplicarse DESPUÉS de crear el bloque
@@ -2882,11 +2901,44 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
     }
 
     if (opcode === 'event_whenbroadcastreceived' && parsedCall.arguments.length > 0) {
-        fields.BROADCAST_OPTION = { name: 'BROADCAST_OPTION', value: String(parsedCall.arguments[0].value) };
+        fields.BROADCAST_OPTION = {
+            name: 'BROADCAST_OPTION',
+            value: String(parsedCall.arguments[0].value),
+            variableType: 'broadcast_msg'
+        };
     }
 
     if (opcode === 'event_whenbackdropswitchesto' && parsedCall.arguments.length > 0) {
         fields.BACKDROP = { name: 'BACKDROP', value: String(parsedCall.arguments[0].value) };
+    }
+
+    // ===== MENSAJES (event_broadcast / event_broadcastandwait) =====
+    // El input BROADCAST_INPUT debe conectarse a un shadow event_broadcast_menu
+    // (dropdown de mensajes), no a un shadow de texto genérico. El id del
+    // mensaje se rellena en ensureBroadcastMessages antes de crear el bloque.
+    if ((opcode === 'event_broadcast' || opcode === 'event_broadcastandwait') && parsedCall.arguments.length > 0) {
+        const msg = String(parsedCall.arguments[0].value);
+        const menuId = generateBlockId();
+        shadowBlocks.push({
+            id: menuId,
+            block: {
+                id: menuId,
+                opcode: 'event_broadcast_menu',
+                inputs: {},
+                fields: {
+                    BROADCAST_OPTION: {
+                        name: 'BROADCAST_OPTION',
+                        value: msg,
+                        variableType: 'broadcast_msg'
+                    }
+                },
+                next: null,
+                parent: blockId,
+                shadow: true,
+                topLevel: false
+            }
+        });
+        inputs.BROADCAST_INPUT = { name: 'BROADCAST_INPUT', block: menuId, shadow: menuId };
     }
 
     // ===== MANEJO ESPECIAL DE VARIABLES =====
@@ -3460,6 +3512,7 @@ export function pythonToBlocks(pythonCode, startPosition = { x: 80, y: 80 }, dev
     const controlStack = new ControlStack(); // Pila de estructuras de control activas
     let inElseBranch = false; // Si estamos en la rama else de un if
     let elseIndentLevel = -1; // Nivel de indentación del else
+    let pendingDecorator = null; // Decorador @cuando_... que precede a su def
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -3470,7 +3523,7 @@ export function pythonToBlocks(pythonCode, startPosition = { x: 80, y: 80 }, dev
             const isImport = trimmed.startsWith('import ') || trimmed.startsWith('from ');
             const isComment = trimmed.startsWith('#');
             const isEmpty = trimmed === '';
-            const isVarDecl = /^\w+\s*=\s*(0|\[\])$/.test(trimmed);
+            const isVarDecl = /^[\wáéíóúüñÁÉÍÓÚÜÑ]+\s*=\s*(0|\[\])$/.test(trimmed);
 
             if (isImport || isComment || isEmpty || isVarDecl) {
                 continue;
@@ -3486,10 +3539,30 @@ export function pythonToBlocks(pythonCode, startPosition = { x: 80, y: 80 }, dev
             continue;
         }
 
+        // Un decorador @cuando_... precede a su def y NO genera bloque por sí
+        // mismo: se almacena y sus argumentos (p. ej. @cuando_tecla("up arrow"))
+        // se aplican al def siguiente, conservando la tecla/fondo/mensaje exactos
+        // y evitando scripts de evento duplicados.
+        if (parsed.isDecorator || (parsed.isEvent && parsed.raw && parsed.raw.trim().startsWith('@'))) {
+            pendingDecorator = parsed;
+            continue;
+        }
+
         // Limpiar parámetros de función al salir de su cuerpo (siguiente bloque top-level)
         // Debe ir ANTES del tracking de definiciones para que el def actual pueda establecer sus params
         if (indentLevel === 0) {
             currentFunctionParams = {};
+        }
+
+        // Aplicar el decorador pendiente al def de evento/procedimiento que le sigue.
+        if ((parsed.isEvent || parsed.isProcedure) && pendingDecorator) {
+            if (pendingDecorator.arguments && pendingDecorator.arguments.length > 0) {
+                parsed.arguments = pendingDecorator.arguments;
+            }
+            pendingDecorator = null;
+        } else if (pendingDecorator) {
+            // Un decorador sin def siguiente no genera bloque: descartarlo.
+            pendingDecorator = null;
         }
 
         // Rastrear definiciones y llamadas de funciones para forward references
@@ -3619,8 +3692,8 @@ export function pythonToBlocks(pythonCode, startPosition = { x: 80, y: 80 }, dev
             parentBlockId = null;
         }
 
-        // Calcular posición X final para este bloque (espaciado reducido entre scripts)
-        const finalX = startPosition.x + (scriptCount * 180);
+        // Calcular posición X final para este bloque (separación entre scripts)
+        const finalX = startPosition.x + (scriptCount * 240);
 
         const result = pythonCallToBlock(
             parsed,
@@ -3736,6 +3809,70 @@ export function pythonToBlocks(pythonCode, startPosition = { x: 80, y: 80 }, dev
 }
 
 /**
+ * Registra los mensajes de difusión referenciados por los bloques generados
+ * como variables de tipo 'broadcast_msg' en el escenario, y rellena el id del
+ * campo BROADCAST_OPTION de cada bloque con el id de la variable.
+ *
+ * Scratch guarda los mensajes de difusión como variables en el escenario
+ * (type 'broadcast_msg'). Si no existen, al sincronizar el XML Blockly falla
+ * con "Variable type doesn't match this field". Aquí se crean (reutilizando
+ * los que ya existan por nombre) y se vinculan a los bloques.
+ * @param {Object} vm - La máquina virtual de Scratch
+ * @param {Object} blockMap - Mapa de bloques generado por pythonToBlocks
+ */
+function ensureBroadcastMessages(vm, blockMap) {
+    if (!vm || !vm.runtime || typeof vm.runtime.getTargetForStage !== 'function') return;
+    const stage = vm.runtime.getTargetForStage();
+    if (!stage || typeof stage.createVariable !== 'function') return;
+
+    // Recopilar los nombres de mensaje únicos usados por los bloques
+    const messages = new Map(); // nombre -> id de variable (null si no existe aún)
+    for (const block of Object.values(blockMap)) {
+        const field = block.fields && block.fields.BROADCAST_OPTION;
+        if (field && field.value) {
+            const name = String(field.value);
+            if (!messages.has(name)) {
+                messages.set(name, null);
+            }
+        }
+    }
+
+    if (messages.size === 0) return;
+
+    // Resolver cada mensaje: reutilizar la variable existente con ese nombre o crearla
+    for (const name of messages.keys()) {
+        let existing = null;
+        const stageVars = stage.variables;
+        for (const varId in stageVars) {
+            const v = stageVars[varId];
+            if (v && v.type === 'broadcast_msg' &&
+                String(v.name).toLowerCase() === name.toLowerCase()) {
+                existing = v;
+                break;
+            }
+        }
+        if (existing) {
+            messages.set(name, existing.id);
+        } else {
+            const newId = generateVarId();
+            stage.createVariable(newId, name, 'broadcast_msg', false);
+            messages.set(name, newId);
+        }
+    }
+
+    // Rellenar el id y el tipo del campo BROADCAST_OPTION en los bloques.
+    // El campo debe declarar variableType 'broadcast_msg' para que al serializar
+    // a XML salga variabletype="broadcast_msg" y Blockly acepte la variable.
+    for (const block of Object.values(blockMap)) {
+        const field = block.fields && block.fields.BROADCAST_OPTION;
+        if (field && field.value && messages.has(String(field.value))) {
+            field.id = messages.get(String(field.value));
+            field.variableType = 'broadcast_msg';
+        }
+    }
+}
+
+/**
  * Sincroniza código Python con el workspace de Scratch
  * @returns {Object} Resultado con success, blocksCreated, errors
  */
@@ -3770,57 +3907,26 @@ export function syncPythonToWorkspace(vm, pythonCode) {
             };
         }
 
-        // Python educativo permite escribir instrucciones directamente cuando
-        // no declaró ningún evento. En ese caso reciben una bandera implícita
-        // para conservar la ejecución con la bandera verde. Si ya existe un
-        // evento, los bloques sin indentación quedan sueltos, exactamente como
-        // se ven en el código.
-        // Los decoradores/eventos y las definiciones de procedimientos ya son
-        // raíces ejecutables y se conservan exactamente como fueron creados.
-        const hasExplicitEvent = result.scripts.some(script => {
-            const rootBlock = result.blockMap[script[0]];
-            return rootBlock && (
-                rootBlock.opcode.startsWith('event_') ||
-                rootBlock.opcode === 'control_start_as_clone' ||
-                rootBlock.opcode.includes('_when')
-            );
-        });
-        for (const script of result.scripts) {
-            const rootId = script[0];
-            const rootBlock = result.blockMap[rootId];
-            if (!rootBlock) continue;
-            const isEventHat = rootBlock.opcode.startsWith('event_') ||
-                rootBlock.opcode === 'control_start_as_clone' ||
-                rootBlock.opcode.includes('_when');
-            const isProcedure = rootBlock.opcode === 'procedures_definition' ||
-                rootBlock.opcode === 'procedures_prototype';
-            if (isEventHat || isProcedure || hasExplicitEvent) continue;
-
-            const hatId = generateBlockId();
-            result.blockMap[hatId] = {
-                id: hatId,
-                opcode: 'event_whenflagclicked',
-                inputs: {},
-                fields: {},
-                next: rootId,
-                parent: null,
-                topLevel: true,
-                shadow: false,
-                x: rootBlock.x,
-                y: rootBlock.y
-            };
-            rootBlock.parent = hatId;
-            rootBlock.topLevel = false;
-            delete rootBlock.x;
-            delete rootBlock.y;
-            script.unshift(hatId);
-        }
+        // Los bloques sin indentación quedan sueltos, exactamente como se ven
+        // en el código. NO se agrega una bandera implícita: el hat "al presionar
+        // la bandera" solo aparece si el usuario lo declara explícitamente con
+        // `def inicio():` (o cualquier otro evento). Los decoradores/eventos y
+        // las definiciones de procedimientos ya son raíces ejecutables y se
+        // conservan exactamente como fueron creados.
         result.total = Object.keys(result.blockMap).length;
 
-        // La conversión ya terminó correctamente: ahora sí reemplazar solo los
-        // bloques sintetizados, conservando cualquier bloque manual del usuario.
-        // Esto también hace que borrar todo el texto limpie el programa Python.
-        clearPythonBlocks(vm, false);
+        // La conversión ya terminó correctamente. En modo Python el texto es la
+        // fuente de verdad: si quedaban bloques manuales (construidos en modo
+        // bloques) se reemplazan también por la traducción desde Python, para
+        // evitar que al activar el modo Python queden bloques duplicados
+        // (manuales + py_block_* con el mismo programa). Con texto vacío o sin
+        // bloques manuales se conserva el comportamiento anterior (solo limpiar
+        // los sintetizados) para no borrar trabajo del usuario.
+        const vmBlocks = vm.editingTarget.blocks._blocks;
+        const hasManualBlocks = vmBlocks ?
+            Object.keys(vmBlocks).some(id => !id.startsWith('py_block_')) :
+            false;
+        clearPythonBlocks(vm, result.total > 0 && hasManualBlocks);
 
         if (result.total === 0) {
             return {
@@ -3834,6 +3940,10 @@ export function syncPythonToWorkspace(vm, pythonCode) {
 
         // Usar la API de creación de bloques
         const targetBlocks = vm.editingTarget.blocks;
+
+        // Registrar los mensajes de difusión como variables del escenario y
+        // rellenar los ids de BROADCAST_OPTION antes de crear los bloques.
+        ensureBroadcastMessages(vm, result.blockMap);
 
         // Crear cada bloque
         for (const [blockId, block] of Object.entries(result.blockMap)) {
