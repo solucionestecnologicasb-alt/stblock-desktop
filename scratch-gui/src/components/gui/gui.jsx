@@ -494,28 +494,24 @@ const GUIComponent = props => {
         userHasInteractedRef.current = true;
     }, []);
 
-    const [pythonKeyLock, setPythonKeyLock] = useState(() => {
-        try {
-            return localStorage.getItem('stblock_python_key_lock');
-        } catch (e) {
-            return null;
-        }
-    });
+    // El candado con clave es SOLO por sesión: NO se persiste en localStorage.
+    // Si se cierra y reabre la app (o se instala en otro equipo), el bloqueo
+    // desaparece y la app vuelve a funcionar con normalidad.
+    const [pythonKeyLock, setPythonKeyLock] = useState(null);
     const isPythonKeyLocked = pythonKeyLock !== null;
     const [pythonKeyModalOpen, setPythonKeyModalOpen] = useState(false);
     const [pythonKeyModalMode, setPythonKeyModalMode] = useState('set');
 
+    // Limpiar cualquier clave vieja que hubiera quedado guardada por versiones
+    // anteriores del candado: libera a usuarios que quedaron atascados con el
+    // modo bloqueo activo tras reiniciar la app.
     useEffect(() => {
         try {
-            if (pythonKeyLock) {
-                localStorage.setItem('stblock_python_key_lock', pythonKeyLock);
-            } else {
-                localStorage.removeItem('stblock_python_key_lock');
-            }
+            localStorage.removeItem('stblock_python_key_lock');
         } catch (e) {
-            console.warn('[GUI] Error saving pythonKeyLock:', e);
+            // Ignorar errores de almacenamiento
         }
-    }, [pythonKeyLock]);
+    }, []);
 
     classroomStateRef.current = classroomState;
 
@@ -1202,6 +1198,7 @@ const GUIComponent = props => {
         if (pythonKeyLock && enteredKey === pythonKeyLock) {
             setPythonKeyLock(null);
             setPythonKeyModalOpen(false);
+            setPythonPanelLocked(true);
             return true;
         }
         return false;
@@ -1434,13 +1431,13 @@ const GUIComponent = props => {
 
     const effectivePanelOpen = classroomForceBlocks ?
         false :
-        (isPythonKeyLocked || pythonPanelOpen || classroomForcePython);
+        (pythonPanelOpen || classroomForcePython);
 
     // El candado con clave y el modo Aula "Python" FUERZAN el modo solo texto:
     // panel abierto, edición habilitada y toolbox oculto (isPythonEditMode=true).
     // Aquí "bloqueado" significa "no puedes salir a bloques", NO "solo lectura".
     const effectivePanelLocked = classroomForceBlocks ?
-        false :
+        true :
         (isPythonKeyLocked || classroomForcePython ? false : pythonPanelLocked);
 
     const pythonPanelIsLocked = effectivePanelLocked || classroomReadOnlyBlocks;
@@ -1455,8 +1452,11 @@ const GUIComponent = props => {
         );
     }, [classroomAssignments, classroomMyId, vm]);
 
-    // Calcular si estamos en modo edición Python (toolbox oculto)
-    const isPythonEditMode = effectivePanelOpen && !effectivePanelLocked && deviceMode !== 'device';
+    // Calcular si estamos en modo edición Python (toolbox oculto).
+    // Cuando el candado está desbloqueado/abierto (!effectivePanelLocked), estamos en modo Python.
+    // Ocultar el panel con el botón "Py" simplemente oculta la interfaz de Python, sin regresar a modo bloques.
+    // El modo bloques ÚNICAMENTE reaparece cuando el candado es bloqueado de nuevo (effectivePanelLocked=true).
+    const isPythonEditMode = !effectivePanelLocked && !classroomForceBlocks && deviceMode !== 'device';
 
     // Modo activo del asistente de IA según el contexto actual de la app.
     const aiActiveMode = deviceMode === 'device' ? 'device'
@@ -3340,6 +3340,7 @@ const GUIComponent = props => {
                             targetId={currentTargetId}
                             targetName={vm.editingTarget?.getName() || 'Sprite'}
                             isStage={vm.editingTarget?.isStage || false}
+                            vm={vm}
                         />
                     </div>
                 </Box>

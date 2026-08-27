@@ -1,7 +1,7 @@
 {
     "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName":  "STBlock",
-    "version":  "0.1.31",
+    "version":  "0.1.33",
     "identifier":  "com.stbacademy.stblock",
     "build":  {
                   "frontendDist":  "../scratch-gui/build",
@@ -52,7 +52,12 @@
                                  ],
                    "createUpdaterArtifacts":  false,
                    "windows":  {
+                                   "webviewInstallMode":  {
+                                                              "type":  "offlineInstaller",
+                                                              "silent":  true
+                                                          },
                                    "nsis":  {
+                                                "template":  "nsis-template.nsi",
                                                 "headerImage":  "icons/nsis-header.bmp",
                                                 "sidebarImage":  "icons/nsis-sidebar.bmp",
                                                 "installerIcon":  "icons/icon.ico",

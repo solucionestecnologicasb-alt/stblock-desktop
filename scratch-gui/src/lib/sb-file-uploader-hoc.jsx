@@ -111,7 +111,11 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             if (thisFileInput.files && thisFileInput.files.length > 0) {
                 this.fileToUpload = thisFileInput.files[0];
                 if (this.fileToUpload.size === 0) {
-                    alert(intl.formatMessage(messages.emptyProjectError)); // eslint-disable-line no-alert
+                    try {
+                        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+                            window.alert(intl.formatMessage(messages.emptyProjectError));
+                        }
+                    } catch (err) {}
                     this.props.closeFileMenu();
                     this.removeFileObjects();
                     return;
@@ -123,9 +127,13 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 // changed it, no need to confirm.)
                 let uploadAllowed = true;
                 if (userOwnsProject || (projectChanged.changed && isShowingWithoutId)) {
-                    uploadAllowed = confirm( // eslint-disable-line no-alert
-                        intl.formatMessage(sharedMessages.replaceProjectWarning)
-                    );
+                    try {
+                        uploadAllowed = typeof window !== 'undefined' && typeof window.confirm === 'function'
+                            ? window.confirm(intl.formatMessage(sharedMessages.replaceProjectWarning))
+                            : true;
+                    } catch (err) {
+                        uploadAllowed = true;
+                    }
                 }
                 if (uploadAllowed) {
                     // cues step 4

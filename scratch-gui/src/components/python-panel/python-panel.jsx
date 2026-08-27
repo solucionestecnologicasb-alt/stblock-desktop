@@ -1,4 +1,4 @@
-import React, {useState, useRef, useEffect, useLayoutEffect, useMemo} from 'react';
+import React, {useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback} from 'react';
 import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import styles from './python-panel.css';
@@ -133,6 +133,15 @@ const StageIcon = () => (
     </svg>
 );
 
+// Icono de variable (x)
+const VariableIcon = () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+        <rect x="3" y="4" width="18" height="16" rx="4"/>
+        <path d="M8 8l3 4-3 4"/>
+        <path d="M14 16h3"/>
+    </svg>
+);
+
 const PythonPanel = ({
     isOpen,
     pythonCode,
@@ -148,7 +157,8 @@ const PythonPanel = ({
     isProgrammingMode,
     targetId,
     targetName,
-    isStage
+    isStage,
+    vm
 }) => {
     const codeRef = useRef(null);
     const highlighterRef = useRef(null);
@@ -162,10 +172,246 @@ const PythonPanel = ({
     const lastTargetRef = useRef(targetKey);
     const [copyFeedback, setCopyFeedback] = useState(false);
     const [showHelp, setShowHelp] = useState(false);
+    const [showVariables, setShowVariables] = useState(false);
+    const [variablesList, setVariablesList] = useState([]);
+    const [newVarName, setNewVarName] = useState('');
     const [errors, setErrors] = useState([]); // Lista de errores
     const [showErrors, setShowErrors] = useState(true); // Mostrar/ocultar panel de errores
     const [draftCode, setDraftCode] = useState(pythonCode || '');
     const draftCodeRef = useRef(pythonCode || '');
+
+// Asegurar que el monitor block exista en runtime.monitorBlocks para que
+// Scratch VM y el MonitorComponent de React puedan calcular el label y renderizar sin error.
+const ensureMonitorBlockForVariable = (vm, varItem) => {
+    if (!vm || !vm.runtime || !vm.runtime.monitorBlocks) return null;
+    const isList = varItem.type === 'list';
+    const opcode = isList ? 'data_listcontents' : 'data_variable';
+    const fieldKey = isList ? 'LIST' : 'VARIABLE';
+
+    let block = vm.runtime.monitorBlocks.getBlock(varItem.id);
+    if (!block) {
+        block = {
+            id: varItem.id,
+            opcode: opcode,
+            inputs: {},
+            fields: {
+                [fieldKey]: {
+                    name: varItem.name,
+                    id: varItem.id,
+                    value: varItem.name,
+                    variableType: isList ? 'list' : ''
+                }
+            },
+            topLevel: true,
+            next: null,
+            parent: null,
+            shadow: false,
+            x: 0,
+            y: 0,
+            isMonitored: !!varItem.visible,
+            targetId: varItem.isGlobal ? null : (vm.editingTarget ? vm.editingTarget.id : null)
+        };
+        vm.runtime.monitorBlocks.createBlock(block);
+    } else {
+        if (!block.fields || !block.fields[fieldKey]) {
+            block.fields = {
+                [fieldKey]: {
+                    name: varItem.name,
+                    id: varItem.id,
+                    value: varItem.name,
+                    variableType: isList ? 'list' : ''
+                }
+            };
+        }
+        if (block.fields[fieldKey] && typeof block.fields[fieldKey].value === 'undefined') {
+            block.fields[fieldKey].value = varItem.name;
+        }
+    }
+    return block;
+};
+
+    // Refrescar lista de variables y su estado de visualización en pantalla
+    const refreshVariables = useCallback(() => {
+        if (!vm || !vm.runtime) return;
+        const vars = [];
+        const seenIds = new Set();
+
+        // 1. Escenario (Variables globales)
+        const stage = typeof vm.runtime.getTargetForStage === 'function'
+            ? vm.runtime.getTargetForStage()
+            : null;
+        if (stage && stage.variables) {
+            for (const [id, v] of Object.entries(stage.variables)) {
+                if (v.type === '' || v.type === 'list') {
+                    const isVisible = !!(
+                        (vm.runtime._monitorState && vm.runtime._monitorState.get(id)?.get('visible')) ||
+                        (vm.runtime.monitorBlocks && vm.runtime.monitorBlocks.getBlock(id)?.isMonitored)
+                    );
+                    const varItem = {
+                        id,
+                        name: v.name,
+                        type: v.type === 'list' ? 'list' : 'variable',
+                        value: v.value,
+                        isGlobal: true,
+                        visible: isVisible
+                    };
+                    ensureMonitorBlockForVariable(vm, varItem);
+                    vars.push(varItem);
+                    seenIds.add(id);
+                }
+            }
+        }
+
+        // 2. Sprite actual (Variables locales)
+        const editingTarget = vm.editingTarget;
+        if (editingTarget && editingTarget !== stage && editingTarget.variables) {
+            for (const [id, v] of Object.entries(editingTarget.variables)) {
+                if (!seenIds.has(id) && (v.type === '' || v.type === 'list')) {
+                    const isVisible = !!(
+                        (vm.runtime._monitorState && vm.runtime._monitorState.get(id)?.get('visible')) ||
+                        (vm.runtime.monitorBlocks && vm.runtime.monitorBlocks.getBlock(id)?.isMonitored)
+                    );
+                    const varItem = {
+                        id,
+                        name: v.name,
+                        type: v.type === 'list' ? 'list' : 'variable',
+                        value: v.value,
+                        isGlobal: false,
+                        targetName: editingTarget.getName ? editingTarget.getName() : 'Sprite',
+                        visible: isVisible
+                    };
+                    ensureMonitorBlockForVariable(vm, varItem);
+                    vars.push(varItem);
+                    seenIds.add(id);
+                }
+            }
+        }
+
+        setVariablesList(vars);
+    }, [vm]);
+
+    useEffect(() => {
+        refreshVariables();
+        if (!vm) return;
+
+        const handleUpdate = () => refreshVariables();
+        vm.addListener('MONITORS_UPDATE', handleUpdate);
+        vm.addListener('PROJECT_CHANGED', handleUpdate);
+        vm.addListener('workspaceUpdate', handleUpdate);
+        vm.addListener('targetsUpdate', handleUpdate);
+        vm.addListener('targetStateUpdate', handleUpdate);
+
+        const timer = setInterval(refreshVariables, 1000);
+
+        return () => {
+            vm.removeListener('MONITORS_UPDATE', handleUpdate);
+            vm.removeListener('PROJECT_CHANGED', handleUpdate);
+            vm.removeListener('workspaceUpdate', handleUpdate);
+            vm.removeListener('targetsUpdate', handleUpdate);
+            vm.removeListener('targetStateUpdate', handleUpdate);
+            clearInterval(timer);
+        };
+    }, [vm, refreshVariables]);
+
+    const handleToggleMonitor = useCallback((varItem) => {
+        if (!vm || !vm.runtime) return;
+        const newVisible = !varItem.visible;
+
+        // Asegurar que el bloque monitor exista en runtime.monitorBlocks
+        ensureMonitorBlockForVariable(vm, varItem);
+
+        if (vm.runtime.monitorBlocks) {
+            vm.runtime.monitorBlocks.changeBlock({
+                id: varItem.id,
+                element: 'checkbox',
+                value: newVisible
+            }, vm.runtime);
+        } else if (newVisible && typeof vm.runtime.requestShowMonitor === 'function') {
+            vm.runtime.requestShowMonitor(varItem.id);
+        } else if (!newVisible && typeof vm.runtime.requestHideMonitor === 'function') {
+            vm.runtime.requestHideMonitor(varItem.id);
+        }
+
+        if (typeof vm.emitProjectChanged === 'function') {
+            vm.emitProjectChanged();
+        }
+        refreshVariables();
+    }, [vm, refreshVariables]);
+
+    const handleToggleAllMonitors = useCallback((show) => {
+        if (!vm || !vm.runtime) return;
+        variablesList.forEach(v => {
+            ensureMonitorBlockForVariable(vm, v);
+            if (vm.runtime.monitorBlocks) {
+                vm.runtime.monitorBlocks.changeBlock({
+                    id: v.id,
+                    element: 'checkbox',
+                    value: show
+                }, vm.runtime);
+            }
+        });
+        if (typeof vm.emitProjectChanged === 'function') {
+            vm.emitProjectChanged();
+        }
+        refreshVariables();
+    }, [vm, variablesList, refreshVariables]);
+
+    const handleCreateVariable = useCallback((e) => {
+        if (e) e.preventDefault();
+        if (!newVarName.trim() || !vm || !vm.runtime) return;
+        const name = newVarName.trim();
+        const stage = typeof vm.runtime.getTargetForStage === 'function'
+            ? vm.runtime.getTargetForStage()
+            : vm.editingTarget;
+        if (stage) {
+            if (typeof stage.lookupVariableByNameAndType === 'function') {
+                const existing = stage.lookupVariableByNameAndType(name, '', true);
+                if (existing) {
+                    setNewVarName('');
+                    return;
+                }
+            }
+            let created = null;
+            if (typeof stage.createVariable === 'function') {
+                created = stage.createVariable(null, name, '');
+            }
+            if (created) {
+                ensureMonitorBlockForVariable(vm, {
+                    id: created.id,
+                    name: created.name,
+                    type: 'variable',
+                    value: created.value,
+                    isGlobal: true,
+                    visible: false
+                });
+            }
+            if (typeof vm.emitWorkspaceUpdate === 'function') {
+                vm.emitWorkspaceUpdate();
+            }
+            if (typeof vm.emitProjectChanged === 'function') {
+                vm.emitProjectChanged();
+            }
+            setNewVarName('');
+            refreshVariables();
+        }
+    }, [vm, newVarName, refreshVariables]);
+
+    const handleInsertText = useCallback((textToInsert) => {
+        if (!codeRef.current) return;
+        const textarea = codeRef.current;
+        const start = textarea.selectionStart || 0;
+        const end = textarea.selectionEnd || 0;
+        const current = draftCodeRef.current || '';
+        const newValue = current.substring(0, start) + textToInsert + current.substring(end);
+        setDraftCode(newValue);
+        draftCodeRef.current = newValue;
+        if (onCodeChange) onCodeChange(newValue);
+        requestAnimationFrame(() => {
+            textarea.focus();
+            textarea.selectionStart = start + textToInsert.length;
+            textarea.selectionEnd = start + textToInsert.length;
+        });
+    }, [onCodeChange]);
     // Tamaño de fuente del editor Python (persistido)
     const [fontSize, setFontSize] = useState(() => {
         try {
@@ -175,6 +421,65 @@ const PythonPanel = ({
             return 14;
         }
     });
+
+    // Ancho del panel Python persistido en preferencias (en píxeles)
+    const [panelWidth, setPanelWidth] = useState(() => {
+        try {
+            const prefs = loadPreferences();
+            if (prefs && typeof prefs.panelWidth === 'number' && prefs.panelWidth >= 280) {
+                return Math.min(window.innerWidth - 80, prefs.panelWidth);
+            }
+        } catch (e) {}
+        return Math.max(360, Math.round(window.innerWidth * 0.5));
+    });
+    const [isResizing, setIsResizing] = useState(false);
+    const resizeStartXRef = useRef(0);
+    const resizeStartWidthRef = useRef(panelWidth);
+
+    const handleResizeMouseDown = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsResizing(true);
+        resizeStartXRef.current = e.clientX;
+        resizeStartWidthRef.current = panelWidth;
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'col-resize';
+    }, [panelWidth]);
+
+    useEffect(() => {
+        if (!isResizing) return;
+
+        const handleMouseMove = (e) => {
+            const deltaX = resizeStartXRef.current - e.clientX;
+            const parentWidth = window.innerWidth;
+            const minWidth = 280;
+            const maxWidth = Math.max(minWidth, parentWidth - 80);
+            const newWidth = Math.max(minWidth, Math.min(maxWidth, resizeStartWidthRef.current + deltaX));
+            setPanelWidth(newWidth);
+        };
+
+        const handleMouseUp = () => {
+            setIsResizing(false);
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+            setPanelWidth(currentWidth => {
+                try {
+                    savePreferences({ panelWidth: currentWidth });
+                } catch (e) {}
+                return currentWidth;
+            });
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        };
+    }, [isResizing]);
 
     // Medir el ancho del scrollbar del textarea y compensar el ancho del
     // highlighter para que AMBAS capas envuelvan (wrap) las líneas largas en
@@ -382,17 +687,15 @@ const PythonPanel = ({
             {/* Boton de toggle en el borde */}
             <div
                 className={classNames(styles.toggleButton, {
-                    [styles.panelOpen]: isOpen,
-                    [styles.toggleButtonDisabled]: isKeyLocked
+                    [styles.panelOpen]: isOpen
                 })}
-                onClick={isKeyLocked ? undefined : onToggleOpen}
-                title={isKeyLocked
-                    ? 'El candado con clave impide cerrar el panel Python'
-                    : (isOpen ? 'Cerrar panel Python' : 'Abrir panel Python')}
+                style={isOpen ? { right: `calc(${panelWidth}px - 2px)` } : undefined}
+                onClick={onToggleOpen}
+                title={isOpen ? 'Cerrar panel Python' : 'Abrir panel Python'}
                 role="button"
-                tabIndex={isKeyLocked ? -1 : 0}
+                tabIndex={0}
                 onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !isKeyLocked) onToggleOpen();
+                    if (e.key === 'Enter') onToggleOpen();
                 }}
             >
                 <div className={styles.toggleIcon}>
@@ -405,9 +708,25 @@ const PythonPanel = ({
             <div
                 data-stblock-python-panel="true"
                 className={classNames(styles.pythonPanel, {
-                    [styles.open]: isOpen
+                    [styles.open]: isOpen,
+                    [styles.resizing]: isResizing
                 })}
+                style={{
+                    width: isOpen ? `${panelWidth}px` : 0
+                }}
             >
+                {/* Borde interactivo para redimensionar el ancho */}
+                {isOpen && (
+                    <div
+                        className={classNames(styles.resizeHandle, {
+                            [styles.isResizing]: isResizing
+                        })}
+                        onMouseDown={handleResizeMouseDown}
+                        title="Arrastra para redimensionar el panel de Python"
+                    >
+                        <div className={styles.resizeHandleLine} />
+                    </div>
+                )}
                 {/* Header */}
                 <div className={styles.header}>
                     <div className={styles.headerTitle}>
@@ -430,12 +749,33 @@ const PythonPanel = ({
                         )}
                     </div>
                     <div className={styles.headerActions}>
+                        {/* Botón Gestor de Variables en pantalla */}
+                        <button
+                            className={classNames(styles.actionButton, {
+                                [styles.variablesActive]: showVariables
+                            })}
+                            onClick={() => {
+                                setShowVariables(!showVariables);
+                                if (!showVariables && showHelp) setShowHelp(false);
+                            }}
+                            title="Mostrar / Ocultar variables en el escenario"
+                        >
+                            <VariableIcon />
+                            {variablesList.filter(v => v.visible).length > 0 && (
+                                <span className={styles.activeMonitorCount}>
+                                    {variablesList.filter(v => v.visible).length}
+                                </span>
+                            )}
+                        </button>
                         {/* Botón Ayuda */}
                         <button
                             className={classNames(styles.actionButton, {
                                 [styles.helpActive]: showHelp
                             })}
-                            onClick={() => setShowHelp(!showHelp)}
+                            onClick={() => {
+                                setShowHelp(!showHelp);
+                                if (!showHelp && showVariables) setShowVariables(false);
+                            }}
                             title="Referencia rápida de Python"
                         >
                             <HelpIcon />
@@ -447,7 +787,7 @@ const PythonPanel = ({
                             onClick={isKeyLocked ? undefined : onToggleLock}
                             disabled={isKeyLocked}
                             title={isKeyLocked
-                                ? 'El candado con clave fija el modo Python (no puedes cambiar a bloques)'
+                                ? 'El candado con clave fija el modo Python (desbloquea con la clave)'
                                 : (isLocked ? 'Desbloquear para editar' : 'Bloquear edicion')}
                         >
                             {isLocked ? <LockIcon /> : <UnlockIcon />}
@@ -479,9 +819,8 @@ const PythonPanel = ({
                         </button>
                         <button
                             className={styles.actionButton}
-                            onClick={isKeyLocked ? undefined : onToggleOpen}
-                            disabled={isKeyLocked}
-                            title={isKeyLocked ? 'El candado con clave impide cerrar el panel' : 'Cerrar panel'}
+                            onClick={onToggleOpen}
+                            title="Cerrar panel"
                         >
                             <CloseIcon />
                         </button>
@@ -639,6 +978,129 @@ const PythonPanel = ({
                     <PythonReferencePanel onClose={() => setShowHelp(false)} />
                 )}
 
+                {/* Panel de Variables - Monitores en pantalla */}
+                {showVariables && (
+                    <div className={styles.variablesPanel}>
+                        <div className={styles.variablesHeader}>
+                            <div className={styles.variablesHeaderTitle}>
+                                <VariableIcon />
+                                <span>Variables en pantalla</span>
+                                <span className={styles.variableBadge}>
+                                    {variablesList.length}
+                                </span>
+                            </div>
+                            <div className={styles.variablesHeaderActions}>
+                                {variablesList.length > 0 && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            className={styles.variablesActionLink}
+                                            onClick={() => handleToggleAllMonitors(true)}
+                                            title="Mostrar todas las variables en pantalla"
+                                        >
+                                            Mostrar todas
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={styles.variablesActionLink}
+                                            onClick={() => handleToggleAllMonitors(false)}
+                                            title="Ocultar todas las variables"
+                                        >
+                                            Ocultar todas
+                                        </button>
+                                    </>
+                                )}
+                                <button
+                                    className={styles.variablesClose}
+                                    onClick={() => setShowVariables(false)}
+                                    title="Cerrar"
+                                >
+                                    <CloseIcon />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className={styles.variablesDesc}>
+                            Marca la casilla para mostrar el valor de la variable en el escenario.
+                        </div>
+
+                        <div className={styles.variablesList}>
+                            {variablesList.length === 0 ? (
+                                <div className={styles.noVariablesMsg}>
+                                    No hay variables creadas todavía.<br />
+                                    Crea una variable abajo o escribe <code>mi_variable = 0</code> en el código.
+                                </div>
+                            ) : (
+                                variablesList.map(item => (
+                                    <div
+                                        key={item.id}
+                                        className={classNames(styles.variableCard, {
+                                            [styles.variableCardActive]: item.visible
+                                        })}
+                                    >
+                                        <div className={styles.variableCardLeft}>
+                                            <input
+                                                type="checkbox"
+                                                id={`var_chk_${item.id}`}
+                                                checked={item.visible}
+                                                onChange={() => handleToggleMonitor(item)}
+                                                className={styles.variableCheckbox}
+                                                title={item.visible ? 'Ocultar del escenario' : 'Mostrar en el escenario'}
+                                            />
+                                            <div className={styles.variableInfo}>
+                                                <div className={styles.variableNameRow}>
+                                                    <label htmlFor={`var_chk_${item.id}`} className={styles.variableName}>
+                                                        {item.name}
+                                                    </label>
+                                                    <span className={classNames(styles.variableBadge, {
+                                                        [styles.local]: !item.isGlobal,
+                                                        [styles.list]: item.type === 'list'
+                                                    })}>
+                                                        {item.type === 'list' ? 'Lista' : item.isGlobal ? 'Global' : item.targetName || 'Sprite'}
+                                                    </span>
+                                                </div>
+                                                <div className={styles.variableValuePreview} title="Valor actual en tiempo real">
+                                                    Valor: {typeof item.value === 'object' ? JSON.stringify(item.value) : String(item.value ?? 0)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {!isLocked && (
+                                            <div className={styles.variableCardActions}>
+                                                <button
+                                                    type="button"
+                                                    className={styles.variableInsertBtn}
+                                                    onClick={() => handleInsertText(item.name)}
+                                                    title={`Insertar "${item.name}" en el código`}
+                                                >
+                                                    + Insertar
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        {/* Formulario para crear variable rápidamente */}
+                        <form className={styles.variablesCreateBar} onSubmit={handleCreateVariable}>
+                            <input
+                                type="text"
+                                placeholder="Nombre de nueva variable..."
+                                value={newVarName}
+                                onChange={e => setNewVarName(e.target.value)}
+                                className={styles.variablesCreateInput}
+                            />
+                            <button
+                                type="submit"
+                                disabled={!newVarName.trim()}
+                                className={styles.variablesCreateBtn}
+                            >
+                                + Crear variable
+                            </button>
+                        </form>
+                    </div>
+                )}
+
                 {/* Panel de errores */}
                 {!isLocked && errors.length > 0 && showErrors && (
                     <div className={styles.errorsPanel}>
@@ -730,7 +1192,8 @@ PythonPanel.propTypes = {
     isProgrammingMode: PropTypes.bool,
     targetId: PropTypes.string,
     targetName: PropTypes.string,
-    isStage: PropTypes.bool
+    isStage: PropTypes.bool,
+    vm: PropTypes.object
 };
 
 PythonPanel.defaultProps = {
@@ -743,7 +1206,8 @@ PythonPanel.defaultProps = {
     isProgrammingMode: true,
     targetId: null,
     targetName: 'Sprite',
-    isStage: false
+    isStage: false,
+    vm: null
 };
 
 export default PythonPanel;

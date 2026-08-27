@@ -45,8 +45,16 @@ const MenuBarHOC = function (WrappedComponent) {
         projectChanged: PropTypes.shape({changed: PropTypes.bool, hasBeenSaved: PropTypes.bool})
     };
     MenuBarContainer.defaultProps = {
-        // default to using standard js confirm
-        confirmWithMessage: message => (confirm(message)) // eslint-disable-line no-alert
+        // default to using standard js confirm with safe try-catch
+        confirmWithMessage: message => {
+            try {
+                return typeof window !== 'undefined' && typeof window.confirm === 'function'
+                    ? window.confirm(message)
+                    : true;
+            } catch (e) {
+                return true;
+            }
+        }
     };
     const mapStateToProps = state => ({
         projectChanged: state.scratchGui.projectChanged

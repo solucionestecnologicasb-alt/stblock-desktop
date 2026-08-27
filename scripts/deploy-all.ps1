@@ -343,13 +343,7 @@ if (-not $SkipPluginCopy) {
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
-    $x32Installer = $bundleFiles |
-        Where-Object { $_.Extension -eq '.exe' -and ($_.Name -match 'x32' -or $_.Name -match 'ia32') -and $_.Name -like "*_$version`_*" } |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-
     $pluginX64Exe = Join-Path $PluginAssetsDir 'STBlock-Desktop-Installer-x64.exe'
-    $pluginX32Exe = Join-Path $PluginAssetsDir 'STBlock-Desktop-Installer-x32.exe'
     $pluginX64Msi = Join-Path $PluginAssetsDir 'STBlock-Desktop-Installer-x64.msi'
 
     if ($x64ExeInstaller) {
@@ -357,14 +351,6 @@ if (-not $SkipPluginCopy) {
         Write-OK "Instalador x64 copiado exactamente a $pluginX64Exe"
     } else {
         Fail "No se encontro instalador EXE x64. Ejecuta build con NSIS antes del deploy."
-    }
-
-    if ($x32Installer) {
-        Copy-Item -LiteralPath $x32Installer.FullName -Destination $pluginX32Exe -Force
-        Write-OK "Instalador x32 copiado exactamente a $pluginX32Exe"
-    } else {
-        Copy-Item -LiteralPath $x64ExeInstaller.FullName -Destination $pluginX32Exe -Force
-        Write-Warn "No se genero instalador x32; se sobrescribio $pluginX32Exe con el instalador x64 para evitar conservar el archivo viejo."
     }
 
     if ($x64MsiInstaller) {

@@ -1696,7 +1696,7 @@ function parsePythonLine(line) {
     // Otras condiciones constantes (while not 1 == 0:, while 1 == 1:) NO generan
     // "por siempre": siguen la regla general `while X:` → "repetir hasta que (not X)".
     const whileForeverMatch = trimmed.match(/^while\s+(.+)\s*:\s*$/);
-    if (whileForeverMatch && /^true$/i.test(whileForeverMatch[1].trim())) {
+    if (whileForeverMatch && /^true$/i.test(stripOuterParens(whileForeverMatch[1]))) {
         return {
             function: '__control_forever__',
             arguments: [],
@@ -1746,7 +1746,7 @@ function parsePythonLine(line) {
     // condición ya empieza con "not ", se simplifica la doble negación.
     const whileCondMatch = trimmed.match(/^while\s+(.+)\s*:\s*$/);
     if (whileCondMatch) {
-        // Quitar UN par de paréntesis externos: (x < 5) → x < 5
+        // Quitar paréntesis externos: (x < 5) → x < 5
         // (sin truncar cadenas que solo terminen en ")" como sprite.tocando("x"))
         let whileCond = stripOuterParens(whileCondMatch[1]);
         const notWhile = whileCond.match(/^not\s+(.+)$/i);
@@ -1767,7 +1767,7 @@ function parsePythonLine(line) {
     if (ifMatch) {
         return {
             function: '__control_if__',
-            arguments: [{ type: 'condition', value: ifMatch[1] }],
+            arguments: [{ type: 'condition', value: stripOuterParens(ifMatch[1]) }],
             raw: trimmed,
             isControl: true,
             controlType: 'if'
@@ -1779,7 +1779,7 @@ function parsePythonLine(line) {
     if (siMatch) {
         return {
             function: '__control_if__',
-            arguments: [{ type: 'condition', value: siMatch[1] }],
+            arguments: [{ type: 'condition', value: stripOuterParens(siMatch[1]) }],
             raw: trimmed,
             isControl: true,
             controlType: 'if'
@@ -1801,7 +1801,7 @@ function parsePythonLine(line) {
     if (elifMatch) {
         return {
             function: '__elif__',
-            arguments: [{ type: 'condition', value: elifMatch[1] }],
+            arguments: [{ type: 'condition', value: stripOuterParens(elifMatch[1]) }],
             raw: trimmed,
             isElif: true
         };
@@ -2325,14 +2325,44 @@ function createBooleanLiteral(bool, parentId) {
 }
 
 /**
- * Quita UN solo par de paréntesis externos (si la cadena está completamente envuelta).
- * A diferencia de `replace(/^\(\s*|\s*\)$/g, '')`, NO trunca cadenas que simplemente
- * TERMINAN en ")" como `sprite.tocando("borde")`.
+ * Quita pares de paréntesis externos repetidamente si la cadena está completamente envuelta.
+ * A diferencia de `slice(1, -1)` ingenuo, respeta balance de paréntesis y strings para no romper
+ * expresiones compuestas como `(a == 1) and (b == 2)`.
  */
 function stripOuterParens(str) {
-    const trimmed = str.trim();
-    if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
-        return trimmed.slice(1, -1).trim();
+    if (!str || typeof str !== 'string') return '';
+    let trimmed = str.trim();
+    while (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+        let depth = 0;
+        let wrapsAll = true;
+        let inString = false;
+        let stringChar = null;
+
+        for (let i = 0; i < trimmed.length - 1; i++) {
+            const char = trimmed[i];
+            if ((char === '"' || char === "'") && (i === 0 || trimmed[i - 1] !== '\\')) {
+                if (!inString) {
+                    inString = true;
+                    stringChar = char;
+                } else if (stringChar === char) {
+                    inString = false;
+                }
+            }
+            if (inString) continue;
+
+            if (char === '(') depth++;
+            else if (char === ')') depth--;
+
+            if (depth === 0 && i > 0) {
+                wrapsAll = false;
+                break;
+            }
+        }
+        if (wrapsAll && depth === 1) {
+            trimmed = trimmed.slice(1, -1).trim();
+        } else {
+            break;
+        }
     }
     return trimmed;
 }
@@ -2555,6 +2585,28 @@ function parseExpressionToBlock(exprStr, parentId, expectedType = 'text') {
     
     // 4. Variables de Scratch (identificadores simples)
     if (/^[a-zA-Z_áéíóúÁÉÍÓÚñÑ][a-zA-Z0-9_áéíóúÁÉÍÓÚñÑ]*$/.test(str)) {
+        // Casos especiales de reporters del sistema que no son variables
+        if (str === 'cronometro') {
+            const rId = generateBlockId();
+            return { blockId: rId, block: { id: rId, opcode: 'sensing_timer', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+        }
+        if (str === 'respuesta') {
+            const rId = generateBlockId();
+            return { blockId: rId, block: { id: rId, opcode: 'sensing_answer', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+        }
+        if (str === 'dias_desde_2000') {
+            const rId = generateBlockId();
+            return { blockId: rId, block: { id: rId, opcode: 'sensing_dayssince2000', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+        }
+        if (str === 'nombre_usuario') {
+            const rId = generateBlockId();
+            return { blockId: rId, block: { id: rId, opcode: 'sensing_username', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+        }
+        if (str === 'volumen_microfono') {
+            const rId = generateBlockId();
+            return { blockId: rId, block: { id: rId, opcode: 'sensing_loudness', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+        }
+
         const varBlockId = generateBlockId();
         const block = {
             id: varBlockId,
@@ -2575,6 +2627,36 @@ function parseExpressionToBlock(exprStr, parentId, expectedType = 'text') {
             isShadow: false
         };
     }
+
+    // 5. Propiedades reporter de Scratch (sprite.x, sprite.y, sprite.direccion, etc.)
+    if (str === 'sprite.x') {
+        const rId = generateBlockId();
+        return { blockId: rId, block: { id: rId, opcode: 'motion_xposition', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+    }
+    if (str === 'sprite.y') {
+        const rId = generateBlockId();
+        return { blockId: rId, block: { id: rId, opcode: 'motion_yposition', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+    }
+    if (str === 'sprite.direccion') {
+        const rId = generateBlockId();
+        return { blockId: rId, block: { id: rId, opcode: 'motion_direction', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+    }
+    if (str === 'sprite.tamaño' || str === 'sprite.tamano') {
+        const rId = generateBlockId();
+        return { blockId: rId, block: { id: rId, opcode: 'looks_size', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+    }
+    if (str === 'sonido.volumen') {
+        const rId = generateBlockId();
+        return { blockId: rId, block: { id: rId, opcode: 'sound_volume', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+    }
+    if (str === 'raton.x') {
+        const rId = generateBlockId();
+        return { blockId: rId, block: { id: rId, opcode: 'sensing_mousex', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+    }
+    if (str === 'raton.y') {
+        const rId = generateBlockId();
+        return { blockId: rId, block: { id: rId, opcode: 'sensing_mousey', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+    }
     
     // Fallback: bloque shadow según el tipo esperado
     const shadow = expectedType === 'number' ? createShadowNumber(str, parentId) : createShadowText(str, parentId);
@@ -2587,17 +2669,168 @@ function parseExpressionToBlock(exprStr, parentId, expectedType = 'text') {
 }
 
 /**
+ * Encuentra operadores lógicos 'or' o 'and' al nivel más externo fuera de paréntesis y strings.
+ */
+function findSplitLogical(str, keyword) {
+    let depth = 0;
+    let inString = false;
+    let stringChar = null;
+    const len = keyword.length;
+
+    for (let i = str.length - 1; i >= 0; i--) {
+        const char = str[i];
+        if ((char === '"' || char === "'") && (i === 0 || str[i - 1] !== '\\')) {
+            if (!inString) {
+                inString = true;
+                stringChar = char;
+            } else if (stringChar === char) {
+                inString = false;
+            }
+        }
+        if (inString) continue;
+
+        if (char === ')') depth++;
+        else if (char === '(') depth--;
+        else if (depth === 0) {
+            if (i + len <= str.length && str.slice(i, i + len).toLowerCase() === keyword) {
+                const prevChar = i > 0 ? str[i - 1] : ' ';
+                const nextChar = i + len < str.length ? str[i + len] : ' ';
+                if (/\s/.test(prevChar) && /\s/.test(nextChar)) {
+                    return {
+                        left: str.slice(0, i).trim(),
+                        right: str.slice(i + len).trim()
+                    };
+                }
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Encuentra el operador de comparación (==, !=, >=, <=, >, <) al nivel más externo (depth === 0).
+ */
+function findSplitComparison(str) {
+    let depth = 0;
+    let inString = false;
+    let stringChar = null;
+
+    const ops2 = ['==', '!=', '>=', '<='];
+    const ops1 = ['>', '<'];
+
+    for (let i = 0; i < str.length; i++) {
+        const char = str[i];
+        if ((char === '"' || char === "'") && (i === 0 || str[i - 1] !== '\\')) {
+            if (!inString) {
+                inString = true;
+                stringChar = char;
+            } else if (stringChar === char) {
+                inString = false;
+            }
+        }
+        if (inString) continue;
+
+        if (char === '(') depth++;
+        else if (char === ')') depth--;
+        else if (depth === 0) {
+            const twoChar = str.slice(i, i + 2);
+            if (ops2.includes(twoChar)) {
+                return {
+                    op: twoChar,
+                    left: str.slice(0, i).trim(),
+                    right: str.slice(i + 2).trim()
+                };
+            }
+            if (ops1.includes(char)) {
+                return {
+                    op: char,
+                    left: str.slice(0, i).trim(),
+                    right: str.slice(i + 1).trim()
+                };
+            }
+        }
+    }
+    return null;
+}
+
+/**
  * Parsea una expresión de condición y la convierte a un bloque booleano de Scratch
- * Soporta: sprite.tocando("x"), tecla_presionada("x"), comparaciones, negaciones y literales booleanos.
+ * Soporta: sprite.tocando("x"), tecla_presionada("x"), comparaciones, negaciones,
+ * operadores lógicos and/or y literales booleanos.
  */
 function parseConditionToBlock(conditionStr, parentId) {
     if (!conditionStr || typeof conditionStr !== 'string') return null;
 
-    const condition = conditionStr.trim();
-    const blockId = generateBlockId();
-    const shadowBlocks = [];
+    let condition = stripOuterParens(conditionStr);
+    if (!condition) return null;
 
-    // Negación: "not <cond>" → operator_not(cond interna)
+    const blockId = generateBlockId();
+
+    // 1. Operador lógico 'or' (menor precedencia)
+    const orSplit = findSplitLogical(condition, 'or');
+    if (orSplit) {
+        const leftResult = parseConditionToBlock(orSplit.left, blockId);
+        const rightResult = parseConditionToBlock(orSplit.right, blockId);
+        if (leftResult && rightResult) {
+            const childShadows = [];
+            childShadows.push({ id: leftResult.blockId, block: leftResult.block });
+            childShadows.push(...(leftResult.shadowBlocks || []));
+            childShadows.push({ id: rightResult.blockId, block: rightResult.block });
+            childShadows.push(...(rightResult.shadowBlocks || []));
+
+            return {
+                blockId,
+                block: {
+                    id: blockId,
+                    opcode: 'operator_or',
+                    inputs: {
+                        OPERAND1: { name: 'OPERAND1', block: leftResult.blockId, shadow: null },
+                        OPERAND2: { name: 'OPERAND2', block: rightResult.blockId, shadow: null }
+                    },
+                    fields: {},
+                    next: null,
+                    parent: parentId,
+                    topLevel: false,
+                    shadow: false
+                },
+                shadowBlocks: childShadows
+            };
+        }
+    }
+
+    // 2. Operador lógico 'and'
+    const andSplit = findSplitLogical(condition, 'and');
+    if (andSplit) {
+        const leftResult = parseConditionToBlock(andSplit.left, blockId);
+        const rightResult = parseConditionToBlock(andSplit.right, blockId);
+        if (leftResult && rightResult) {
+            const childShadows = [];
+            childShadows.push({ id: leftResult.blockId, block: leftResult.block });
+            childShadows.push(...(leftResult.shadowBlocks || []));
+            childShadows.push({ id: rightResult.blockId, block: rightResult.block });
+            childShadows.push(...(rightResult.shadowBlocks || []));
+
+            return {
+                blockId,
+                block: {
+                    id: blockId,
+                    opcode: 'operator_and',
+                    inputs: {
+                        OPERAND1: { name: 'OPERAND1', block: leftResult.blockId, shadow: null },
+                        OPERAND2: { name: 'OPERAND2', block: rightResult.blockId, shadow: null }
+                    },
+                    fields: {},
+                    next: null,
+                    parent: parentId,
+                    topLevel: false,
+                    shadow: false
+                },
+                shadowBlocks: childShadows
+            };
+        }
+    }
+
+    // 3. Negación: "not <cond>" → operator_not(cond interna)
     const notMatch = condition.match(/^not\s+(.+)$/i);
     if (notMatch) {
         const inner = stripOuterParens(notMatch[1]);
@@ -2616,14 +2849,14 @@ function parseConditionToBlock(conditionStr, parentId) {
                     topLevel: false,
                     shadow: false
                 },
-                shadowBlocks: innerResult.shadowBlocks.concat([{ id: innerResult.blockId, block: innerResult.block }])
+                shadowBlocks: (innerResult.shadowBlocks || []).concat([{ id: innerResult.blockId, block: innerResult.block }])
             };
         }
         // "not <literal booleano>" sin bloque interno → constante negada
         return createBooleanLiteral(inner === 'false' || inner === 'False' ? true : false, parentId);
     }
 
-    // sprite.tocando("_edge_") o sprite.tocando("Sprite2")
+    // 4. sprite.tocando("_edge_") o sprite.tocando("Sprite2")
     const touchingMatch = condition.match(/^sprite\.tocando\s*\(\s*["'](.+?)["']\s*\)$/);
     if (touchingMatch) {
         const target = touchingMatch[1];
@@ -2667,7 +2900,7 @@ function parseConditionToBlock(conditionStr, parentId) {
         };
     }
 
-    // tecla_presionada("espacio")
+    // 5. tecla_presionada("espacio")
     const keyPressedMatch = condition.match(/^tecla_presionada\s*\(\s*["'](.+?)["']\s*\)$/);
     if (keyPressedMatch) {
         const key = keyPressedMatch[1].toLowerCase();
@@ -2715,7 +2948,7 @@ function parseConditionToBlock(conditionStr, parentId) {
         };
     }
 
-    // raton.presionado
+    // 6. raton.presionado
     if (condition === 'raton.presionado' || condition === 'mouse.pressed') {
         return {
             blockId,
@@ -2733,7 +2966,7 @@ function parseConditionToBlock(conditionStr, parentId) {
         };
     }
 
-    // sprite.tocando_color("#RRGGBB")
+    // 7. sprite.tocando_color("#RRGGBB")
     const colorMatch = condition.match(/^sprite\.tocando_color\s*\(\s*["'](.+?)["']\s*\)$/);
     if (colorMatch) {
         return {
@@ -2772,21 +3005,17 @@ function parseConditionToBlock(conditionStr, parentId) {
         };
     }
 
-    // Comparaciones: x > y, x < y, x == y
-    const comparisonMatch = condition.match(/^(.+?)\s*(>|<|==|>=|<=|!=)\s*(.+)$/);
-    if (comparisonMatch) {
-        const left = comparisonMatch[1].trim();
-        const op = comparisonMatch[2];
-        const right = comparisonMatch[3].trim();
-
+    // 8. Comparaciones: x > y, x < y, x == y, x != y, x >= y, x <= y
+    const cmp = findSplitComparison(condition);
+    if (cmp) {
         let opcode;
-        if (op === '>') opcode = 'operator_gt';
-        else if (op === '<') opcode = 'operator_lt';
-        else if (op === '==' || op === '!=') opcode = 'operator_equals';
+        if (cmp.op === '>') opcode = 'operator_gt';
+        else if (cmp.op === '<') opcode = 'operator_lt';
+        else if (cmp.op === '==' || cmp.op === '!=') opcode = 'operator_equals';
         else return null;
 
-        const leftResult = parseExpressionToBlock(left, blockId, 'number');
-        const rightResult = parseExpressionToBlock(right, blockId, 'number');
+        const leftResult = parseExpressionToBlock(cmp.left, blockId, 'number');
+        const rightResult = parseExpressionToBlock(cmp.right, blockId, 'number');
 
         const block = {
             blockId,
@@ -2815,7 +3044,7 @@ function parseConditionToBlock(conditionStr, parentId) {
         block.shadowBlocks = childShadows;
 
         // Para !=, envolver en NOT
-        if (op === '!=') {
+        if (cmp.op === '!=') {
             const notBlockId = generateBlockId();
             return {
                 blockId: notBlockId,
@@ -2838,7 +3067,7 @@ function parseConditionToBlock(conditionStr, parentId) {
         return block;
     }
 
-    // Literales booleanos: True/False → constante booleana
+    // 9. Literales booleanos: True/False → constante booleana
     if (condition === 'True' || condition === 'true' || condition === 'False' || condition === 'false') {
         return createBooleanLiteral(condition === 'True' || condition === 'true', parentId);
     }
@@ -3587,8 +3816,10 @@ export function pythonToBlocks(pythonCode, startPosition = { x: 80, y: 80 }, dev
             }
         }
 
-        // Calcular posición - cada script nuevo se mueve a la derecha
-        const scriptY = startPosition.y;
+        // Separación generosa entre pilas/scripts independientes
+        const SCRIPT_SPACING_X = 460; // Más espacio horizontal entre bloques para evitar solapamientos
+        const SCRIPT_SPACING_Y = 420; // Espacio vertical cuando se organizan múltiples pilas
+        const SCRIPTS_PER_ROW = 3;   // Máximo de scripts por fila antes de saltar a la siguiente
 
         // Manejar else: convertir el if anterior a if_else
         if (parsed.isElse) {
@@ -3692,8 +3923,11 @@ export function pythonToBlocks(pythonCode, startPosition = { x: 80, y: 80 }, dev
             parentBlockId = null;
         }
 
-        // Calcular posición X final para este bloque (separación entre scripts)
-        const finalX = startPosition.x + (scriptCount * 240);
+        // Calcular posición X e Y final para este bloque (distribución espaciada y ordenada)
+        const col = scriptCount % SCRIPTS_PER_ROW;
+        const row = Math.floor(scriptCount / SCRIPTS_PER_ROW);
+        const finalX = startPosition.x + (col * SCRIPT_SPACING_X);
+        const scriptY = startPosition.y + (row * SCRIPT_SPACING_Y);
 
         const result = pythonCallToBlock(
             parsed,
