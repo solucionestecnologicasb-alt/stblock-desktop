@@ -1,0 +1,80 @@
+@import "../../css/colors.css";
+
+.bluetooth-button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+    border: none;
+    background: transparent;
+    user-select: none;
+    cursor: pointer;
+    outline: none;
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.bluetooth-button:hover {
+    background-color: $looks-light-transparent;
+}
+
+.bluetooth-button .icon {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+/* LED de estado (esquina inferior derecha):
+   - gris con aro blanco  → desconectado
+   - verde con halo       → conectado
+   - ámbar pulsando       → conectando
+   El aro blanco separa el LED del icono y del fondo para que el estado se lea
+   de un vistazo. */
+.bluetooth-button .led {
+    position: absolute;
+    bottom: 0.1rem;
+    right: 0.1rem;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background-color: #b9b9b9;
+    box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85);
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.bluetooth-button.is-connected {
+    background-color: rgba(0, 179, 89, 0.18);
+    box-shadow: 0 0 0 1px rgba(0, 179, 89, 0.45);
+}
+
+.bluetooth-button.is-connected .led {
+    background-color: #00e676;
+    box-shadow:
+        0 0 0 1.5px rgba(255, 255, 255, 0.9),
+        0 0 6px rgba(0, 230, 118, 0.95);
+}
+
+.bluetooth-button.is-connecting {
+    background-color: rgba(255, 171, 25, 0.16);
+    box-shadow: 0 0 0 1px rgba(255, 171, 25, 0.45);
+}
+
+.bluetooth-button.is-connecting .led {
+    background-color: #ffb02e;
+    animation: bluetooth-led-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes bluetooth-led-pulse {
+    0%, 100% {
+        box-shadow:
+            0 0 0 1.5px rgba(255, 255, 255, 0.9),
+            0 0 3px rgba(255, 176, 46, 0.6);
+    }
+    50% {
+        box-shadow:
+            0 0 0 1.5px rgba(255, 255, 255, 0.95),
+            0 0 10px rgba(255, 176, 46, 1);
+    }
+}

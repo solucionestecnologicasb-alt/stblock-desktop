@@ -12,6 +12,7 @@ import {
     setDebugActive,
     setDebugSpeed
 } from '../reducers/vm-status';
+import {openBluetoothModal} from '../reducers/modals';
 
 class Controls extends React.Component {
     constructor (props) {
@@ -167,13 +168,17 @@ const mapStateToProps = state => ({
     turbo: state.scratchGui.vmStatus.turbo,
     debugArmed: state.scratchGui.vmStatus.debugArmed,
     debugActive: state.scratchGui.vmStatus.debugActive,
-    debugSpeed: state.scratchGui.vmStatus.debugSpeed
+    debugSpeed: state.scratchGui.vmStatus.debugSpeed,
+    bluetoothEnabled: state.scratchGui.deviceMode.mode === 'game',
+    bluetoothConnected: state.scratchGui.bluetooth.connected,
+    bluetoothConnecting: state.scratchGui.bluetooth.connecting
 });
 
 const mapDispatchToProps = dispatch => ({
     onDebugArmed: armed => dispatch(setDebugArmed(armed)),
     onDebugActive: active => dispatch(setDebugActive(active)),
-    onDebugSpeed: speed => dispatch(setDebugSpeed(speed))
+    onDebugSpeed: speed => dispatch(setDebugSpeed(speed)),
+    onOpenBluetoothModal: () => dispatch(openBluetoothModal())
 });
 
 export default connect(mapStateToProps, mapDispatchToProps)(Controls);

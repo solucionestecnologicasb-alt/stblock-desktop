@@ -5,6 +5,11 @@ import styles from './python-panel.css';
 import PythonHighlighter from './python-highlighter.jsx';
 import PythonReferencePanel from './python-reference-panel.jsx';
 import {loadPreferences, savePreferences} from '../../lib/python/python-storage.js';
+import {parseFolds} from '../../lib/python/python-folds.js';
+
+// Pares para auto-cierre de paréntesis/corchetes/llaves
+const AUTO_CLOSE_PAIRS = {'(': ')', '[': ']', '{': '}'};
+const BRACKET_CLOSE = {')': '(', ']': '[', '}': '{'};
 
 // Icono de Python oficial (serpientes entrelazadas)
 const PythonIcon = () => (
@@ -98,6 +103,25 @@ const HelpIcon = () => (
     </svg>
 );
 
+const SearchIcon = () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+);
+
+const ArrowUpIcon = () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <polyline points="18 15 12 9 6 15"/>
+    </svg>
+);
+
+const ArrowDownIcon = () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <polyline points="6 9 12 15 18 9"/>
+    </svg>
+);
+
 // Icono de error
 const ErrorIcon = () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
@@ -179,6 +203,144 @@ const PythonPanel = ({
     const [showErrors, setShowErrors] = useState(true); // Mostrar/ocultar panel de errores
     const [draftCode, setDraftCode] = useState(pythonCode || '');
     const draftCodeRef = useRef(pythonCode || '');
+    // Línea donde está el cursor (para resaltarla como en Monaco)
+    const [activeLine, setActiveLine] = useState(0);
+    // Búsqueda de texto
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [activeMatchIndex, setActiveMatchIndex] = useState(-1);
+    // Plegado de bloques (folding) estilo VS Code
+    const [collapsedSigs, setCollapsedSigs] = useState([]);
+    const [foldLayouts, setFoldLayouts] = useState([]);
+    const foldOverlayRef = useRef(null);
+    const prevFoldLayoutsRef = useRef([]);
+    // Posición del cursor para el footer (Ln X, Col Y)
+    const [cursorPos, setCursorPos] = useState({line: 1, col: 1});
+    // Par de paréntesis/corchetes coincidente para resaltar
+    const [bracketRanges, setBracketRanges] = useState(null);
+
+    const defaultCode = `# Codigo Python generado por STBlock
+# Arrastra bloques para ver el codigo aqui
+
+# Ejemplo:
+# sprite.move(10)
+# sprite.turn_right(90)
+# sprite.say("Hola!")
+`;
+
+    // Código que muestra el highlighter (usado también para buscar coincidencias)
+    const displayCode = isLocked ? (pythonCode || defaultCode) : draftCode;
+
+    // Bloques plegables del código actual (condiciones, funciones, bucles...)
+    const folds = useMemo(() => parseFolds(displayCode), [displayCode]);
+    const collapsedFolds = useMemo(
+        () => folds.filter(f => collapsedSigs.indexOf(f.sig) !== -1),
+        [folds, collapsedSigs]
+    );
+    // Rangos (índices 0-based de línea) de los cuerpos plegados, para que el
+    // highlighter oculte esas líneas (opacity 0) sin quitarles el espacio.
+    const collapsedRanges = useMemo(
+        () => collapsedFolds.map(f => ({start: f.start, end: f.end})),
+        [collapsedFolds]
+    );
+    const toggleFold = useCallback((sig) => {
+        setCollapsedSigs(prev => {
+            const next = prev.slice();
+            const idx = next.indexOf(sig);
+            if (idx !== -1) next.splice(idx, 1); else next.push(sig);
+            return next;
+        });
+    }, []);
+
+    // Calcula la posición de los indicadores/barras de plegado sobre el wrapper.
+    // Se llama tras cada render, en cada frame de scroll y al redimensionar.
+    const positionFolds = useCallback(() => {
+        const wrapper = editorWrapperRef.current;
+        const hs = highlighterRef.current;
+        if (!wrapper || !hs) return;
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const items = [];
+        for (const f of folds) {
+            const headerEl = hs.querySelector(`[data-line="${f.header + 1}"]`);
+            if (!headerEl) continue;
+            const headerRect = headerEl.getBoundingClientRect();
+            const collapsed = collapsedSigs.indexOf(f.sig) !== -1;
+            const item = {
+                sig: f.sig,
+                top: headerRect.top - wrapperRect.top,
+                height: headerRect.height,
+                collapsed,
+                hiddenLines: f.end - f.start + 1,
+                bandTop: 0,
+                bandHeight: 0,
+                guideTop: 0,
+                guideHeight: 0
+            };
+            if (collapsed) {
+                const bodyStartEl = hs.querySelector(`[data-line="${f.start + 1}"]`);
+                const bodyEndEl = hs.querySelector(`[data-line="${f.end + 1}"]`);
+                if (bodyStartEl && bodyEndEl) {
+                    const sr = bodyStartEl.getBoundingClientRect();
+                    const er = bodyEndEl.getBoundingClientRect();
+                    item.bandTop = sr.top - wrapperRect.top;
+                    item.bandHeight = er.bottom - sr.top;
+                }
+            } else {
+                // Línea guía del grupo: desde debajo de la cabecera hasta el
+                // final del cuerpo, para visualizar el alcance del bloque.
+                const bodyEndEl = hs.querySelector(`[data-line="${f.end + 1}"]`);
+                if (bodyEndEl) {
+                    const er = bodyEndEl.getBoundingClientRect();
+                    item.guideTop = headerRect.bottom - wrapperRect.top;
+                    item.guideHeight = Math.max(0, er.bottom - wrapperRect.top - item.guideTop);
+                }
+            }
+            items.push(item);
+        }
+
+        // Solo actualizar estado si algo cambió (evita re-render en bucle).
+        const prev = prevFoldLayoutsRef.current;
+        let changed = prev.length !== items.length;
+        if (!changed) {
+            for (let i = 0; i < items.length; i++) {
+                const a = items[i];
+                const b = prev[i];
+                if (!b || a.sig !== b.sig ||
+                    Math.abs(a.top - b.top) > 0.6 ||
+                    Math.abs(a.height - b.height) > 0.6 ||
+                    a.collapsed !== b.collapsed ||
+                    (a.collapsed && (Math.abs(a.bandTop - b.bandTop) > 0.6 ||
+                        Math.abs(a.bandHeight - b.bandHeight) > 0.6)) ||
+                    (!a.collapsed && (Math.abs(a.guideTop - b.guideTop) > 0.6 ||
+                        Math.abs(a.guideHeight - b.guideHeight) > 0.6))) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (changed) {
+            prevFoldLayoutsRef.current = items;
+            setFoldLayouts(items);
+        }
+    }, [folds, collapsedSigs]);
+
+    const handleFoldClick = useCallback((sig) => {
+        toggleFold(sig);
+        requestAnimationFrame(() => {
+            const ta = codeRef.current;
+            if (ta) {
+                const pos = ta.selectionStart;
+                ta.focus();
+                ta.setSelectionRange(pos, pos);
+            }
+        });
+    }, [toggleFold]);
+
+    // Ref "latest" de positionFolds para usarla en el ResizeObserver sin añadir
+    // la dependencia al efecto (positionFolds cambia de identidad en cada tecla
+    // porque folds cambia → recrear el observer en cada tecla sería un desperdicio).
+    const positionFoldsRef = useRef(positionFolds);
+    positionFoldsRef.current = positionFolds;
 
 // Asegurar que el monitor block exista en runtime.monitorBlocks para que
 // Scratch VM y el MonitorComponent de React puedan calcular el label y renderizar sin error.
@@ -481,36 +643,158 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
         };
     }, [isResizing]);
 
-    // Medir el ancho del scrollbar del textarea y compensar el ancho del
-    // highlighter para que AMBAS capas envuelvan (wrap) las líneas largas en
-    // el MISMO punto. Si no se compensa, en equipos con scrollbars permanentes
-    // (p. ej. Windows) el textarea pierde ancho de contenido mientras el
-    // highlighter ocupa el ancho completo → las líneas se cortan distinto → el
-    // cursor (textarea) no coincide con lo que se ve (highlighter). En equipos
-    // con scrollbars overlay (p. ej. macOS) el ancho es 0 y no hay problema;
-    // por eso el bug "varía según la máquina".
-    useLayoutEffect(() => {
-        const measureScrollbar = () => {
-            const wrapper = editorWrapperRef.current;
-            if (!wrapper) return;
-            let sbw = 0;
-            // Solo hay textarea en modo edición; en modo lectura el highlighter
-            // muestra su propio scrollbar y no necesita compensación.
-            if (codeRef.current) {
-                sbw = codeRef.current.offsetWidth - codeRef.current.clientWidth;
+    const lastScrollLogRef = useRef(0);
+
+    // Sincronizar el layout del textarea y el highlighter. Ambas capas deben
+    // tener el MISMO ancho de texto para que envuelvan (wrap) las líneas largas
+    // en el MISMO punto; si no, el cursor (textarea) no coincide con lo que se
+    // ve (highlighter) y al hacer scroll el texto "se corre" (escribes arriba
+    // o abajo de donde estás parado).
+    //
+    // Realimentación: la línea-content del highlighter debe tener el mismo ancho
+    // que el texto del textarea. Como ambas capas comparten gutter y padding,
+    // basta con igualar hs.clientWidth == ta.clientWidth. Cada llamada ajusta
+    // --editor-sbw en la diferencia observada y converge en 1-2 pasos,
+    // corrigiendo cualquier diferencia de renderizado (scrollbars overlay,
+    // redondeo de píxeles, etc.). Además, diagnostica si las alturas de
+    // contenido difieren (wrap desincronizado = el bug de "escribes arriba/abajo").
+    const syncLayout = useCallback(() => {
+        const wrapper = editorWrapperRef.current;
+        const ta = codeRef.current;
+        const hs = highlighterRef.current;
+        if (!wrapper) return;
+
+        // Modo lectura: no hay textarea, el highlighter usa ancho completo.
+        if (!ta) {
+            const next = '0px';
+            if (wrapper.style.getPropertyValue('--editor-sbw') !== next) {
+                wrapper.style.setProperty('--editor-sbw', next);
             }
-            wrapper.style.setProperty('--editor-sbw', `${sbw}px`);
-        };
-        measureScrollbar();
-        const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measureScrollbar);
+            // La barra de plegado no debe cubrir el scrollbar del highlighter (8px).
+            if (wrapper.style.getPropertyValue('--py-overlay-sbw') !== '8px') {
+                wrapper.style.setProperty('--py-overlay-sbw', '8px');
+            }
+            return;
+        }
+
+        // Corrección fina (realimentación): la línea-content del highlighter
+        // debe tener el MISMO ancho que el texto del textarea. Como ambas capas
+        // comparten gutter y padding, basta con igualar hs.clientWidth ==
+        // ta.clientWidth. Cada llamada ajusta --editor-sbw en la diferencia
+        // observada; converge en 1-2 pasos y corrige cualquier diferencia de
+        // renderizado (scrollbars overlay, redondeo, etc.).
+        const currentSbw = parseFloat(wrapper.style.getPropertyValue('--editor-sbw')) || 0;
+        let nextSbw = currentSbw;
+        if (hs) {
+            const diff = hs.clientWidth - ta.clientWidth;
+            if (Math.abs(diff) > 1) {
+                nextSbw = Math.max(0, currentSbw + diff);
+                console.log('[PythonEditor][sync] ancho corregido:', {
+                    hsClientW: hs.clientWidth,
+                    taClientW: ta.clientWidth,
+                    diff,
+                    currentSbw,
+                    nextSbw
+                });
+            }
+        }
+
+        const next = `${nextSbw}px`;
+        if (wrapper.style.getPropertyValue('--editor-sbw') !== next) {
+            wrapper.style.setProperty('--editor-sbw', next);
+            console.log('[PythonEditor][sync] sbw:', nextSbw, 'px', {
+                taClientW: ta.clientWidth,
+                hsClientW: hs ? hs.clientWidth : null
+            });
+        }
+        // La barra de plegado no debe cubrir el scrollbar del textarea: termina
+        // donde acaba el área de texto (a la izquierda del scrollbar).
+        if (wrapper.style.getPropertyValue('--py-overlay-sbw') !== next) {
+            wrapper.style.setProperty('--py-overlay-sbw', next);
+        }
+
+        // 3) Diagnóstico de wrap desincronizado (limitado para no inundar).
+        if (hs && Math.abs(ta.scrollHeight - hs.scrollHeight) > 3) {
+            const now = performance.now();
+            if (now - lastScrollLogRef.current > 300) {
+                lastScrollLogRef.current = now;
+                // Medidas extra para localizar la causa del desfase:
+                //  - lineContentW: ancho real del texto del highlighter
+                //    (si > taTextW, la línea no se encogió → palabra larga
+                //    sin romper = min-width:auto del flex item).
+                //  - taTextW: ancho del texto del textarea (clientWidth - paddings).
+                //  - codeDisplayH: altura del contenido del highlighter.
+                const codeDisplay = hs.firstElementChild || null;
+                const firstLine = codeDisplay ? codeDisplay.firstElementChild : null;
+                const lineContent = firstLine ? firstLine.children[1] || null : null;
+                const taPadL = parseFloat(getComputedStyle(ta).paddingLeft);
+                const taPadR = parseFloat(getComputedStyle(ta).paddingRight);
+                const taTextW = isNaN(taPadL) ? null : ta.clientWidth - taPadL - taPadR;
+                console.warn('[PythonEditor][sync] ALTURAS DESINCRONIZADAS (wrap distinto → escribes en otra línea):', {
+                    textareaScrollHeight: ta.scrollHeight,
+                    highlighterScrollHeight: hs.scrollHeight,
+                    diff: hs.scrollHeight - ta.scrollHeight,
+                    sbw: nextSbw,
+                    taClientW: ta.clientWidth,
+                    hsClientW: hs.clientWidth,
+                    lineContentW: lineContent ? lineContent.clientWidth : null,
+                    taTextW,
+                    codeDisplayH: codeDisplay ? codeDisplay.scrollHeight : null
+                });
+            }
+        }
+    }, []);
+
+    useLayoutEffect(() => {
+        syncLayout();
+        const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+            syncLayout();
+            positionFoldsRef.current();
+        });
         if (resizeObserver && editorWrapperRef.current) resizeObserver.observe(editorWrapperRef.current);
         if (resizeObserver && codeRef.current) resizeObserver.observe(codeRef.current);
-        window.addEventListener('resize', measureScrollbar);
+        window.addEventListener('resize', syncLayout);
         return () => {
-            window.removeEventListener('resize', measureScrollbar);
+            window.removeEventListener('resize', syncLayout);
             if (resizeObserver) resizeObserver.disconnect();
         };
-    }, [isLocked, fontSize]);
+    }, [syncLayout, isLocked, fontSize]);
+
+    // Reposicionar el overlay de plegado cuando cambia el contenido, la fuente,
+    // el tamaño del editor o el estado colapsado.
+    useLayoutEffect(() => {
+        positionFolds();
+    }, [positionFolds, displayCode, fontSize, searchOpen, isLocked, panelWidth]);
+
+    // El scrollbar aparece/desaparece cuando el contenido crece/decrece
+    // (texto largo), y la barra de búsqueda reduce la altura del editor.
+    // Re-sincronizar en esos casos evita que el highlighter y el textarea se
+    // desincronicen al hacer scroll (clic en una línea y el cursor escribe en
+    // otra).
+    useLayoutEffect(() => {
+        syncLayout();
+    }, [draftCode, searchOpen, syncLayout]);
+
+    // Diagnóstico único al iniciar el editor: muestra el layout inicial para
+    // ver si el ancho de ambas capas y sus alturas de contenido coinciden.
+    useEffect(() => {
+        const t = setTimeout(() => {
+            syncLayout();
+            const ta = codeRef.current;
+            const hs = highlighterRef.current;
+            const wr = editorWrapperRef.current;
+            console.log('[PythonEditor][init] layout:', {
+                taClientW: ta ? ta.clientWidth : null,
+                hsClientW: hs ? hs.clientWidth : null,
+                taScrollH: ta ? ta.scrollHeight : null,
+                hsScrollH: hs ? hs.scrollHeight : null,
+                taScrollTop: ta ? Math.round(ta.scrollTop) : null,
+                sbw: wr ? wr.style.getPropertyValue('--editor-sbw') : null,
+                fontSize
+            });
+        }, 500);
+        return () => clearTimeout(t);
+    }, [isLocked, syncLayout, fontSize]);
 
     // El texto se mantiene local mientras se escribe. Propagar cada tecla hasta
     // GUI vuelve a renderizar casi toda la aplicación, incluido el escenario.
@@ -546,18 +830,221 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
         }
     }, [targetKey]);
 
-    // Sincronizar scroll entre textarea y highlighter
+    // Sincronizar scroll entre textarea y highlighter. También re-sincronizamos
+    // el layout en cada frame: si el texto crece y aparece el scrollbar, el
+    // --editor-sbw debe actualizarse o el highlighter envuelve distinto.
     const handleScroll = (e) => {
         const {scrollTop, scrollLeft} = e.target;
         if (scrollFrameRef.current) cancelAnimationFrame(scrollFrameRef.current);
         scrollFrameRef.current = requestAnimationFrame(() => {
+            syncLayout();
             if (highlighterRef.current) {
                 highlighterRef.current.scrollTop = scrollTop;
                 highlighterRef.current.scrollLeft = scrollLeft;
+                // Diagnóstico: si el highlighter no pudo llegar a scrollTop
+                // (contenido más corto por wrap distinto), el scroll está
+                // desincronizado y el texto visible no coincide con el cursor.
+                const hsScroll = highlighterRef.current.scrollTop;
+                if (Math.abs(hsScroll - scrollTop) > 1) {
+                    console.warn('[PythonEditor][sync] scroll clamp (highlighter no alcanza):', {
+                        textareaScrollTop: scrollTop,
+                        highlighterScrollTop: hsScroll
+                    });
+                }
             }
+            positionFolds();
             scrollFrameRef.current = null;
         });
     };
+
+    // Encuentra el paréntesis/corchete/llave que coincide con el que está bajo
+    // el cursor (o justo antes). Devuelve {start, end} con end EXCLUSIVO.
+    const findMatchingBracket = useCallback((code, pos) => {
+        if (!code) return null;
+        const charAtCursor = code[pos];
+        if (BRACKET_CLOSE[charAtCursor]) {
+            // El cursor está sobre un cierre → buscar su apertura hacia atrás.
+            let depth = 1;
+            for (let i = pos - 1; i >= 0; i--) {
+                const c = code[i];
+                if (c === charAtCursor) {
+                    depth++;
+                } else if (c === BRACKET_CLOSE[charAtCursor]) {
+                    depth--;
+                    if (depth === 0) return {start: i, end: pos + 1};
+                }
+            }
+            return null;
+        }
+        const charBefore = code[pos - 1];
+        if (AUTO_CLOSE_PAIRS[charBefore]) {
+            // El cursor está justo después de una apertura → buscar su cierre.
+            let depth = 1;
+            for (let i = pos; i < code.length; i++) {
+                const c = code[i];
+                if (c === AUTO_CLOSE_PAIRS[charBefore]) {
+                    depth--;
+                    if (depth === 0) return {start: pos - 1, end: i + 1};
+                } else if (c === charBefore) {
+                    depth++;
+                }
+            }
+            return null;
+        }
+        return null;
+    }, []);
+
+    // Línea del cursor (resaltado estilo Monaco) + posición Ln/Col + paréntesis
+    // coincidente + auto-expansión de bloques plegados bajo el cursor.
+    const updateActiveLine = useCallback(() => {
+        const ta = codeRef.current;
+        if (!ta) return;
+        const selStart = ta.selectionStart;
+        const upTo = ta.value.slice(0, selStart);
+        const line = upTo.split('\n').length;
+        if (activeLine !== line) {
+            console.log('[PythonEditor] línea activa:', line);
+            setActiveLine(line);
+        }
+
+        // Posición del cursor para el footer (Ln X, Col Y)
+        const col = selStart - (upTo.lastIndexOf('\n') + 1) + 1;
+        setCursorPos(prev => (prev.line === line && prev.col === col) ? prev : {line, col});
+
+        // Paréntesis/corchete coincidente con el cursor
+        const bracket = findMatchingBracket(ta.value, selStart);
+        setBracketRanges(prev => {
+            if (!bracket && !prev) return prev;
+            if (bracket && prev && bracket.start === prev.start && bracket.end === prev.end) return prev;
+            return bracket;
+        });
+
+        // Auto-expandir los bloques plegados que contienen el cursor (flechas).
+        // Se expanden TODOS los que contienen la línea (soportar anidados).
+        collapsedFolds.forEach(f => {
+            if (line >= f.start && line <= f.end) toggleFold(f.sig);
+        });
+
+        // Diagnóstico del bug "escribes arriba/abajo de donde estás parado":
+        // si al mover el cursor las alturas de contenido difieren, el wrap está
+        // desincronizado y el caret no coincide con lo que se ve.
+        const hs = highlighterRef.current;
+        if (hs) {
+            const heightDelta = ta.scrollHeight - hs.scrollHeight;
+            const scrollDelta = Math.abs(ta.scrollTop - hs.scrollTop);
+            if (Math.abs(heightDelta) > 3 || scrollDelta > 1) {
+                const now = performance.now();
+                if (now - lastScrollLogRef.current > 300) {
+                    lastScrollLogRef.current = now;
+                    const wrapperSbw = editorWrapperRef.current ?
+                        editorWrapperRef.current.style.getPropertyValue('--editor-sbw') : '?';
+                    console.warn('[PythonEditor][caret] cursor en línea', line, 'con desync:', {
+                        taScrollTop: Math.round(ta.scrollTop),
+                        hsScrollTop: Math.round(hs.scrollTop),
+                        taScrollHeight: ta.scrollHeight,
+                        hsScrollHeight: hs.scrollHeight,
+                        diffAlturas: heightDelta,
+                        sbw: wrapperSbw
+                    });
+                }
+            }
+        }
+    }, [activeLine, findMatchingBracket, collapsedFolds, toggleFold]);
+
+    // Coincidencias de búsqueda sobre el código que muestra el highlighter.
+    // Avanzar q.length (no de 1 en 1) para obtener coincidencias NO superpuestas,
+    // igual que el buscador de Monaco: si no, "aa" en "aaaa" daría rangos que se
+    // solapan y el highlighter duplicaría caracteres al renderizarlos.
+    const searchMatches = useMemo(() => {
+        if (!searchQuery) return [];
+        const q = searchQuery.toLowerCase();
+        const matches = [];
+        let idx = displayCode.toLowerCase().indexOf(q);
+        while (idx !== -1) {
+            const line = displayCode.slice(0, idx).split('\n').length;
+            matches.push({start: idx, end: idx + q.length, line});
+            idx = displayCode.toLowerCase().indexOf(q, idx + q.length);
+        }
+        console.log('[PythonEditor] coincidencias:', matches.length);
+        return matches;
+    }, [searchQuery, displayCode]);
+
+    // Llevar una línea a la vista centrándola (estimación: las líneas muy
+    // largas pueden estar envueltas, así que no siempre es exacto, pero el
+    // scroll-sync del textarea reajusta el highlighter en cada frame).
+    const scrollToLine = useCallback((line) => {
+        const lineHeight = (fontSize || 14) * 1.7;
+        const ta = codeRef.current;
+        if (ta) {
+            const scrollTop = Math.max(0, (line - 1) * lineHeight - (ta.clientHeight / 2));
+            ta.scrollTop = scrollTop;
+            if (highlighterRef.current) highlighterRef.current.scrollTop = scrollTop;
+        } else if (highlighterRef.current) {
+            highlighterRef.current.scrollTop = Math.max(0, (line - 1) * lineHeight - (highlighterRef.current.clientHeight / 2));
+        }
+    }, [fontSize]);
+
+    // Posicionar el cursor en una coincidencia y llevarla a la vista. NO usa
+    // focus() en el textarea: si el foco pasara al textarea, la barra de
+    // búsqueda lo perdería y Enter no seguiría navegando entre coincidencias.
+    // La coincidencia activa se ve naranja en el highlighter.
+    const selectMatch = (match) => {
+        const ta = codeRef.current;
+        if (ta) {
+            ta.setSelectionRange(match.start, match.end);
+        }
+        scrollToLine(match.line);
+        setActiveLine(match.line);
+        console.log('[PythonEditor] ir a coincidencia línea:', match.line);
+    };
+
+    const goToMatch = (direction) => {
+        if (searchMatches.length === 0) return;
+        setActiveMatchIndex(prev => {
+            const next = (prev + direction + searchMatches.length) % searchMatches.length;
+            selectMatch(searchMatches[next]);
+            return next;
+        });
+    };
+
+    const closeSearch = () => {
+        setSearchOpen(false);
+        setSearchQuery('');
+        setActiveMatchIndex(-1);
+        const ta = codeRef.current;
+        if (ta) {
+            const pos = ta.selectionStart;
+            ta.setSelectionRange(pos, pos);
+            // Devolver el foco al editor al cerrar la búsqueda (estilo Monaco)
+            ta.focus();
+        }
+    };
+
+    // Resetear línea activa y resaltado de paréntesis al bloquear el panel o
+    // cambiar de sprite (el textarea desaparece y quedaría información obsoleta).
+    useEffect(() => {
+        setActiveLine(0);
+        setBracketRanges(null);
+    }, [isLocked, targetKey]);
+
+    // Atajo de teclado Ctrl+F / Cmd+F para abrir la búsqueda. Solo se
+    // intercepta cuando el foco está dentro del panel Python (o en el cuerpo)
+    // para no robarle el Ctrl+F al buscador de bloques u otras partes de la app.
+    useEffect(() => {
+        const handleGlobalKeyDown = (e) => {
+            if (!isOpen) return;
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+                const el = e.target;
+                const inPanel = el && el.closest && el.closest('[data-stblock-python-panel="true"]');
+                if (inPanel || el === document.body) {
+                    e.preventDefault();
+                    setSearchOpen(true);
+                }
+            }
+        };
+        window.addEventListener('keydown', handleGlobalKeyDown);
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    }, [isOpen]);
 
     // Auto-sincronización cuando cambia el código (debounced)
     useEffect(() => {
@@ -639,25 +1126,238 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
         });
     };
 
-    const handleCodeEdit = (e, forceCommit = false) => {
-        if (!isLocked && onCodeChange) {
-            const value = e.target.value;
-            draftCodeRef.current = value;
-            setDraftCode(value);
-            if (codeCommitRef.current) clearTimeout(codeCommitRef.current.timer);
-            codeCommitRef.current = null;
-            if (isComposingRef.current && !forceCommit) return;
-            const pending = {
-                code: value,
-                onCodeChange,
-                timer: setTimeout(() => {
-                    if (codeCommitRef.current !== pending) return;
-                    codeCommitRef.current = null;
-                    onCodeChange(value);
-                }, 150)
-            };
-            codeCommitRef.current = pending;
+    // Propaga un valor del draft a la GUI de forma debounced (la reconstrucción
+    // de bloques es costosa). Reutilizado por el textarea y por las ediciones
+    // programáticas (Tab, Enter, auto-cierre, comentar, plegar...).
+    const commitEdit = useCallback((value) => {
+        if (isLocked || !onCodeChange) return;
+        if (codeCommitRef.current) clearTimeout(codeCommitRef.current.timer);
+        const pending = {
+            code: value,
+            onCodeChange,
+            timer: setTimeout(() => {
+                if (codeCommitRef.current !== pending) return;
+                codeCommitRef.current = null;
+                onCodeChange(value);
+            }, 150)
+        };
+        codeCommitRef.current = pending;
+    }, [isLocked, onCodeChange]);
+
+    // Aplica una edición programática y restaura la selección en el siguiente
+    // frame (para no pelear con el re-render del textarea controlado).
+    const applyCodeEdit = useCallback((value, nextStart, nextEnd) => {
+        draftCodeRef.current = value;
+        setDraftCode(value);
+        commitEdit(value);
+        const ta = codeRef.current;
+        if (ta && typeof nextStart === 'number' && typeof nextEnd === 'number') {
+            requestAnimationFrame(() => {
+                ta.focus();
+                ta.setSelectionRange(nextStart, nextEnd);
+            });
         }
+    }, [commitEdit]);
+
+    const handleCodeEdit = (e, forceCommit = false) => {
+        const value = e.target.value;
+        draftCodeRef.current = value;
+        setDraftCode(value);
+        if (isComposingRef.current && !forceCommit) return;
+        commitEdit(value);
+    };
+
+    // Tab / Shift+Tab: indentar la selección completa sin borrar texto (VS Code).
+    const handleTab = (e, ta) => {
+        e.preventDefault();
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const code = draftCodeRef.current;
+        const lineStart = code.lastIndexOf('\n', start - 1) + 1;
+        let nextStart;
+        let nextEnd;
+
+        if (e.shiftKey) {
+            // Dedent: quitar hasta 4 espacios por línea, sin pasarse del indente real.
+            const selected = code.substring(lineStart, end);
+            const lines = selected.split('\n');
+            const newLines = lines.map(l => l.replace(/^ {1,4}/, ''));
+            const replacement = newLines.join('\n');
+            const firstRemoved = lines[0].length - newLines[0].length;
+            const caretOffset = start - lineStart;
+            const removedBeforeCaret = Math.min(caretOffset, firstRemoved);
+            if (start === end) {
+                nextStart = nextEnd = start - removedBeforeCaret;
+            } else {
+                nextStart = start - removedBeforeCaret;
+                nextEnd = lineStart + replacement.length;
+            }
+            const newValue = code.substring(0, lineStart) + replacement + code.substring(end);
+            applyCodeEdit(newValue, nextStart, nextEnd);
+            return;
+        }
+
+        if (start === end) {
+            // Tab simple: alinear al siguiente múltiplo de 4.
+            const colInLine = start - lineStart;
+            const spaces = 4 - (colInLine % 4);
+            const newValue = code.substring(0, start) + ' '.repeat(spaces) + code.substring(end);
+            applyCodeEdit(newValue, start + spaces, start + spaces);
+            return;
+        }
+
+        // Indentar todas las líneas seleccionadas (desde el inicio de la línea
+        // donde empieza la selección). Si la selección termina justo en un salto
+        // de línea, no se indenta la línea vacía final (como hace VS Code).
+        const selected = code.substring(lineStart, end);
+        const endsWithNewline = selected.endsWith('\n');
+        const body = endsWithNewline ? selected.slice(0, -1) : selected;
+        const replacement = body.replace(/^/gm, '    ') + (endsWithNewline ? '\n' : '');
+        const added = replacement.length - selected.length;
+        applyCodeEdit(
+            code.substring(0, lineStart) + replacement + code.substring(end),
+            start + 4,
+            end + added
+        );
+    };
+
+    // Enter con auto-indentación: hereda la indentación de la línea y suma 4
+    // espacios si la línea termina en ':' (abre un bloque) o si hay paréntesis
+    // sin cerrar (continuación de expresión).
+    const handleEnter = (e, ta) => {
+        e.preventDefault();
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const code = draftCodeRef.current;
+        const lineStart = code.lastIndexOf('\n', start - 1) + 1;
+        const beforeCaret = code.substring(lineStart, start);
+        const baseIndent = (beforeCaret.match(/^[ \t]*/) || [''])[0];
+        const trimmed = beforeCaret.trimEnd();
+        const openParens = (beforeCaret.match(/[([{]/g) || []).length;
+        const closeParens = (beforeCaret.match(/[)\]}]/g) || []).length;
+        let nextIndent = baseIndent;
+        if (trimmed.endsWith(':') && !trimmed.startsWith('#')) {
+            nextIndent += '    ';
+        } else if (openParens > closeParens) {
+            nextIndent += '    ';
+        }
+        const newValue = code.substring(0, start) + '\n' + nextIndent + code.substring(end);
+        const caret = start + 1 + nextIndent.length;
+        applyCodeEdit(newValue, caret, caret);
+    };
+
+    // Auto-cierre de paréntesis/corchetes/llaves/comillas (estilo VS Code).
+    const handleAutoClose = (e, ta, key) => {
+        const close = AUTO_CLOSE_PAIRS[key];
+        if (!close) return false;
+        e.preventDefault();
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const code = draftCodeRef.current;
+        const nextChar = code[end] || '';
+        const prevChar = code[start - 1] || '';
+
+        if (start === end) {
+            // Comillas: no auto-cerrar si escribimos dentro de una palabra
+            // (ej. un apóstrofo) ni duplicar si ya hay una igual después.
+            if (key === "'" || key === '"') {
+                if (/[A-Za-z0-9_áéíóúñÁÉÍÓÚÑ]/.test(nextChar) ||
+                    /[A-Za-z0-9_áéíóúñÁÉÍÓÚÑ]/.test(prevChar)) {
+                    const newValue = code.substring(0, start) + key + code.substring(end);
+                    applyCodeEdit(newValue, start + 1, start + 1);
+                    return true;
+                }
+                if (nextChar === key) {
+                    const newValue = code.substring(0, start) + key + code.substring(end + 1);
+                    applyCodeEdit(newValue, start + 1, start + 1);
+                    return true;
+                }
+            }
+            // Paréntesis/corchetes: si ya hay un cierre justo después, saltarlo.
+            if (nextChar === close) {
+                ta.setSelectionRange(start + 1, start + 1);
+                return true;
+            }
+            const newValue = code.substring(0, start) + key + close + code.substring(end);
+            applyCodeEdit(newValue, start + 1, start + 1);
+        } else {
+            // Hay selección: envolverla con el par.
+            const selected = code.substring(start, end);
+            const newValue = code.substring(0, start) + key + selected + close + code.substring(end);
+            applyCodeEdit(newValue, start + 1, end + 1);
+        }
+        return true;
+    };
+
+    // Backspace dentro de un par vacío: borra ambos caracteres.
+    const handleBackspace = (e, ta) => {
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        if (start !== end || start === 0) return false;
+        const code = draftCodeRef.current;
+        const prev = code[start - 1];
+        const next = code[start] || '';
+        const close = AUTO_CLOSE_PAIRS[prev];
+        if (close && close === next) {
+            e.preventDefault();
+            const newValue = code.substring(0, start - 1) + code.substring(end + 1);
+            applyCodeEdit(newValue, start - 1, start - 1);
+            return true;
+        }
+        return false;
+    };
+
+    // Ctrl+/ (Cmd+/) : comentar / descomentar líneas.
+    const toggleComment = () => {
+        const ta = codeRef.current;
+        if (!ta) return;
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const code = draftCodeRef.current;
+        const firstLineStart = code.lastIndexOf('\n', start - 1) + 1;
+        let selEnd;
+        if (start === end) {
+            const nl = code.indexOf('\n', start);
+            selEnd = nl === -1 ? code.length : nl;
+        } else if (code[end - 1] === '\n') {
+            selEnd = end - 1;
+        } else {
+            const nl = code.indexOf('\n', end);
+            selEnd = nl === -1 ? code.length : nl;
+        }
+        const block = code.substring(firstLineStart, selEnd);
+        const lines = block.split('\n');
+        const nonEmpty = lines.filter(l => l.trim() !== '');
+        const allCommented = nonEmpty.length > 0 && nonEmpty.every(l => /^\s*#/.test(l));
+        const newBlock = allCommented
+            ? lines.map(l => l.replace(/^(\s*)#/, '$1')).join('\n')
+            : lines.map(l => (l.trim() === '' ? l : '#' + l)).join('\n');
+
+        let nextStart;
+        let nextEnd;
+        if (start === end) {
+            const caretOffset = start - firstLineStart;
+            const firstLineBefore = lines[0];
+            const firstLineAfter = newBlock.split('\n')[0];
+            const delta = firstLineAfter.length - firstLineBefore.length;
+            const newCaret = Math.max(firstLineStart,
+                Math.min(start + delta, firstLineStart + firstLineAfter.length));
+            nextStart = nextEnd = newCaret;
+        } else {
+            nextStart = firstLineStart;
+            nextEnd = firstLineStart + newBlock.length;
+        }
+        const newValue = code.substring(0, firstLineStart) + newBlock + code.substring(selEnd);
+        applyCodeEdit(newValue, nextStart, nextEnd);
+    };
+
+    // Al salir del textarea, confirmar cualquier texto pendiente. También
+    // resetear el estado de composición IME: si el usuario hace clic fuera
+    // durante una composición (sin compositionEnd), el texto quedaría sin
+    // confirmar y las siguientes pulsaciones se ignorarían.
+    const handleBlur = () => {
+        isComposingRef.current = false;
+        commitDraft();
     };
 
     // Ajustar tamaño de fuente del editor Python (10px - 28px)
@@ -672,15 +1372,6 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
             return next;
         });
     };
-
-    const defaultCode = `# Codigo Python generado por STBlock
-# Arrastra bloques para ver el codigo aqui
-
-# Ejemplo:
-# sprite.move(10)
-# sprite.turn_right(90)
-# sprite.say("Hola!")
-`;
 
     return (
         <>
@@ -780,6 +1471,24 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
                         >
                             <HelpIcon />
                         </button>
+                        {/* Botón Búsqueda (Ctrl+F) */}
+                        <button
+                            className={classNames(styles.actionButton, {
+                                [styles.searchActive]: searchOpen
+                            })}
+                            onClick={() => {
+                                if (searchOpen) {
+                                    closeSearch();
+                                } else {
+                                    setSearchOpen(true);
+                                    setSearchQuery('');
+                                    setActiveMatchIndex(-1);
+                                }
+                            }}
+                            title="Buscar en el código (Ctrl+F)"
+                        >
+                            <SearchIcon />
+                        </button>
                         <button
                             className={classNames(styles.actionButton, {
                                 [styles.unlocked]: !isLocked
@@ -850,6 +1559,74 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
                             >+</button>
                         </div>
                     </div>
+                    {/* Barra de búsqueda */}
+                    {searchOpen && (
+                        <div className={styles.searchBar}>
+                            <input
+                                className={styles.searchInput}
+                                value={searchQuery}
+                                onChange={(e) => {
+                                    const q = e.target.value;
+                                    setSearchQuery(q);
+                                    // Calcular con el valor NUEVO del query (el
+                                    // searchMatches del closure aún es del viejo).
+                                    if (!q) {
+                                        setActiveMatchIndex(-1);
+                                    } else {
+                                        const idx = displayCode.toLowerCase().indexOf(q.toLowerCase());
+                                        if (idx !== -1) {
+                                            setActiveMatchIndex(0);
+                                            // Llevar la 1ª coincidencia a la vista
+                                            const line = displayCode.slice(0, idx).split('\n').length;
+                                            scrollToLine(line);
+                                        } else {
+                                            setActiveMatchIndex(-1);
+                                        }
+                                    }
+                                }}
+                                placeholder="Buscar en el codigo..."
+                                autoFocus
+                                onKeyDown={(e) => {
+                                    e.stopPropagation();
+                                    if (e.key === 'Enter') {
+                                        if (e.shiftKey) goToMatch(-1);
+                                        else goToMatch(1);
+                                        e.preventDefault();
+                                    } else if (e.key === 'Escape') {
+                                        closeSearch();
+                                    }
+                                }}
+                            />
+                            <span className={styles.searchCount}>
+                                {searchQuery && searchMatches.length > 0
+                                    ? `${activeMatchIndex + 1} de ${searchMatches.length}`
+                                    : (searchQuery ? '0 de 0' : '')}
+                            </span>
+                            <button
+                                className={styles.searchNavButton}
+                                onClick={() => goToMatch(-1)}
+                                title="Coincidencia anterior (Shift+Enter)"
+                                disabled={searchMatches.length === 0}
+                            >
+                                <ArrowUpIcon />
+                            </button>
+                            <button
+                                className={styles.searchNavButton}
+                                onClick={() => goToMatch(1)}
+                                title="Siguiente coincidencia (Enter)"
+                                disabled={searchMatches.length === 0}
+                            >
+                                <ArrowDownIcon />
+                            </button>
+                            <button
+                                className={styles.searchCloseButton}
+                                onClick={closeSearch}
+                                title="Cerrar búsqueda (Esc)"
+                            >
+                                <CloseIcon />
+                            </button>
+                        </div>
+                    )}
                     <div
                         ref={editorWrapperRef}
                         className={styles.editorWrapper}
@@ -861,12 +1638,22 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
                             className={classNames(styles.highlighterScroll, {
                                 [styles.scrollable]: isLocked
                             })}
+                            onScroll={() => {
+                                // Modo lectura: el highlighter controla el scroll.
+                                positionFolds();
+                                syncLayout();
+                            }}
                         >
                             <PythonHighlighter
-                                code={isLocked ? (pythonCode || defaultCode) : draftCode}
+                                code={displayCode}
                                 showLineNumbers={true}
                                 errorLines={errorLines}
                                 warningLines={warningLines}
+                                activeLine={activeLine}
+                                searchMatches={searchMatches}
+                                activeMatchIndex={activeMatchIndex}
+                                collapsedRanges={collapsedRanges}
+                                bracketRanges={bracketRanges}
                                 className={classNames(styles.highlighterLayer, {
                                     [styles.editable]: !isLocked
                                 })}
@@ -886,48 +1673,46 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
                                     isComposingRef.current = false;
                                     handleCodeEdit(e, true);
                                 }}
-                                onBlur={commitDraft}
+                                onBlur={handleBlur}
+                                onFocus={() => requestAnimationFrame(updateActiveLine)}
+                                onSelect={updateActiveLine}
+                                onClick={updateActiveLine}
                                 onScroll={handleScroll}
                                 onKeyDown={(e) => {
                                     e.stopPropagation();
                                     e.nativeEvent.stopImmediatePropagation();
 
-                                    // Manejar Tab y Shift+Tab sin perder selección.
-                                    if (e.key === 'Tab') {
-                                        e.preventDefault();
-                                        const textarea = e.target;
-                                        const start = textarea.selectionStart;
-                                        const end = textarea.selectionEnd;
-                                        const lineStart = draftCode.lastIndexOf('\n', start - 1) + 1;
-                                        const selected = draftCode.substring(lineStart, end);
-                                        let replacement;
-                                        let nextStart;
-                                        let nextEnd;
-                                        if (e.shiftKey) {
-                                            replacement = selected.replace(/^ {1,4}/gm, '');
-                                            const removed = selected.length - replacement.length;
-                                            nextStart = Math.max(lineStart, start - Math.min(4, start - lineStart));
-                                            nextEnd = Math.max(nextStart, end - removed);
-                                        } else if (start === end) {
-                                            replacement = `${draftCode.substring(lineStart, start)}    `;
-                                            nextStart = nextEnd = start + 4;
-                                        } else {
-                                            replacement = selected.replace(/^/gm, '    ');
-                                            const added = replacement.length - selected.length;
-                                            nextStart = start + 4;
-                                            nextEnd = end + added;
-                                        }
-                                        const newValue = draftCode.substring(0, lineStart) +
-                                            replacement + draftCode.substring(end);
-                                        handleCodeEdit({target: {value: newValue}});
+                                    // Durante la composición IME (texto predictivo)
+                                    // no interceptar teclas: Tab/Enter/auto-cierre
+                                    // romperían la composición en curso.
+                                    if (isComposingRef.current) return;
 
-                                        requestAnimationFrame(() => {
-                                            textarea.selectionStart = nextStart;
-                                            textarea.selectionEnd = nextEnd;
-                                        });
+                                    if (e.key === 'Tab') {
+                                        handleTab(e, e.target);
+                                    } else if (e.key === 'Enter') {
+                                        handleEnter(e, e.target);
+                                    } else if (e.key === 'Backspace') {
+                                        handleBackspace(e, e.target);
+                                    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === '/') {
+                                        toggleComment();
+                                    } else if (AUTO_CLOSE_PAIRS[e.key] && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                                        handleAutoClose(e, e.target, e.key);
+                                    } else if (BRACKET_CLOSE[e.key] && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                                        // Cierre: si ya hay uno igual justo después,
+                                        // saltarlo sin duplicar (estilo VS Code).
+                                        const ta = e.target;
+                                        if (ta.selectionStart === ta.selectionEnd &&
+                                            draftCodeRef.current[ta.selectionStart] === e.key) {
+                                            e.preventDefault();
+                                            const pos = ta.selectionStart + 1;
+                                            ta.setSelectionRange(pos, pos);
+                                        }
                                     }
                                 }}
-                                onKeyUp={(e) => e.stopPropagation()}
+                                onKeyUp={(e) => {
+                                    e.stopPropagation();
+                                    updateActiveLine();
+                                }}
                                 onKeyPress={(e) => e.stopPropagation()}
                                 onPaste={(e) => e.stopPropagation()}
                                 onCut={(e) => e.stopPropagation()}
@@ -938,6 +1723,63 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
                                 autoCapitalize="off"
                                 placeholder="# Escribe codigo Python..."
                             />
+                        )}
+                        {/* Overlay de plegado: indicadores en el gutter + barras de
+                            "N líneas ocultas". pointer-events: none salvo en los
+                            indicadores/barras, así el texto sigue siendo editable. */}
+                        {folds.length > 0 && (
+                            <div ref={foldOverlayRef} className={styles.foldOverlay}>
+                                {foldLayouts.map(item => (
+                                    <div key={item.sig}>
+                                        <button
+                                            type="button"
+                                            className={classNames(styles.foldIndicator, {
+                                                [styles.foldIndicatorCollapsed]: item.collapsed
+                                            })}
+                                            style={{top: item.top + (item.height - 18) / 2}}
+                                            onClick={() => handleFoldClick(item.sig)}
+                                            title={item.collapsed
+                                                ? `Expandir bloque (${item.hiddenLines} ${item.hiddenLines === 1 ? 'línea oculta' : 'líneas ocultas'})`
+                                                : 'Plegar bloque'}
+                                            tabIndex={-1}
+                                        >
+                                            <span className={styles.foldArrow}>▸</span>
+                                        </button>
+                                        {!item.collapsed && item.guideHeight > 0 && (
+                                            <div
+                                                className={styles.foldGuide}
+                                                style={{top: item.guideTop, height: item.guideHeight}}
+                                            />
+                                        )}
+                                        {item.collapsed && (
+                                            <div
+                                                className={styles.foldBand}
+                                                style={{top: item.bandTop, height: Math.max(1, item.bandHeight)}}
+                                                onClick={() => handleFoldClick(item.sig)}
+                                                onWheel={(e) => {
+                                                    // Permitir scrollear aunque la rueda
+                                                    // esté sobre la barra de plegado.
+                                                    const ta = codeRef.current;
+                                                    if (ta) {
+                                                        ta.scrollTop += e.deltaY;
+                                                    } else {
+                                                        const hs = highlighterRef.current;
+                                                        if (hs) {
+                                                            hs.scrollTop += e.deltaY;
+                                                            requestAnimationFrame(positionFolds);
+                                                        }
+                                                    }
+                                                }}
+                                                title="Haz clic para expandir el bloque"
+                                            >
+                                                <span className={styles.foldBandLabel}>
+                                                    {item.hiddenLines} {item.hiddenLines === 1 ? 'línea oculta' : 'líneas ocultas'}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                         )}
                         {/* Botones de zoom flotantes (estilo bloques) */}
                         <div className={styles.floatingZoomControls}>
@@ -1171,6 +2013,11 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
                                     : 'Escribe código y los bloques se crean automáticamente • La bandera ejecuta el proyecto completo'
                         }
                     </span>
+                    {!isLocked && (
+                        <span className={styles.cursorPos} title="Posición del cursor">
+                            Ln {cursorPos.line}, Col {cursorPos.col}
+                        </span>
+                    )}
                 </div>
             </div>
         </>

@@ -1168,6 +1168,28 @@ const testBlocks = function () {
         <block type="test_report"/>
     </category>`;
 };
+const bluetoothCategory = function () {
+    return `
+    <category name="Bluetooth" id="bluetooth" colour="#0A8BD6" secondaryColour="#075C93">
+        <block type="bt_when_line"/>
+        ${blockSeparator}
+        <block type="bt_connect">${textShadow('PUERTO', 'COM3')}${numShadow('BAUD', 9600)}</block>
+        <block type="bt_disconnect"/>
+        <block type="bt_isConnected"/>
+        ${blockSeparator}
+        <block type="bt_send">${textShadow('TEXTO', 'hola')}</block>
+        <block type="bt_sendLine">${textShadow('TEXTO', 'hola')}</block>
+        <block type="bt_sendByte">${numShadow('NUMERO', 0)}</block>
+        ${blockSeparator}
+        <block type="bt_lineAvailable"/>
+        <block type="bt_byteAvailable"/>
+        <block type="bt_readLine"/>
+        <block type="bt_readByte"/>
+        <block type="bt_lastLine"/>
+        <block type="bt_lastByte"/>
+        <block type="bt_clearRx"/>
+    </category>`;
+};
 const advancedBlocksToggle = function (showAdvancedBlocks = false) {
     return `
     <category name="${showAdvancedBlocks ? '▴ Ocultar bloques' : '▾ Más bloques'}" id="advancedBlocksToggle" colour="#6B7280" secondaryColour="#4B5563">
@@ -1330,6 +1352,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         operatorsXML, gap,
         variablesXML, gap,
         myBlocksXML, gap,
+        bluetoothCategory(), gap,
         advancedBlocksToggle(showAdvancedBlocks)
     ];
     if (hasDeviceBlocks) {

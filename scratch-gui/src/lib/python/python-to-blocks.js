@@ -49,6 +49,33 @@ const PLACA_METHODS = [
     'struct_array_crear', 'struct_array_poner', 'struct_array_obtener'
 ];
 
+// Métodos del objeto `bluetooth` (HC-05 vía COM Bluetooth del PC, modo Programación)
+const BLUETOOTH_METHODS = [
+    'conectar', 'desconectar', 'conectado',
+    'enviar', 'enviar_linea', 'enviar_byte',
+    'hay_linea', 'hay_byte', 'leer_linea', 'leer_byte',
+    'ultima_linea', 'ultimo_byte', 'vaciar'
+];
+
+// Opcodes Bluetooth reporter/booleano SIN argumentos. Se pueden usar como
+// expresión/condición con paréntesis: bluetooth.conectado(),
+// bluetooth.hay_linea(), bluetooth.leer_linea(), etc.
+const BT_NOARG_REPORTERS = {
+    'bt_isConnected': true,
+    'bt_lineAvailable': true,
+    'bt_byteAvailable': true,
+    'bt_readLine': true,
+    'bt_readByte': true,
+    'bt_lastLine': true,
+    'bt_lastByte': true
+};
+
+// Entradas con valor por defecto para opcodes Bluetooth: permiten omitir
+// argumentos finales (p. ej. bluetooth.conectar("COM3") → baudaje 9600).
+const BT_INPUT_DEFAULTS = {
+    'bt_connect': { BAUD: 9600 }
+};
+
 // Menús `field_dropdown` directos sobre el bloque (no shadow-menu): mapean
 // inputName → nombre de menú en device-menu-mappings.js. Los campos cuyo valor
 // ya es canónico (PIN, PORT, VALUE de serialBegin, etc.) no se listan aquí.
@@ -184,6 +211,8 @@ const KNOWN_FUNCTIONS = [
     'raton.velocidad', 'raton.x_anterior', 'raton.y_anterior',
     // ── DISPOSITIVO (placa) ──
     ...PLACA_METHODS.map(m => `placa.${m}`),
+    // ── BLUETOOTH (HC-05 vía COM del PC) ──
+    ...BLUETOOTH_METHODS.map(m => `bluetooth.${m}`),
 ];
 
 // Métodos válidos para cada objeto
@@ -236,6 +265,8 @@ const VALID_METHODS = {
     'ia': ['mover_a_xy', 'perseguir', 'huir_de', 'mirar_a', 'distancia_a', 'en_rango', 'patrullar_x', 'perseguir_si_rango', 'mantener_distancia', 'deambular', 'cerca_de'],
     // ── DISPOSITIVO ──
     'placa': PLACA_METHODS,
+    // ── BLUETOOTH ──
+    'bluetooth': BLUETOOTH_METHODS,
 };
 
 // Función para encontrar la función más similar (distancia de Levenshtein)
@@ -495,6 +526,7 @@ const PYTHON_TO_OPCODE = {
     // ═══════════════════════════════════════════════════════════════
     '__procedure_def__': 'procedures_definition',
     '__procedure_call__': 'procedures_call',
+    '__procedure_return__': 'procedures_return_value',
 
     // ═══════════════════════════════════════════════════════════════
     // BLOQUES DE JUEGO (Game Blocks de STBlock)
@@ -758,7 +790,25 @@ const PYTHON_TO_OPCODE = {
     'placa.struct_obtener': 'arduino_structs_structGet',
     'placa.struct_array_crear': 'arduino_structs_structArrayCreate',
     'placa.struct_array_poner': 'arduino_structs_structArraySet',
-    'placa.struct_array_obtener': 'arduino_structs_structArrayGet'
+    'placa.struct_array_obtener': 'arduino_structs_structArrayGet',
+
+    // ═══════════════════════════════════════════════════════════════
+    // BLUETOOTH (HC-05 vía COM Bluetooth del PC, modo Programación)
+    // ═══════════════════════════════════════════════════════════════
+    '__event_bt_line__': 'bt_when_line',
+    'bluetooth.conectar': 'bt_connect',
+    'bluetooth.desconectar': 'bt_disconnect',
+    'bluetooth.conectado': 'bt_isConnected',
+    'bluetooth.enviar': 'bt_send',
+    'bluetooth.enviar_linea': 'bt_sendLine',
+    'bluetooth.enviar_byte': 'bt_sendByte',
+    'bluetooth.hay_linea': 'bt_lineAvailable',
+    'bluetooth.hay_byte': 'bt_byteAvailable',
+    'bluetooth.leer_linea': 'bt_readLine',
+    'bluetooth.leer_byte': 'bt_readByte',
+    'bluetooth.ultima_linea': 'bt_lastLine',
+    'bluetooth.ultimo_byte': 'bt_lastByte',
+    'bluetooth.vaciar': 'bt_clearRx'
 };
 
 /**
@@ -894,6 +944,7 @@ const OPCODE_INPUTS = {
     // ═══════════════════════════════════════════════════════════════
     'procedures_definition': { custom_block: 'string' },
     'procedures_call': { custom_block: 'string' },
+    'procedures_return_value': { VALUE: 'any' },
 
     // ═══════════════════════════════════════════════════════════════
     // BLOQUES DE JUEGO
@@ -1301,6 +1352,24 @@ const OPCODE_INPUTS = {
     'arduino_structs_structArrayCreate': { ARRNAME: 'string', STRUCTNAME: 'string', SIZE: 'number' },
     'arduino_structs_structArraySet': { ARRNAME: 'string', '[INDEX': 'number', FIELD: 'string', VALUE: 'string' },
     'arduino_structs_structArrayGet': { ARRNAME: 'string', '[INDEX': 'number', FIELD: 'string' },
+
+    // ═══════════════════════════════════════════════════════════════
+    // BLUETOOTH (HC-05 vía COM Bluetooth del PC)
+    // ═══════════════════════════════════════════════════════════════
+    'bt_when_line': {},
+    'bt_connect': { PUERTO: 'string', BAUD: 'number' },
+    'bt_disconnect': {},
+    'bt_isConnected': {},
+    'bt_send': { TEXTO: 'string' },
+    'bt_sendLine': { TEXTO: 'string' },
+    'bt_sendByte': { NUMERO: 'number' },
+    'bt_lineAvailable': {},
+    'bt_byteAvailable': {},
+    'bt_readLine': {},
+    'bt_readByte': {},
+    'bt_lastLine': {},
+    'bt_lastByte': {},
+    'bt_clearRx': {}
 };
 
 /**
@@ -1318,17 +1387,25 @@ function validateFunctionArguments(funcName, args, lineNumber) {
     const inputDefs = OPCODE_INPUTS[opcode] || {};
     const inputNames = Object.keys(inputDefs).filter(name => !name.startsWith('SUBSTACK'));
     const expectedArgCount = inputNames.length;
+    // Entradas con valor por defecto (BT_INPUT_DEFAULTS) son opcionales y pueden
+    // omitirse al final: p. ej. bluetooth.conectar("COM3") sin baudaje.
+    const defaultedInputs = BT_INPUT_DEFAULTS[opcode] || {};
 
     // Verificar cantidad de argumentos
     if (args.length < expectedArgCount) {
-        const missing = expectedArgCount - args.length;
-        errors.push(new CodeError(
-            ERROR_TYPES.MISSING_ARGUMENT,
-            `Faltan ${missing} argumento(s) en ${funcName}(). Se esperan ${expectedArgCount}.`,
-            lineNumber,
-            0,
-            `${funcName}(${inputNames.map(n => n.toLowerCase()).join(', ')})`
-        ));
+        // Solo cuentan como faltantes las entradas sin valor por defecto.
+        const missingRequired = inputNames.filter((_, idx) =>
+            idx >= args.length && defaultedInputs[inputNames[idx]] === undefined
+        );
+        if (missingRequired.length > 0) {
+            errors.push(new CodeError(
+                ERROR_TYPES.MISSING_ARGUMENT,
+                `Faltan ${missingRequired.length} argumento(s) en ${funcName}(). Se esperan ${expectedArgCount}.`,
+                lineNumber,
+                0,
+                `${funcName}(${inputNames.map(n => n.toLowerCase()).join(', ')})`
+            ));
+        }
     } else if (args.length > expectedArgCount && expectedArgCount > 0) {
         errors.push(new CodeError(
             ERROR_TYPES.EXTRA_ARGUMENT,
@@ -1977,6 +2054,21 @@ function parsePythonLine(line) {
         };
     }
 
+    // ===== RETURN (devolver valor) =====
+
+    // Detectar "return valor" → bloque "devolver %1" (procedures_return_value).
+    // Solo es válido dentro de una función; fuera de ella no genera bloque útil
+    // pero el valor aún puede parsearse como expresión.
+    const returnMatch = trimmed.match(/^return\s+(.+)$/);
+    if (returnMatch) {
+        return {
+            function: '__procedure_return__',
+            arguments: [parseValue(returnMatch[1].trim())],
+            raw: trimmed,
+            isReturn: true
+        };
+    }
+
     // ===== DEFINICIONES DE FUNCIONES (EVENTOS Y PROCEDIMIENTOS) =====
 
     // Detectar definiciones de funciones especiales (eventos)
@@ -2011,6 +2103,16 @@ function parsePythonLine(line) {
         if (funcName === 'al_hacer_clic' || funcName === 'al_clic' || funcName === 'al_clickear') {
             return {
                 function: '__event_click__',
+                arguments: [],
+                raw: trimmed,
+                isEvent: true
+            };
+        }
+        // al_recibir_linea_bluetooth → evento "cuando llegue una línea por Bluetooth"
+        // (debe ir ANTES del patrón genérico al_recibir_X → mensaje)
+        if (funcName === 'al_recibir_linea_bluetooth') {
+            return {
+                function: '__event_bt_line__',
                 arguments: [],
                 raw: trimmed,
                 isEvent: true
@@ -2085,6 +2187,24 @@ function parsePythonLine(line) {
     const match = trimmed.match(funcPattern);
 
     if (!match) {
+        // Línea con SOLO una expresión que devuelve valor (sprite.x, sprite.y,
+        // sprite.direccion, una variable, etc.): generar el bloque reportero
+        // suelto. Solo si parseExpressionToBlock produce un bloque real (no un
+        // literal shadow como 42 o "texto").
+        let exprCheck = null;
+        try {
+            exprCheck = parseExpressionToBlock(trimmed, null);
+        } catch (e) {
+            exprCheck = null;
+        }
+        if (exprCheck && !exprCheck.isShadow) {
+            return {
+                function: '__reporter_expression__',
+                arguments: [],
+                raw: trimmed,
+                isReporterExpression: true
+            };
+        }
         return null;
     }
 
@@ -2194,6 +2314,11 @@ function parseValue(value) {
  * Detecta el tamaño de indentación usado en el código
  */
 let detectedIndentSize = 4; // Default
+
+// Nombres de procedimientos definidos en el código actual, usado por
+// parseExpressionToBlock para reconocer llamadas como valor
+// (procedures_call_return). Se rellena en pythonToBlocks.
+let currentDefinedProcedures = new Set();
 
 function detectIndentSize(lines) {
     for (const line of lines) {
@@ -2478,6 +2603,209 @@ function findSplitOperator(str) {
 }
 
 /**
+ * Propiedades reporter de Scratch accesibles como atributos Python.
+ * Cada entrada mapea el texto Python exacto → bloque reportero.
+ * `fields` opcionales se escriben directamente sobre el bloque (dropdowns).
+ */
+const PROPERTY_GETTERS = {
+    'sprite.x': { opcode: 'motion_xposition' },
+    'sprite.y': { opcode: 'motion_yposition' },
+    'sprite.direccion': { opcode: 'motion_direction' },
+    'sprite.tamaño': { opcode: 'looks_size' },
+    'sprite.tamano': { opcode: 'looks_size' },
+    'sprite.disfraz_numero': { opcode: 'looks_costumenumbername', fields: { NUMBER_NAME: 'number' } },
+    'sprite.disfraz_nombre': { opcode: 'looks_costumenumbername', fields: { NUMBER_NAME: 'name' } },
+    'escenario.fondo_numero': { opcode: 'looks_backdropnumbername', fields: { NUMBER_NAME: 'number' } },
+    'escenario.fondo_nombre': { opcode: 'looks_backdropnumbername', fields: { NUMBER_NAME: 'name' } },
+    'sonido.volumen': { opcode: 'sound_volume' },
+    'raton.x': { opcode: 'sensing_mousex' },
+    'raton.y': { opcode: 'sensing_mousey' },
+    'escenario.ancho': { opcode: 'sensing_stageWidth' },
+    'escenario.alto': { opcode: 'sensing_stageHeight' },
+    'raton.velocidad': { opcode: 'sensing_mouseSpeed' },
+    'raton.x_anterior': { opcode: 'sensing_mousePreviousX' },
+    'raton.y_anterior': { opcode: 'sensing_mousePreviousY' },
+    'delta_tiempo': { opcode: 'sensing_deltaTime' },
+    'fps': { opcode: 'sensing_fps' },
+    'sprite.en_suelo': { opcode: 'game_isOnGround' },
+    'sprite.en_aire': { opcode: 'game_isInAir' },
+    'sprite.esta_vivo': { opcode: 'game_isAlive' },
+    'sprite.esta_muerto': { opcode: 'game_isDead' },
+    'sprite.rapidez': { opcode: 'game_speed' },
+    'sprite.velocidad_x': { opcode: 'game_velocityX' },
+    'sprite.velocidad_y': { opcode: 'game_velocityY' },
+    'sprite.salud_maxima': { opcode: 'game_maxHealth' },
+    'sprite.salud_porcentaje': { opcode: 'game_healthPercent' },
+    'sprite.es_invencible': { opcode: 'game_isInvincible' },
+    'fisica.gravedad': { opcode: 'game_gravity' },
+    'fisica.velocidad_terminal': { opcode: 'game_terminalVelocity' },
+    'fisica.suelo_y': { opcode: 'game_groundY' },
+    'camara.zoom': { opcode: 'game_cameraZoom' },
+    'estado.actual': { opcode: 'state_current' },
+    'estado.anterior': { opcode: 'state_previous' },
+    'estado.es': { opcode: 'state_is' },
+    'dato_evento': { opcode: 'event_eventData' },
+    'conteo': { opcode: 'control_countHere' },
+    'pruebas.pasadas': { opcode: 'test_passed' },
+    'pruebas.fallidas': { opcode: 'test_failed' },
+    'pruebas.total': { opcode: 'test_total' },
+    'pruebas.reporte': { opcode: 'test_report' },
+    'debug.contador': { opcode: 'debug_counter' },
+    'debug.contar': { opcode: 'debug_count' },
+    'ia.distancia_a': { opcode: 'game_aiDistanceToTarget' },
+    'ia.en_rango': { opcode: 'game_aiTargetInRange' },
+    'ia.cerca_de': { opcode: 'game_aiStopNearTarget' }
+};
+
+/**
+ * Funciones matemáticas → campo OPERATOR del bloque operator_mathop.
+ */
+const MATHOP_FIELDS = {
+    'abs': 'abs', 'piso': 'floor', 'techo': 'ceiling', 'raiz': 'sqrt',
+    'seno': 'sin', 'coseno': 'cos', 'tangente': 'tan',
+    'arcoseno': 'asin', 'arcocoseno': 'acos', 'arcotangente': 'atan',
+    'logaritmo_natural': 'ln', 'logaritmo': 'log',
+    'e_elevado': 'e ^', 'diez_elevado': '10 ^'
+};
+
+/**
+ * Especificación de inputs para llamadas a funciones reporter.
+ * `inputs` son pares [input, tipo] en el mismo orden que los argumentos Python.
+ * `fieldFromName` es un dropdown directo sobre el bloque cuyo valor se deduce
+ * del nombre de la función (p. ej. operator_mathop.OPERATOR = 'abs').
+ */
+const REPORTER_CALL_SPECS = {
+    'operator_random': { inputs: [['FROM', 'number'], ['TO', 'number']] },
+    'operator_join': { inputs: [['STRING1', 'string'], ['STRING2', 'string']] },
+    'operator_letter_of': { inputs: [['LETTER', 'number'], ['STRING', 'string']] },
+    'operator_length': { inputs: [['STRING', 'string']] },
+    'operator_round': { inputs: [['NUM', 'number']] },
+    'operator_mathop': {
+        inputs: [['NUM', 'number']],
+        fieldFromName: { field: 'OPERATOR', values: MATHOP_FIELDS }
+    }
+};
+
+/**
+ * Convierte una llamada a función que devuelve valor (aleatorio(...), unir(...),
+ * abs(...), etc.) en un bloque reportero. Devuelve null si la función no es un
+ * reportero conocido o si faltan argumentos.
+ */
+function parseFunctionReporterToBlock(funcName, argsStr, parentId) {
+    const opcode = PYTHON_TO_OPCODE[funcName];
+    if (!opcode) return null;
+    const spec = REPORTER_CALL_SPECS[opcode];
+    if (!spec) return null;
+
+    const args = parseArguments(argsStr);
+    if (args.length < spec.inputs.length) return null;
+
+    const blockId = generateBlockId();
+    const inputs = {};
+    const fields = {};
+    const shadowBlocks = [];
+
+    spec.inputs.forEach(([inputName, inputType], idx) => {
+        const arg = args[idx];
+        let valueStr;
+        if (arg.type === 'number') valueStr = String(arg.value);
+        else if (arg.type === 'string') valueStr = `"${arg.value}"`;
+        else if (arg.type === 'boolean') valueStr = arg.value ? 'True' : 'False';
+        else valueStr = String(arg.value);
+
+        const parsedExpr = parseExpressionToBlock(
+            valueStr,
+            blockId,
+            inputType === 'number' ? 'number' : 'text'
+        );
+        shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+        shadowBlocks.push(...parsedExpr.shadowBlocks);
+        inputs[inputName] = {
+            name: inputName,
+            block: parsedExpr.blockId,
+            shadow: parsedExpr.isShadow ? parsedExpr.blockId : null
+        };
+    });
+
+    if (spec.fieldFromName) {
+        const { field, values } = spec.fieldFromName;
+        fields[field] = { name: field, value: values[funcName] || funcName };
+    }
+
+    return {
+        blockId,
+        block: {
+            id: blockId,
+            opcode,
+            inputs,
+            fields,
+            next: null,
+            parent: parentId,
+            shadow: false,
+            topLevel: false
+        },
+        shadowBlocks,
+        isShadow: false
+    };
+}
+
+/**
+ * Construye un bloque de llamada a procedimiento personalizado (statement o
+ * reporter según `opcode`), con su mutación y los inputs de sus argumentos.
+ */
+function buildProcedureCallBlock(opcode, procName, callArgs, parentId) {
+    const blockId = generateBlockId();
+    const argIds = callArgs.map((_, idx) => `arg_${procName}_${idx}`);
+    const proccode = procName + callArgs.map(() => ' %s').join('');
+    const inputs = {};
+    const shadowBlocks = [];
+
+    callArgs.forEach((arg, idx) => {
+        const inputName = argIds[idx];
+        if (arg.type === 'number') {
+            const shadow = createShadowNumber(arg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs[inputName] = { name: inputName, block: shadow.id, shadow: shadow.id };
+        } else if (arg.type === 'string' || arg.type === 'any') {
+            const shadow = createShadowText(arg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs[inputName] = { name: inputName, block: shadow.id, shadow: shadow.id };
+        } else if (arg.type === 'variable') {
+            const parsedExpr = parseExpressionToBlock(String(arg.value), blockId, 'text');
+            shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+            shadowBlocks.push(...parsedExpr.shadowBlocks);
+            inputs[inputName] = {
+                name: inputName,
+                block: parsedExpr.blockId,
+                shadow: parsedExpr.isShadow ? parsedExpr.blockId : null
+            };
+        }
+    });
+
+    return {
+        blockId,
+        block: {
+            id: blockId,
+            opcode,
+            inputs,
+            fields: {},
+            next: null,
+            parent: parentId,
+            shadow: false,
+            topLevel: false,
+            mutation: {
+                tagName: 'mutation',
+                proccode,
+                argumentids: JSON.stringify(argIds),
+                warp: 'false',
+                children: []
+            }
+        },
+        shadowBlocks
+    };
+}
+
+/**
  * Parsea recursivamente una expresión matemática/lógica en bloques Scratch
  */
 function parseExpressionToBlock(exprStr, parentId, expectedType = 'text') {
@@ -2583,6 +2911,30 @@ function parseExpressionToBlock(exprStr, parentId, expectedType = 'text') {
         };
     }
     
+    // 3.5 Propiedades reporter de Scratch (sprite.x, sprite.disfraz_numero,
+    // delta_tiempo, fps, etc.). Se consulta ANTES que las variables para que los
+    // reporters del sistema sin punto no se interpreten como variables.
+    const getter = PROPERTY_GETTERS[str];
+    if (getter) {
+        const rId = generateBlockId();
+        const block = {
+            id: rId,
+            opcode: getter.opcode,
+            inputs: {},
+            fields: {},
+            next: null,
+            parent: parentId,
+            shadow: false,
+            topLevel: false
+        };
+        if (getter.fields) {
+            for (const [fieldName, fieldValue] of Object.entries(getter.fields)) {
+                block.fields[fieldName] = { name: fieldName, value: fieldValue };
+            }
+        }
+        return { blockId: rId, block, shadowBlocks: [], isShadow: false };
+    }
+
     // 4. Variables de Scratch (identificadores simples)
     if (/^[a-zA-Z_áéíóúÁÉÍÓÚñÑ][a-zA-Z0-9_áéíóúÁÉÍÓÚñÑ]*$/.test(str)) {
         // Casos especiales de reporters del sistema que no son variables
@@ -2628,36 +2980,46 @@ function parseExpressionToBlock(exprStr, parentId, expectedType = 'text') {
         };
     }
 
-    // 5. Propiedades reporter de Scratch (sprite.x, sprite.y, sprite.direccion, etc.)
-    if (str === 'sprite.x') {
-        const rId = generateBlockId();
-        return { blockId: rId, block: { id: rId, opcode: 'motion_xposition', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+    // 4.5 Llamadas a funciones reporter (aleatorio(...), unir(...), abs(...), etc.)
+    const fnCallMatch = str.match(/^([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\((.*)\)\s*$/);
+    if (fnCallMatch) {
+        const fnReporter = parseFunctionReporterToBlock(fnCallMatch[1], fnCallMatch[2], parentId);
+        if (fnReporter) return fnReporter;
+
+        // Llamada a procedimiento personalizado usado como valor → procedures_call_return
+        if (currentDefinedProcedures.has(fnCallMatch[1])) {
+            const callArgs = parseArguments(fnCallMatch[2]);
+            const callResult = buildProcedureCallBlock('procedures_call_return', fnCallMatch[1], callArgs, parentId);
+            return { ...callResult, isShadow: false };
+        }
     }
-    if (str === 'sprite.y') {
-        const rId = generateBlockId();
-        return { blockId: rId, block: { id: rId, opcode: 'motion_yposition', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
+
+    // 4.6 Llamadas a métodos Bluetooth sin argumentos usadas como valor
+    // (bluetooth.leer_linea(), bluetooth.conectado(), etc.). El patrón genérico
+    // fnCallMatch no acepta el punto del objeto, así que se resuelve aquí.
+    const btCallMatch = str.match(/^bluetooth\.([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\(\s*\)\s*$/);
+    if (btCallMatch) {
+        const btOpcode = PYTHON_TO_OPCODE[`bluetooth.${btCallMatch[1]}`];
+        if (btOpcode && BT_NOARG_REPORTERS[btOpcode]) {
+            const btReporterId = generateBlockId();
+            return {
+                blockId: btReporterId,
+                block: {
+                    id: btReporterId,
+                    opcode: btOpcode,
+                    inputs: {},
+                    fields: {},
+                    next: null,
+                    parent: parentId,
+                    shadow: false,
+                    topLevel: false
+                },
+                shadowBlocks: [],
+                isShadow: false
+            };
+        }
     }
-    if (str === 'sprite.direccion') {
-        const rId = generateBlockId();
-        return { blockId: rId, block: { id: rId, opcode: 'motion_direction', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
-    }
-    if (str === 'sprite.tamaño' || str === 'sprite.tamano') {
-        const rId = generateBlockId();
-        return { blockId: rId, block: { id: rId, opcode: 'looks_size', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
-    }
-    if (str === 'sonido.volumen') {
-        const rId = generateBlockId();
-        return { blockId: rId, block: { id: rId, opcode: 'sound_volume', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
-    }
-    if (str === 'raton.x') {
-        const rId = generateBlockId();
-        return { blockId: rId, block: { id: rId, opcode: 'sensing_mousex', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
-    }
-    if (str === 'raton.y') {
-        const rId = generateBlockId();
-        return { blockId: rId, block: { id: rId, opcode: 'sensing_mousey', inputs: {}, fields: {}, next: null, parent: parentId, shadow: false, topLevel: false }, shadowBlocks: [], isShadow: false };
-    }
-    
+
     // Fallback: bloque shadow según el tipo esperado
     const shadow = expectedType === 'number' ? createShadowNumber(str, parentId) : createShadowText(str, parentId);
     return {
@@ -3072,6 +3434,31 @@ function parseConditionToBlock(conditionStr, parentId) {
         return createBooleanLiteral(condition === 'True' || condition === 'true', parentId);
     }
 
+    // 10. Booleanos Bluetooth sin argumentos: bluetooth.conectado(),
+    // bluetooth.hay_linea(), bluetooth.hay_byte()
+    const btBoolMatch = condition.match(/^bluetooth\.([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\(\s*\)\s*$/);
+    if (btBoolMatch) {
+        const btBoolOpcode = PYTHON_TO_OPCODE[`bluetooth.${btBoolMatch[1]}`];
+        if (btBoolOpcode === 'bt_isConnected' ||
+            btBoolOpcode === 'bt_lineAvailable' ||
+            btBoolOpcode === 'bt_byteAvailable') {
+            return {
+                blockId,
+                block: {
+                    id: blockId,
+                    opcode: btBoolOpcode,
+                    inputs: {},
+                    fields: {},
+                    next: null,
+                    parent: parentId,
+                    topLevel: false,
+                    shadow: false
+                },
+                shadowBlocks: []
+            };
+        }
+    }
+
     console.warn(`[parseConditionToBlock] Condición no reconocida: ${condition}`);
     return null;
 }
@@ -3175,8 +3562,12 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
         const varName = parsedCall.arguments[0].value;
         const varArg = parsedCall.arguments[1];
         fields.VARIABLE = { name: 'VARIABLE', value: varName, id: varName };
-        if (varArg.type === 'variable') {
-            const parsedExpr = parseExpressionToBlock(String(varArg.value), blockId, 'text');
+        if (varArg.type === 'variable' || varArg.type === 'boolean') {
+            const parsedExpr = parseExpressionToBlock(
+                varArg.type === 'boolean' ? (varArg.value ? 'True' : 'False') : String(varArg.value),
+                blockId,
+                'text'
+            );
             shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
             shadowBlocks.push(...parsedExpr.shadowBlocks);
             inputs.VALUE = {
@@ -3199,8 +3590,12 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
         const varName = parsedCall.arguments[0].value;
         const varArg = parsedCall.arguments[1];
         fields.VARIABLE = { name: 'VARIABLE', value: varName, id: varName };
-        if (varArg.type === 'variable') {
-            const parsedExpr = parseExpressionToBlock(String(varArg.value), blockId, 'number');
+        if (varArg.type === 'variable' || varArg.type === 'boolean') {
+            const parsedExpr = parseExpressionToBlock(
+                varArg.type === 'boolean' ? (varArg.value ? 'True' : 'False') : String(varArg.value),
+                blockId,
+                'number'
+            );
             shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
             shadowBlocks.push(...parsedExpr.shadowBlocks);
             inputs.VALUE = {
@@ -3458,23 +3853,15 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
                 shadowBlocks.push(shadow);
                 inputs[inputName] = { name: inputName, block: shadow.id, shadow: shadow.id };
             } else if (arg.type === 'variable') {
-                const varBlockId = generateBlockId();
-                shadowBlocks.push({
-                    id: varBlockId,
-                    block: {
-                        id: varBlockId,
-                        opcode: 'data_variable',
-                        inputs: {},
-                        fields: {
-                            VARIABLE: { name: 'VARIABLE', value: arg.value, id: arg.value }
-                        },
-                        next: null,
-                        parent: blockId,
-                        shadow: false,
-                        topLevel: false
-                    }
-                });
-                inputs[inputName] = { name: inputName, block: varBlockId, shadow: null };
+                // Variable, propiedad (sprite.x) o expresión → reportero real
+                const parsedExpr = parseExpressionToBlock(String(arg.value), blockId, 'text');
+                shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+                shadowBlocks.push(...parsedExpr.shadowBlocks);
+                inputs[inputName] = {
+                    name: inputName,
+                    block: parsedExpr.blockId,
+                    shadow: parsedExpr.isShadow ? parsedExpr.blockId : null
+                };
             }
         });
         
@@ -3487,6 +3874,34 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
             warp: 'false',
             children: []
         };
+    }
+
+    // ===== MANEJO ESPECIAL DE RETURN (devolver valor) =====
+    if (opcode === 'procedures_return_value' && parsedCall.arguments.length >= 1) {
+        const valueArg = parsedCall.arguments[0];
+        if (valueArg.type === 'number') {
+            const shadow = createShadowNumber(valueArg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs.VALUE = { name: 'VALUE', block: shadow.id, shadow: shadow.id };
+        } else if (valueArg.type === 'boolean') {
+            const lit = createBooleanLiteral(valueArg.value, blockId);
+            shadowBlocks.push({ id: lit.blockId, block: lit.block });
+            shadowBlocks.push(...lit.shadowBlocks);
+            inputs.VALUE = { name: 'VALUE', block: lit.blockId, shadow: null };
+        } else if (valueArg.type === 'variable') {
+            const parsedExpr = parseExpressionToBlock(String(valueArg.value), blockId, 'text');
+            shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+            shadowBlocks.push(...parsedExpr.shadowBlocks);
+            inputs.VALUE = {
+                name: 'VALUE',
+                block: parsedExpr.blockId,
+                shadow: parsedExpr.isShadow ? parsedExpr.blockId : null
+            };
+        } else {
+            const shadow = createShadowText(valueArg.value, blockId);
+            shadowBlocks.push(shadow);
+            inputs.VALUE = { name: 'VALUE', block: shadow.id, shadow: shadow.id };
+        }
     }
 
     // ===== MANEJO ESPECIAL DE COLISIONES =====
@@ -3525,11 +3940,19 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
     // Solo si no se manejó arriba con casos especiales
     if (!isEvent && Object.keys(inputs).length === 0 && Object.keys(fields).length === 0) {
         let argIndex = 0;
+        const argDefaults = BT_INPUT_DEFAULTS[opcode] || {};
         for (const inputName of inputNames) {
             const inputType = inputDefs[inputName];
             const arg = parsedCall.arguments[argIndex];
 
             if (!arg) {
+                // Entrada omitida: si tiene valor por defecto (p. ej. bt_connect.BAUD),
+                // crear el shadow con ese valor; si no, dejar el input vacío.
+                if (argDefaults[inputName] !== undefined) {
+                    const shadow = createShadowNumber(argDefaults[inputName], blockId);
+                    shadowBlocks.push(shadow);
+                    inputs[inputName] = { name: inputName, block: shadow.id, shadow: shadow.id };
+                }
                 argIndex++;
                 continue;
             }
@@ -3555,6 +3978,20 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
                         }
                     });
                     inputs[inputName] = { name: inputName, block: reporterId, shadow: reporterId };
+                } else if (arg.type === 'variable' || arg.type === 'boolean') {
+                    // Variable, propiedad (sprite.x), booleano o expresión → reportero real
+                    const parsedExpr = parseExpressionToBlock(
+                        arg.type === 'boolean' ? (arg.value ? 'True' : 'False') : String(arg.value),
+                        blockId,
+                        'number'
+                    );
+                    shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+                    shadowBlocks.push(...parsedExpr.shadowBlocks);
+                    inputs[inputName] = {
+                        name: inputName,
+                        block: parsedExpr.blockId,
+                        shadow: parsedExpr.isShadow ? parsedExpr.blockId : null
+                    };
                 } else {
                     const shadow = createShadowNumber(arg.value, blockId);
                     shadowBlocks.push(shadow);
@@ -3581,6 +4018,20 @@ function pythonCallToBlock(parsedCall, position = { x: 50, y: 50 }, parentBlockI
                         }
                     });
                     inputs[inputName] = { name: inputName, block: reporterId, shadow: reporterId };
+                } else if (arg.type === 'variable' || arg.type === 'boolean') {
+                    // Variable, propiedad (sprite.disfraz_numero), booleano o expresión → reportero real
+                    const parsedExpr = parseExpressionToBlock(
+                        arg.type === 'boolean' ? (arg.value ? 'True' : 'False') : String(arg.value),
+                        blockId,
+                        'text'
+                    );
+                    shadowBlocks.push({ id: parsedExpr.blockId, block: parsedExpr.block });
+                    shadowBlocks.push(...parsedExpr.shadowBlocks);
+                    inputs[inputName] = {
+                        name: inputName,
+                        block: parsedExpr.blockId,
+                        shadow: parsedExpr.isShadow ? parsedExpr.blockId : null
+                    };
                 } else {
                     const shadow = createShadowText(arg.value, blockId);
                     shadowBlocks.push(shadow);
@@ -3722,6 +4173,15 @@ export function pythonToBlocks(pythonCode, startPosition = { x: 80, y: 80 }, dev
     const procedureCalls = []; // Llamadas a funciones {name, lineNumber}
     let currentFunctionParams = {}; // Mapa: nombreParam -> idParam, para resolver params en cuerpo de función
 
+    // Pre-pase: recolectar TODOS los nombres de funciones definidas, de modo que
+    // parseExpressionToBlock pueda reconocer llamadas usadas como valor
+    // (procedures_call_return) aunque la definición aparezca después (forward refs).
+    currentDefinedProcedures = new Set();
+    for (const line of lines) {
+        const defNameMatch = line.trim().match(/^def\s+([\wáéíóúüñÁÉÍÓÚÜÑ]+)\s*\(/);
+        if (defNameMatch) currentDefinedProcedures.add(defNameMatch[1]);
+    }
+
     // Detectar si el código fue generado automáticamente por STBlock / STB Academy
     const isGeneratedCode = pythonCode.includes('Código generado por STBlock') || 
                             pythonCode.includes('Código generado por STB Academy') || 
@@ -3820,6 +4280,44 @@ export function pythonToBlocks(pythonCode, startPosition = { x: 80, y: 80 }, dev
         const SCRIPT_SPACING_X = 460; // Más espacio horizontal entre bloques para evitar solapamientos
         const SCRIPT_SPACING_Y = 420; // Espacio vertical cuando se organizan múltiples pilas
         const SCRIPTS_PER_ROW = 3;   // Máximo de scripts por fila antes de saltar a la siguiente
+
+        // Línea con SOLO una expresión que devuelve valor (sprite.x, sprite.y,
+        // sprite.direccion, una variable, etc.): crear el bloque reportero
+        // SUELTO en el workspace. No es una instrucción, por eso no se conecta
+        // a ningún padre (no tiene next).
+        if (parsed.isReporterExpression) {
+            // Cada reportero suelto ocupa un hueco de script propio para no
+            // superponerse a la pila/script anterior (p. ej. dentro de un
+            // `def` o un `if`).
+            if (Object.keys(blockMap).length > 0) {
+                scriptCount++;
+            }
+            const exprCol = scriptCount % SCRIPTS_PER_ROW;
+            const exprRow = Math.floor(scriptCount / SCRIPTS_PER_ROW);
+            const exprX = startPosition.x + (exprCol * SCRIPT_SPACING_X);
+            const exprY = startPosition.y + (exprRow * SCRIPT_SPACING_Y);
+
+            let exprResult = null;
+            try {
+                exprResult = parseExpressionToBlock(parsed.raw, null);
+            } catch (e) {
+                exprResult = null;
+            }
+            if (exprResult && !exprResult.isShadow) {
+                exprResult.block.topLevel = true;
+                exprResult.block.x = exprX;
+                exprResult.block.y = exprY;
+                exprResult.block._pythonLine = i + 1;
+                blockMap[exprResult.blockId] = exprResult.block;
+                if (exprResult.shadowBlocks) {
+                    for (const shadow of exprResult.shadowBlocks) {
+                        blockMap[shadow.id] = shadow.block;
+                    }
+                }
+                scripts.push([exprResult.blockId]);
+            }
+            continue;
+        }
 
         // Manejar else: convertir el if anterior a if_else
         if (parsed.isElse) {

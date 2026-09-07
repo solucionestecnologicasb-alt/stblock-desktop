@@ -328,6 +328,15 @@ class PythonExecutor {
                 return stage ? stage.currentCostume + 1 : 1;
             },
 
+            getCostumeNumber: () => target ? target.currentCostume + 1 : 1,
+
+            getCostumeName: () => {
+                if (!target) return '';
+                const costumes = target.sprite.costumes;
+                const idx = target.currentCostume;
+                return costumes && costumes[idx] ? costumes[idx].name : '';
+            },
+
             // ─── Sensores ───
             isTouching: (targetName) => {
                 if (!target) return false;

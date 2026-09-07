@@ -394,9 +394,10 @@ class VirtualMachine extends EventEmitter {
      * Connect to the extension's specified peripheral.
      * @param {string} extensionId - the id of the extension.
      * @param {number} peripheralId - the id of the peripheral.
+     * @param {object} [connectOptions] - optional connection options (e.g. {baudRate}).
      */
-    connectPeripheral (extensionId, peripheralId) {
-        this.runtime.connectPeripheral(extensionId, peripheralId);
+    connectPeripheral (extensionId, peripheralId, connectOptions) {
+        this.runtime.connectPeripheral(extensionId, peripheralId, connectOptions);
     }
 
     /**
@@ -404,7 +405,7 @@ class VirtualMachine extends EventEmitter {
      * @param {string} extensionId - the id of the extension.
      */
     disconnectPeripheral (extensionId) {
-        this.runtime.disconnectPeripheral(extensionId);
+        return this.runtime.disconnectPeripheral(extensionId);
     }
 
     /**

@@ -359,6 +359,21 @@ sprite.decir("Puntos: " + str(puntos))`,
                 params: []
             },
             {
+                name: 'Número de disfraz',
+                python: 'sprite.disfraz_numero',
+                description: 'Obtiene el número del disfraz actual',
+                example: `if sprite.disfraz_numero > 3:
+    sprite.decir("Tengo varios disfraces")`,
+                params: []
+            },
+            {
+                name: 'Nombre de disfraz',
+                python: 'sprite.disfraz_nombre',
+                description: 'Obtiene el nombre del disfraz actual',
+                example: `mensaje = unir("Disfraz: ", sprite.disfraz_nombre)`,
+                params: []
+            },
+            {
                 name: 'Cambiar tamaño',
                 python: 'sprite.cambiar_tamaño(cantidad)',
                 description: 'Aumenta o reduce el tamaño del sprite',
@@ -1857,6 +1872,121 @@ placa.serial_enviar("Hola", False)  # Sin salto de línea`,
                 python: 'placa.serial_vaciar()',
                 description: 'Limpia el buffer de datos seriales',
                 example: `placa.serial_vaciar()`,
+                params: []
+            }
+        ]
+    },
+    bluetooth: {
+        name: 'Bluetooth',
+        icon: '📶',
+        color: '#0A8BD6',
+        description: 'Conecta el PC por Bluetooth (HC-05 vía COM Bluetooth) para enviar y recibir datos con tu placa o dispositivo',
+        blocks: [
+            {
+                name: 'Conectar',
+                python: 'bluetooth.conectar(puerto, baudaje=9600)',
+                description: 'Conecta al módulo Bluetooth en el puerto COM indicado (baudaje opcional, 9600 por defecto)',
+                example: 'bluetooth.conectar("COM5", 9600)',
+                params: [
+                    { name: 'puerto', type: 'texto', desc: 'Puerto COM Bluetooth (ej. "COM5")' },
+                    { name: 'baudaje', type: 'número', desc: 'Velocidad en baudios (por defecto 9600)' }
+                ]
+            },
+            {
+                name: 'Desconectar',
+                python: 'bluetooth.desconectar()',
+                description: 'Cierra la conexión Bluetooth',
+                example: 'bluetooth.desconectar()',
+                params: []
+            },
+            {
+                name: '¿Conectado?',
+                python: 'bluetooth.conectado()',
+                description: 'Devuelve True si hay una conexión Bluetooth activa',
+                example: 'if bluetooth.conectado():\n    bluetooth.enviar_linea("Hola")',
+                params: []
+            },
+            {
+                name: 'Enviar texto',
+                python: 'bluetooth.enviar(datos)',
+                description: 'Envía texto sin añadir salto de línea',
+                example: 'bluetooth.enviar("Hola")',
+                params: [
+                    { name: 'datos', type: 'texto', desc: 'Texto a enviar' }
+                ]
+            },
+            {
+                name: 'Enviar línea',
+                python: 'bluetooth.enviar_linea(datos)',
+                description: 'Envía texto con salto de línea (\\n) al final',
+                example: 'bluetooth.enviar_linea("Hola")',
+                params: [
+                    { name: 'datos', type: 'texto', desc: 'Texto a enviar' }
+                ]
+            },
+            {
+                name: 'Enviar byte',
+                python: 'bluetooth.enviar_byte(número)',
+                description: 'Envía un solo byte (0-255)',
+                example: 'bluetooth.enviar_byte(65)  # "A"',
+                params: [
+                    { name: 'número', type: 'número', desc: 'Valor de 0 a 255' }
+                ]
+            },
+            {
+                name: '¿Hay línea?',
+                python: 'bluetooth.hay_linea()',
+                description: 'Devuelve True si hay una línea completa esperando ser leída',
+                example: 'if bluetooth.hay_linea():\n    mensaje = bluetooth.leer_linea()',
+                params: []
+            },
+            {
+                name: '¿Hay byte?',
+                python: 'bluetooth.hay_byte()',
+                description: 'Devuelve True si hay al menos un byte sin leer',
+                example: 'if bluetooth.hay_byte():\n    dato = bluetooth.leer_byte()',
+                params: []
+            },
+            {
+                name: 'Leer línea',
+                python: 'bluetooth.leer_linea()',
+                description: 'Lee y consume la siguiente línea recibida ("" si no hay ninguna)',
+                example: 'mensaje = bluetooth.leer_linea()',
+                params: []
+            },
+            {
+                name: 'Leer byte',
+                python: 'bluetooth.leer_byte()',
+                description: 'Lee y consume el siguiente byte (-1 si no hay ninguno)',
+                example: 'dato = bluetooth.leer_byte()',
+                params: []
+            },
+            {
+                name: 'Última línea',
+                python: 'bluetooth.ultima_linea()',
+                description: 'Devuelve la última línea recibida sin consumirla',
+                example: 'bluetooth.enviar_linea("Recibí: " + bluetooth.ultima_linea())',
+                params: []
+            },
+            {
+                name: 'Último byte',
+                python: 'bluetooth.ultimo_byte()',
+                description: 'Devuelve el último byte recibido sin consumirlo',
+                example: 'dato = bluetooth.ultimo_byte()',
+                params: []
+            },
+            {
+                name: 'Vaciar datos',
+                python: 'bluetooth.vaciar()',
+                description: 'Limpia las líneas y bytes pendientes por leer',
+                example: 'bluetooth.vaciar()',
+                params: []
+            },
+            {
+                name: 'Al recibir línea',
+                python: 'def al_recibir_linea_bluetooth():',
+                description: 'Evento: se ejecuta cuando llega una línea nueva por Bluetooth',
+                example: 'def al_recibir_linea_bluetooth():\n    sprite.decir(bluetooth.leer_linea())',
                 params: []
             }
         ]

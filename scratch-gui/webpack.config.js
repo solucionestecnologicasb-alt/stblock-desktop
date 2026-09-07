@@ -5,7 +5,6 @@ const webpack = require('webpack');
 // Plugins
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
 const ScratchWebpackConfigBuilder = require('scratch-webpack-configuration');
 
@@ -89,23 +88,6 @@ const baseConfig = new ScratchWebpackConfigBuilder(
             }
         ]
     }))
-    .addPlugin(new MonacoWebpackPlugin({
-        // Only include the languages we need
-        languages: ['cpp', 'python', 'javascript'],
-        // Features we want to include
-        features: [
-            'bracketMatching',
-            'folding',
-            'hover',
-            'wordHighlighter',
-            'find',
-            'clipboard',
-            'contextmenu',
-            'suggest',
-            'comment',
-            'indentation'
-        ]
-    }));
 
 if (!process.env.CI) {
     baseConfig.addPlugin(new webpack.ProgressPlugin());
@@ -148,7 +130,7 @@ const buildConfig = baseConfig.clone()
             path: path.resolve(__dirname, 'build')
         },
         // En dev el devtool por defecto ('cheap-module-source-map') mantiene en
-        // memoria todos los source maps del bundle (Scratch + Blockly + Monaco),
+        // memoria todos los source maps del bundle (Scratch + Blockly),
         // lo que dispara el consumo del dev server a varios GB. 'eval-cheap-module-
         // source-map' conserva buen trazado de errores con mucha menos memoria.
         ...(process.env.NODE_ENV !== 'production' ? {devtool: 'eval-cheap-module-source-map'} : {})

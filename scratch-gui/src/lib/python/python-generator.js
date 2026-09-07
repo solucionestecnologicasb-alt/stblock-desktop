@@ -83,7 +83,9 @@ class PythonGenerator {
             opcode.startsWith('game_on') ||
             // Hats de dispositivo (Arduino / STBoard V2 / micro:bit)
             opcode === 'arduino_whenArduinoBegin' ||
-            opcode === 'microbit_whenmicrobitbegin'
+            opcode === 'microbit_whenmicrobitbegin' ||
+            // Hat Bluetooth: cuando llegue una línea
+            opcode === 'bt_when_line'
         );
     }
 
@@ -313,6 +315,10 @@ class PythonGenerator {
                         // Las líneas del body ya tienen su propia indentación
                         if (index === 0) {
                             this.code.push(this.getIndent() + line);
+                        } else if (/^\s*(else|elif|except|finally)\s*:/.test(line)) {
+                            // Los conectores else/elif/except/finally deben quedar
+                            // al MISMO nivel que el if/while que los abrió.
+                            this.code.push(this.getIndent() + line.trim());
                         } else {
                             this.code.push(line);
                         }
@@ -455,6 +461,11 @@ class PythonGenerator {
                     if (index === 0) {
                         return this.getIndent() + line;
                     }
+                    // Los conectores else/elif/except/finally deben quedar al MISMO
+                    // nivel que el if/while que los abrió (no a columna 0).
+                    if (/^\s*(else|elif|except|finally)\s*:/.test(line)) {
+                        return this.getIndent() + line.trim();
+                    }
                     // Las líneas del body ya vienen indentadas correctamente
                     return line;
                 }).join('\n');
@@ -476,13 +487,14 @@ class PythonGenerator {
         if (!block.inputList) return args;
 
         // Manejo especial para procedimientos
-        if (block.type === 'procedures_definition' || block.type === 'procedures_call') {
+        if (block.type === 'procedures_definition' || block.type === 'procedures_call' ||
+            block.type === 'procedures_call_return') {
             const procInfo = this.getProcedureInfo(block);
             args.procedureName = procInfo.name;
             args.procedureParams = procInfo.params;
 
             // Para llamadas, extraer los valores de los argumentos
-            if (block.type === 'procedures_call') {
+            if (block.type === 'procedures_call' || block.type === 'procedures_call_return') {
                 args.procedureArgs = this.extractProcedureCallArgs(block, procInfo.params.length);
             }
 

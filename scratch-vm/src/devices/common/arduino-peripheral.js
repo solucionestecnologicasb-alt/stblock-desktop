@@ -192,6 +192,14 @@ class ArduinoPeripheral {
     }
 
     /**
+     * Get connected peripheral ID
+     * @returns {string|null}
+     */
+    getConnectedPeripheralId () {
+        return this._connectedPeripheralId;
+    }
+
+    /**
      * Get program mode
      * @returns {string}
      */

@@ -158,6 +158,16 @@ class _Sprite:
         """Cambiar al siguiente disfraz"""
         _call_js('nextCostume')
 
+    @property
+    def disfraz_numero(self):
+        """Número del disfraz actual"""
+        return _call_js('getCostumeNumber') or 1
+
+    @property
+    def disfraz_nombre(self):
+        """Nombre del disfraz actual"""
+        return _call_js('getCostumeName') or ''
+
     def cambiar_tamaño(self, cambio):
         """Cambiar el tamaño por un porcentaje"""
         _call_js('changeSizeBy', cambio)

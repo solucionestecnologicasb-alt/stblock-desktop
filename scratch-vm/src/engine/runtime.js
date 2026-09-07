@@ -48,7 +48,8 @@ const defaultBlockPackages = {
     scratch3_sound: require('../blocks/scratch3_sound'),
     scratch3_sensing: require('../blocks/scratch3_sensing'),
     scratch3_data: require('../blocks/scratch3_data'),
-    scratch3_procedures: require('../blocks/scratch3_procedures')
+    scratch3_procedures: require('../blocks/scratch3_procedures'),
+    scratch3_bluetooth: require('../blocks/scratch3_bluetooth')
 };
 
 const defaultExtensionColors = ['#0FBD8C', '#0DA57A', '#0B8E69'];
@@ -402,7 +403,11 @@ class Runtime extends EventEmitter {
          */
         this._collisionCacheEpoch = 0;
 
-        // Register all given block packages.
+        // Register all given block packages. Note that some CORE packages
+        // (scratch3_bluetooth) register a peripheral extension from their
+        // constructor, so `peripheralExtensions` must be initialized first.
+        /** @type {Object.<string, Object>} */
+        this.peripheralExtensions = {};
         this._registerBlockPackages();
 
         // Register and initialize "IO devices", containers for processing
@@ -417,11 +422,6 @@ class Runtime extends EventEmitter {
             userData: new UserData(),
             video: new Video(this)
         };
-
-        /**
-         * A list of extensions, used to manage hardware connection.
-         */
-        this.peripheralExtensions = {};
 
         /**
          * A runtime profiler that records timed events for later playback to
@@ -2015,10 +2015,11 @@ class Runtime extends EventEmitter {
      * Connect to the extension's specified peripheral.
      * @param {string} extensionId - the id of the extension.
      * @param {number} peripheralId - the id of the peripheral.
+     * @param {object} [connectOptions] - optional connection options (e.g. {baudRate}).
      */
-    connectPeripheral (extensionId, peripheralId) {
+    connectPeripheral (extensionId, peripheralId, connectOptions) {
         if (this.peripheralExtensions[extensionId]) {
-            this.peripheralExtensions[extensionId].connect(peripheralId);
+            this.peripheralExtensions[extensionId].connect(peripheralId, connectOptions);
         }
     }
 
@@ -2028,8 +2029,9 @@ class Runtime extends EventEmitter {
      */
     disconnectPeripheral (extensionId) {
         if (this.peripheralExtensions[extensionId]) {
-            this.peripheralExtensions[extensionId].disconnect();
+            return this.peripheralExtensions[extensionId].disconnect();
         }
+        return Promise.resolve();
     }
 
     /**

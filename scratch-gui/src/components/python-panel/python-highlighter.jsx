@@ -166,7 +166,11 @@ const tokenizeLine = (line) => {
             const word = identifierMatch[1];
             let type = 'variable';
 
-            if (KEYWORDS.has(word)) {
+            if (word === 'import' || word === 'from') {
+                // Debe comprobarse antes que KEYWORDS: import/from también están
+                // en ese set y de lo contrario nunca se usaría el token 'import'.
+                type = 'import';
+            } else if (KEYWORDS.has(word)) {
                 type = word === 'def' || word === 'class' ? 'definition' : 'keyword';
             } else if (CONSTANTS.has(word)) {
                 type = 'boolean';
@@ -176,8 +180,6 @@ const tokenizeLine = (line) => {
                 type = 'function';
             } else if (word === 'self') {
                 type = 'self';
-            } else if (word === 'import' || word === 'from') {
-                type = 'import';
             }
 
             // Detectar si es un nombre de función (seguido de paréntesis)
@@ -239,24 +241,102 @@ const TOKEN_CLASS_NAMES = {
     import: styles.tokenImport
 };
 
+// Divide un token en segmentos según los rangos que lo atraviesan (coincidencias
+// de búsqueda y paréntesis/corchete coincidente). Los rangos usan el mismo
+// espacio de coordenadas que el token (offsets relativos al contenido de la
+// línea), así el resaltado convive con el syntax highlighting sin romperlo.
+const splitTokenByRanges = (token, ranges, tokenStart) => {
+    if (!ranges || ranges.length === 0) {
+        return [{text: token.value, isMatch: false, isActiveMatch: false, kind: null}];
+    }
+    const tokenEnd = tokenStart + token.value.length;
+    const segments = [];
+    let cursor = 0;
+    for (const r of ranges) {
+        if (r.end <= tokenStart || r.start >= tokenEnd) continue;
+        // Clamp al cursor: si una búsqueda se solapa con el paréntesis
+        // coincidente, el segundo rango no debe re-dibujar caracteres ya
+        // consumidos (evita duplicar texto al renderizar).
+        const s = Math.max(tokenStart, r.start, tokenStart + cursor);
+        const e = Math.min(tokenEnd, r.end);
+        if (s >= e) continue;
+        if (s > tokenStart + cursor) {
+            segments.push({
+                text: token.value.slice(cursor, s - tokenStart),
+                isMatch: false,
+                isActiveMatch: false,
+                kind: null
+            });
+        }
+        segments.push({
+            text: token.value.slice(s - tokenStart, e - tokenStart),
+            isMatch: true,
+            isActiveMatch: r.isActive,
+            kind: r.kind
+        });
+        cursor = e - tokenStart;
+    }
+    if (cursor < token.value.length) {
+        segments.push({
+            text: token.value.slice(cursor),
+            isMatch: false,
+            isActiveMatch: false,
+            kind: null
+        });
+    }
+    return segments;
+};
+
 const HighlightedLine = React.memo(({
     lineNumber,
     tokens,
     hasError,
     hasWarning,
     isHighlighted,
+    isActiveLine,
+    isFolded,
+    matchRanges,
     showLineNumbers
 }) => {
     const lineClass = [
         styles.codeLine,
         hasError ? styles.hasError : '',
         hasWarning ? styles.hasWarning : '',
-        isHighlighted ? styles.hasHighlight : ''
+        isHighlighted ? styles.hasHighlight : '',
+        isActiveLine ? styles.hasActiveLine : '',
+        isFolded ? styles.folded : ''
     ].filter(Boolean).join(' ');
+
+    // Renderizar cada token, dividiéndolo donde lo atraviesa una coincidencia
+    // de búsqueda o un paréntesis coincidente para marcarla sin perder el color.
+    let tokenPos = 0;
+    const renderedSpans = [];
+    tokens.forEach((token, tokenIndex) => {
+        const tokenStart = tokenPos;
+        tokenPos += token.value.length;
+        const tokenClass = TOKEN_CLASS_NAMES[token.type];
+        const segments = splitTokenByRanges(token, matchRanges, tokenStart);
+        segments.forEach((seg, segIndex) => {
+            let cls = tokenClass || '';
+            if (seg.isMatch) {
+                if (seg.kind === 'bracket') {
+                    cls += ` ${styles.bracketHighlight}`;
+                } else {
+                    cls += ` ${seg.isActiveMatch ? styles.searchHighlightActive : styles.searchHighlight}`;
+                }
+            }
+            renderedSpans.push(
+                <span key={`${tokenIndex}-${segIndex}`} className={cls.trim()}>
+                    {seg.text}
+                </span>
+            );
+        });
+    });
 
     return (
         <div
             className={lineClass}
+            data-line={lineNumber}
             title={hasError ? 'Esta línea tiene un error' :
                 (hasWarning ? 'Esta línea tiene una advertencia' : '')}
         >
@@ -264,18 +344,8 @@ const HighlightedLine = React.memo(({
                 <span className={styles.lineNumber}>{lineNumber}</span>
             )}
             <span className={styles.lineContent}>
-                {tokens.map((token, tokenIndex) => {
-                    const tokenClass = TOKEN_CLASS_NAMES[token.type];
-                    return tokenClass ? (
-                        <span
-                            key={tokenIndex}
-                            className={tokenClass}
-                        >
-                            {token.value}
-                        </span>
-                    ) : <span key={tokenIndex}>{token.value}</span>;
-                })}
-                {tokens.length === 0 && '\u00A0'}
+                {renderedSpans}
+                {renderedSpans.length === 0 && '\u00A0'}
             </span>
         </div>
     );
@@ -291,6 +361,14 @@ HighlightedLine.propTypes = {
     hasError: PropTypes.bool.isRequired,
     hasWarning: PropTypes.bool.isRequired,
     isHighlighted: PropTypes.bool.isRequired,
+    isActiveLine: PropTypes.bool.isRequired,
+    isFolded: PropTypes.bool.isRequired,
+    matchRanges: PropTypes.arrayOf(PropTypes.shape({
+        start: PropTypes.number.isRequired,
+        end: PropTypes.number.isRequired,
+        isActive: PropTypes.bool.isRequired,
+        kind: PropTypes.string
+    })),
     showLineNumbers: PropTypes.bool.isRequired
 };
 
@@ -304,7 +382,12 @@ const PythonHighlighter = ({
     className,
     errorLines = [],
     warningLines = [],
-    highlightLine = null
+    highlightLine = null,
+    activeLine = 0,
+    searchMatches = [],
+    activeMatchIndex = -1,
+    collapsedRanges = [],
+    bracketRanges = null
 }) => {
     // Conservar los tokens de las líneas que no cambiaron. Antes, cada tecla
     // volvía a tokenizar el archivo completo y recreaba todos sus spans.
@@ -315,6 +398,74 @@ const PythonHighlighter = ({
         const lines = code.split('\n');
         const errorLineSet = new Set(errorLines);
         const warningLineSet = new Set(warningLines);
+
+        // Rangos de resaltado por línea (offsets relativos al contenido de cada
+        // línea): coincidencias de búsqueda + paréntesis/corchete coincidente.
+        // kind distingue para aplicar un estilo distinto a cada uno.
+        const rangesByLine = new Map();
+        const addRange = (lineIdx, start, end, kind, isActive) => {
+            let arr = rangesByLine.get(lineIdx);
+            if (!arr) {
+                arr = [];
+                rangesByLine.set(lineIdx, arr);
+            }
+            arr.push({start, end, kind, isActive});
+        };
+
+        if (searchMatches && searchMatches.length > 0) {
+            let lineOffset = 0;
+            for (let i = 0; i < lines.length; i++) {
+                const lineStart = lineOffset;
+                const lineEnd = lineStart + lines[i].length;
+                searchMatches.forEach((m, mi) => {
+                    if (m.end <= lineStart || m.start > lineEnd) return;
+                    addRange(i,
+                        Math.max(0, m.start - lineStart),
+                        Math.min(lines[i].length, m.end - lineStart),
+                        'search',
+                        mi === activeMatchIndex);
+                });
+                lineOffset = lineEnd + 1;
+            }
+        }
+
+        // Par de paréntesis/corchete coincidente (offsets globales, end exclusivo).
+        if (bracketRanges && typeof bracketRanges.start === 'number' &&
+            typeof bracketRanges.end === 'number') {
+            const {start, end} = bracketRanges;
+            const lineStarts = [];
+            let off = 0;
+            for (let i = 0; i < lines.length; i++) {
+                lineStarts.push(off);
+                off += lines[i].length + 1;
+            }
+            const locateLine = (pos) => {
+                for (let i = 0; i < lineStarts.length; i++) {
+                    if (pos < lineStarts[i] + lines[i].length) return i;
+                }
+                return lines.length - 1;
+            };
+            const startLine = locateLine(start);
+            const endLine = locateLine(end);
+            if (startLine === endLine) {
+                addRange(startLine,
+                    start - lineStarts[startLine],
+                    end - lineStarts[startLine],
+                    'bracket', false);
+            } else {
+                addRange(startLine,
+                    start - lineStarts[startLine],
+                    lines[startLine].length,
+                    'bracket', false);
+                const endOffset = end - lineStarts[endLine];
+                if (endOffset > 0) {
+                    addRange(endLine, 0,
+                        Math.min(lines[endLine].length, endOffset),
+                        'bracket', false);
+                }
+            }
+        }
+
         const previousCache = tokenCacheRef.current;
         const nextCache = new Map();
         const occurrenceByText = new Map();
@@ -325,17 +476,37 @@ const PythonHighlighter = ({
             const tokens = previousCache.get(cacheKey) || tokenizeLine(line);
             nextCache.set(cacheKey, tokens);
             const lineNumber = lineIndex + 1;
+
+            // ¿Está esta línea dentro del cuerpo de un bloque plegado? Se oculta
+            // visualmente (opacity 0) pero conserva su espacio para que el
+            // textarea y el highlighter sigan perfectamente alineados.
+            let isFolded = false;
+            if (collapsedRanges.length > 0) {
+                for (let i = 0; i < collapsedRanges.length; i++) {
+                    const r = collapsedRanges[i];
+                    if (lineIndex >= r.start && lineIndex <= r.end) {
+                        isFolded = true;
+                        break;
+                    }
+                }
+            }
+
+            const lineRanges = rangesByLine.get(lineIndex);
+            const sortedRanges = lineRanges ? lineRanges.slice().sort((a, b) => a.start - b.start) : null;
             return {
                 lineNumber,
                 tokens,
                 hasError: errorLineSet.has(lineNumber),
                 hasWarning: warningLineSet.has(lineNumber),
-                isHighlighted: highlightLine === lineNumber
+                isHighlighted: highlightLine === lineNumber,
+                isActiveLine: activeLine === lineNumber,
+                isFolded,
+                matchRanges: sortedRanges
             };
         });
         tokenCacheRef.current = nextCache;
         return result;
-    }, [code, errorLines, warningLines, highlightLine]);
+    }, [code, errorLines, warningLines, highlightLine, activeLine, searchMatches, activeMatchIndex, collapsedRanges, bracketRanges]);
 
     return (
         <div className={`${styles.codeDisplay} ${className || ''}`}>
@@ -347,6 +518,9 @@ const PythonHighlighter = ({
                     hasError={line.hasError}
                     hasWarning={line.hasWarning}
                     isHighlighted={line.isHighlighted}
+                    isActiveLine={line.isActiveLine}
+                    isFolded={line.isFolded}
+                    matchRanges={line.matchRanges}
                     showLineNumbers={showLineNumbers}
                 />
             ))}
@@ -360,7 +534,22 @@ PythonHighlighter.propTypes = {
     className: PropTypes.string,
     errorLines: PropTypes.arrayOf(PropTypes.number),
     warningLines: PropTypes.arrayOf(PropTypes.number),
-    highlightLine: PropTypes.number
+    highlightLine: PropTypes.number,
+    activeLine: PropTypes.number,
+    searchMatches: PropTypes.arrayOf(PropTypes.shape({
+        start: PropTypes.number,
+        end: PropTypes.number,
+        line: PropTypes.number
+    })),
+    activeMatchIndex: PropTypes.number,
+    collapsedRanges: PropTypes.arrayOf(PropTypes.shape({
+        start: PropTypes.number,
+        end: PropTypes.number
+    })),
+    bracketRanges: PropTypes.shape({
+        start: PropTypes.number,
+        end: PropTypes.number
+    })
 };
 
 PythonHighlighter.defaultProps = {
@@ -369,7 +558,12 @@ PythonHighlighter.defaultProps = {
     className: '',
     errorLines: [],
     warningLines: [],
-    highlightLine: null
+    highlightLine: null,
+    activeLine: 0,
+    searchMatches: [],
+    activeMatchIndex: -1,
+    collapsedRanges: [],
+    bracketRanges: null
 };
 
 const mapStateToProps = state => ({

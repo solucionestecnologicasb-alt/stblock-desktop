@@ -13,6 +13,7 @@ const MODAL_SOUND_RECORDER = 'soundRecorder';
 const MODAL_CONNECTION = 'connectionModal';
 const MODAL_TIPS_LIBRARY = 'tipsLibrary';
 const MODAL_DEVICE_LIBRARY = 'deviceLibrary';
+const MODAL_BLUETOOTH = 'bluetoothModal';
 
 const initialState = {
     [MODAL_BACKDROP_LIBRARY]: false,
@@ -26,7 +27,8 @@ const initialState = {
     [MODAL_SOUND_RECORDER]: false,
     [MODAL_CONNECTION]: false,
     [MODAL_TIPS_LIBRARY]: false,
-    [MODAL_DEVICE_LIBRARY]: false
+    [MODAL_DEVICE_LIBRARY]: false,
+    [MODAL_BLUETOOTH]: false
 };
 
 const reducer = function (state, action) {
@@ -86,6 +88,9 @@ const openSoundRecorder = function () {
 const openConnectionModal = function () {
     return openModal(MODAL_CONNECTION);
 };
+const openBluetoothModal = function () {
+    return openModal(MODAL_BLUETOOTH);
+};
 const openTipsLibrary = function () {
     return openModal(MODAL_TIPS_LIBRARY);
 };
@@ -128,6 +133,9 @@ const closeDeviceLibrary = function () {
 const closeConnectionModal = function () {
     return closeModal(MODAL_CONNECTION);
 };
+const closeBluetoothModal = function () {
+    return closeModal(MODAL_BLUETOOTH);
+};
 export {
     reducer as default,
     initialState as modalsInitialState,
@@ -142,6 +150,7 @@ export {
     openTelemetryModal,
     openTipsLibrary,
     openConnectionModal,
+    openBluetoothModal,
     closeBackdropLibrary,
     closeCostumeLibrary,
     closeDebugModal,
@@ -153,6 +162,7 @@ export {
     closeTelemetryModal,
     closeTipsLibrary,
     closeConnectionModal,
+    closeBluetoothModal,
     openDeviceLibrary,
     closeDeviceLibrary
 };

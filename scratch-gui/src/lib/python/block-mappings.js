@@ -41,7 +41,7 @@ const formatValue = (value, args, argName) => {
 
     // Si parece ser una expresion Python (contiene . o ( o es una variable conocida)
     const strValue = String(value);
-    if (strValue.match(/^(sprite|escenario|sonido|raton|fisica|camara|respuesta|cronometro)\./)) {
+    if (strValue.match(/^(sprite|escenario|sonido|raton|fisica|camara|respuesta|cronometro|bluetooth)\./)) {
         return strValue;
     }
     if (strValue.match(/^\(.*\)$/) || strValue.match(/^[a-z_][a-z0-9_]*$/i)) {
@@ -66,7 +66,7 @@ const formatNumberOrExpr = (value, args, argName) => {
 
     // Si parece ser una expresion Python
     const strValue = String(value);
-    if (strValue.match(/^(sprite|escenario|sonido|raton|fisica|camara|respuesta|cronometro)\./)) {
+    if (strValue.match(/^(sprite|escenario|sonido|raton|fisica|camara|respuesta|cronometro|bluetooth)\./)) {
         return strValue;
     }
     if (strValue.includes('(') || strValue.includes('.') || strValue.includes('+') ||
@@ -1003,6 +1003,31 @@ export const BLOCK_TO_PYTHON = {
         return `${name}(${argsStr})`;
     },
 
+    'procedures_call_return': (args) => {
+        const name = args.procedureName || 'mi_bloque';
+        const callArgs = args.procedureArgs || [];
+        const argsStr = callArgs.join(', ');
+        return `${name}(${argsStr})`;
+    },
+
+    'procedures_return_value': (args) => {
+        const v = args.VALUE;
+        if (v === null || v === undefined) return 'return None';
+        // Expresión reportera conectada → usar tal cual
+        if (args.__expressions__ && args.__expressions__.VALUE) return `return ${v}`;
+        const s = String(v);
+        // Expresión Python (propiedad, llamada, aritmética)
+        if (s.match(/^(sprite|escenario|sonido|raton|fisica|camara|respuesta|cronometro|bluetooth|delta_tiempo|fps|conteo|dato_evento)\.?/) ||
+            s.includes('(') || s.includes('+') || s.includes('-') || s.includes('*') || s.includes('/')) {
+            return `return ${s}`;
+        }
+        // Literal numérico
+        const n = Number(s);
+        if (s.trim() !== '' && !isNaN(n)) return `return ${n}`;
+        // Literal de cadena
+        return `return "${escapeString(s)}"`;
+    },
+
     'argument_reporter_string_number': (args) => {
         // Sanitizar el nombre del parametro para que coincida con la definicion
         const name = args.VALUE || 'parametro';
@@ -1351,7 +1376,52 @@ export const BLOCK_TO_PYTHON = {
         `placa.struct_array_poner(${formatValue(args.ARRNAME, args, 'ARRNAME')}, ${formatNumberOrExpr(args['[INDEX'], args, '[INDEX')}, ${formatValue(args.FIELD, args, 'FIELD')}, ${formatValue(args.VALUE, args, 'VALUE')})`,
 
     'arduino_structs_structArrayGet': (args) =>
-        `placa.struct_array_obtener(${formatValue(args.ARRNAME, args, 'ARRNAME')}, ${formatNumberOrExpr(args['[INDEX'], args, '[INDEX')}, ${formatValue(args.FIELD, args, 'FIELD')})`
+        `placa.struct_array_obtener(${formatValue(args.ARRNAME, args, 'ARRNAME')}, ${formatNumberOrExpr(args['[INDEX'], args, '[INDEX')}, ${formatValue(args.FIELD, args, 'FIELD')})`,
+
+    // ═══════════════════════════════════════════════════════════════
+    // BLUETOOTH (HC-05 vía COM Bluetooth del PC, modo Programación)
+    // ═══════════════════════════════════════════════════════════════
+    'bt_when_line': () =>
+        `def al_recibir_linea_bluetooth():`,
+
+    'bt_connect': (args) =>
+        `bluetooth.conectar(${formatValue(args.PUERTO, args, 'PUERTO')}, ${formatNumberOrExpr(args.BAUD, args, 'BAUD')})`,
+
+    'bt_disconnect': () =>
+        `bluetooth.desconectar()`,
+
+    'bt_isConnected': () =>
+        `bluetooth.conectado()`,
+
+    'bt_send': (args) =>
+        `bluetooth.enviar(${formatValue(args.TEXTO, args, 'TEXTO')})`,
+
+    'bt_sendLine': (args) =>
+        `bluetooth.enviar_linea(${formatValue(args.TEXTO, args, 'TEXTO')})`,
+
+    'bt_sendByte': (args) =>
+        `bluetooth.enviar_byte(${formatNumberOrExpr(args.NUMERO, args, 'NUMERO')})`,
+
+    'bt_lineAvailable': () =>
+        `bluetooth.hay_linea()`,
+
+    'bt_byteAvailable': () =>
+        `bluetooth.hay_byte()`,
+
+    'bt_readLine': () =>
+        `bluetooth.leer_linea()`,
+
+    'bt_readByte': () =>
+        `bluetooth.leer_byte()`,
+
+    'bt_lastLine': () =>
+        `bluetooth.ultima_linea()`,
+
+    'bt_lastByte': () =>
+        `bluetooth.ultimo_byte()`,
+
+    'bt_clearRx': () =>
+        `bluetooth.vaciar()`
 };
 
 /**

@@ -32,6 +32,7 @@ import blockTrashReducer, {blockTrashInitialState} from './block-trash';
 import animationsReducer, {animationsInitialState} from './animations';
 import deviceModeReducer, {deviceModeInitialState} from './device-mode';
 import debugHighlightReducer, {debugHighlightInitialState} from './debug-highlight';
+import bluetoothReducer, {bluetoothInitialState} from './bluetooth';
 import throttle from 'redux-throttle';
 
 import decks from '../lib/libraries/decks/index.jsx';
@@ -71,7 +72,8 @@ const guiInitialState = {
     blockTrash: blockTrashInitialState,
     animations: animationsInitialState,
     deviceMode: deviceModeInitialState,
-    debugHighlight: debugHighlightInitialState
+    debugHighlight: debugHighlightInitialState,
+    bluetooth: bluetoothInitialState
 };
 
 const initPlayer = function (currentState) {
@@ -176,7 +178,8 @@ const guiReducer = combineReducers({
     blockTrash: blockTrashReducer,
     animations: animationsReducer,
     deviceMode: deviceModeReducer,
-    debugHighlight: debugHighlightReducer
+    debugHighlight: debugHighlightReducer,
+    bluetooth: bluetoothReducer
 });
 
 export {

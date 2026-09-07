@@ -11,6 +11,7 @@ import initArduinoGenerator from '../lib/arduino-generator';
 import registerCustomDeviceBlocks from '../lib/custom-device-blocks';
 import registerGameBlocks from '../lib/game-blocks';
 import registerProgrammingBlocks from '../lib/programming-blocks';
+import registerBluetoothBlocks from '../lib/bluetooth-blocks';
 
 import log from '../lib/log.js';
 import Prompt from './prompt.jsx';
@@ -162,6 +163,7 @@ class Blocks extends React.Component {
             registerCustomDeviceBlocks(this.ScratchBlocks);
             registerGameBlocks(this.ScratchBlocks);
             registerProgrammingBlocks(this.ScratchBlocks);
+            registerBluetoothBlocks(this.ScratchBlocks);
         } catch (e) {
             console.warn('[Blocks] Failed to register custom blocks:', e);
         }

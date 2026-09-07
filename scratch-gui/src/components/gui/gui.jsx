@@ -26,6 +26,7 @@ import Cards from '../../containers/cards.jsx';
 import Alerts from '../../containers/alerts.jsx';
 import DragLayer from '../../containers/drag-layer.jsx';
 import ConnectionModal from '../../containers/connection-modal.jsx';
+import BluetoothModal from '../../containers/bluetooth-modal.jsx';
 import TelemetryModal from '../telemetry-modal/telemetry-modal.jsx';
 import UpdateModal from '../update-modal/update-modal.jsx';
 import StudentEvaluacionPlayer from '../student-evaluacion/student-evaluacion.jsx';
@@ -324,6 +325,7 @@ const GUIComponent = props => {
         canShare,
         canUseCloud,
         children,
+        bluetoothModalVisible,
         connectionModalVisible,
         costumeLibraryVisible,
         debugModalVisible,
@@ -457,6 +459,13 @@ const GUIComponent = props => {
     useEffect(() => {
         workspaceHandleRef.current = workspaceHandle;
     }, [workspaceHandle]);
+    // Temporizador de reconexión tras subir código a la placa (upload)
+    const postUploadReconnectTimerRef = useRef(null);
+    // True mientras hay un upload (compilación/subida) en curso. Se usa para que
+    // NINGUNA reconexión automática (post-upload o la de "entrar en modo
+    // dispositivo") abra el puerto serie durante la compilación: si la app
+    // mantiene COMx abierto, avrdude falla con "Acceso denegado".
+    const uploadInProgressRef = useRef(false);
     const [mentorGuidanceMsg, setMentorGuidanceMsg] = useState();
     const [showSTBlockLinkPrompt, setShowSTBlockLinkPrompt] = useState(false);
     const [stbBoardPinoutVisible, setStbBoardPinoutVisible] = useState(false);
@@ -510,6 +519,14 @@ const GUIComponent = props => {
             localStorage.removeItem('stblock_python_key_lock');
         } catch (e) {
             // Ignorar errores de almacenamiento
+        }
+    }, []);
+
+    // Limpiar la reconexión pendiente tras un upload si el componente se desmonta
+    useEffect(() => () => {
+        if (postUploadReconnectTimerRef.current) {
+            clearTimeout(postUploadReconnectTimerRef.current);
+            postUploadReconnectTimerRef.current = null;
         }
     }, []);
 
@@ -2208,16 +2225,24 @@ const GUIComponent = props => {
             // Save connection info to localStorage for auto-reconnect
             if (deviceModeDevice && connectionPeripheralName) {
                 try {
+                    // Use the real peripheral id (e.g. 'serial_COM3'), not the display name
+                    const connectedExtId = deviceModeDevice.generator === 'arduino' ? 'arduino' : deviceModeDevice.id;
+                    const connectedPeripheral = vm.runtime && vm.runtime.peripheralExtensions ?
+                        vm.runtime.peripheralExtensions[connectedExtId] : null;
+                    const realPeripheralId = connectedPeripheral &&
+                        typeof connectedPeripheral.getConnectedPeripheralId === 'function' ?
+                        connectedPeripheral.getConnectedPeripheralId() : null;
+
                     const connectionInfo = {
                         deviceId: deviceModeDevice.deviceId || deviceModeDevice.id,
                         deviceName: deviceModeDevice.name,
-                        peripheralId: connectionPeripheralName,
+                        peripheralId: realPeripheralId || connectionPeripheralName,
                         peripheralName: connectionPeripheralName,
                         generator: deviceModeDevice.generator,
                         timestamp: Date.now()
                     };
                     localStorage.setItem('stblock_last_peripheral', JSON.stringify(connectionInfo));
-                    
+
                 } catch (e) {
                     console.warn('[GUI] Failed to save peripheral info:', e);
                 }
@@ -2325,6 +2350,9 @@ const GUIComponent = props => {
 
             // Delay slightly to ensure device mode is fully initialized
             const timeoutId = setTimeout(() => {
+                // Never auto-reconnect while an upload is running: re-opening the
+                // serial port mid-compile makes avrdude fail with "Acceso denegado".
+                if (uploadInProgressRef.current) return;
                 // Only proceed if still in device mode and not connected
                 if (deviceMode === 'device' && !deviceModeConnected) {
                     onSetConnectionState(ConnectionState.CONNECTING);
@@ -2764,6 +2792,11 @@ const GUIComponent = props => {
 
     // Handler for disconnecting from device
     const handleDeviceDisconnect = useCallback(() => {
+        // Cancel any pending auto-reconnect after an upload (manual disconnect wins)
+        if (postUploadReconnectTimerRef.current) {
+            clearTimeout(postUploadReconnectTimerRef.current);
+            postUploadReconnectTimerRef.current = null;
+        }
         if (deviceModeDevice) {
             // Use 'arduino' as the extensionId for all Arduino-type devices
             const extensionId = deviceModeDevice.generator === 'arduino' ? 'arduino' : deviceModeDevice.id;
@@ -2829,11 +2862,66 @@ const GUIComponent = props => {
             onAddUploadLog(log);
         });
 
+        const extensionId = deviceModeDevice.generator === 'arduino' ? 'arduino' : deviceModeDevice.id;
+
+        // Remember the connection so we can re-open the port automatically once the
+        // upload finishes. During an upload the port must be released for
+        // arduino-cli/avrdude, but the board resets and boots again afterwards.
+        const peripheral = vm.runtime && vm.runtime.peripheralExtensions ?
+            vm.runtime.peripheralExtensions[extensionId] : null;
+        const reconnectInfo = (peripheral && peripheral.isConnected() &&
+            typeof peripheral.getConnectedPeripheralId === 'function') ? {
+            extensionId: extensionId,
+            peripheralId: peripheral.getConnectedPeripheralId(),
+            displayName: portName
+        } : null;
+
+        // Re-open the serial port after the board has reset (mirrors the Firmata
+        // firmware flow). Success -> 1.5s; error -> 2.5s so the user can retry.
+        const schedulePostUploadReconnect = delay => {
+            if (!reconnectInfo || !reconnectInfo.peripheralId) return;
+            if (postUploadReconnectTimerRef.current) {
+                clearTimeout(postUploadReconnectTimerRef.current);
+                postUploadReconnectTimerRef.current = null;
+            }
+            postUploadReconnectTimerRef.current = setTimeout(() => {
+                postUploadReconnectTimerRef.current = null;
+                // Si el usuario ya lanzó OTRO upload, no reabrir el puerto: lo
+                // liberaría justo cuando avrdude lo necesita (Acceso denegado).
+                if (!deviceModeDevice || uploadInProgressRef.current) return;
+                onSetConnectionState(ConnectionState.CONNECTING);
+                onSetDevicePort(reconnectInfo.displayName);
+                try {
+                    const periph = vm.runtime && vm.runtime.peripheralExtensions ?
+                        vm.runtime.peripheralExtensions[reconnectInfo.extensionId] : null;
+                    if (periph && !periph.isConnected()) {
+                        vm.connectPeripheral(reconnectInfo.extensionId, reconnectInfo.peripheralId);
+                    } else {
+                        onSetConnectionState(ConnectionState.DISCONNECTED);
+                    }
+                } catch (e) {
+                    console.warn('[GUI] Post-upload reconnect failed:', e);
+                    onSetConnectionState(ConnectionState.DISCONNECTED);
+                }
+            }, delay);
+        };
+
+        // Marca el upload como en curso: mientras tanto el puerto serie debe
+        // quedar LIBRE para avrdude, así que se bloquea cualquier reconexión
+        // automática (la programada tras un upload previo o la del efecto de
+        // "entrar en modo dispositivo").
+        uploadInProgressRef.current = true;
+        if (postUploadReconnectTimerRef.current) {
+            clearTimeout(postUploadReconnectTimerRef.current);
+            postUploadReconnectTimerRef.current = null;
+        }
+
         try {
-            // Disconnect from serial before uploading (Arduino needs the port)
-            const extensionId = deviceModeDevice.generator === 'arduino' ? 'arduino' : deviceModeDevice.id;
+            // Disconnect from serial before uploading (Arduino needs the port).
+            // Se ESPERA a que el cierre termine: así Windows libera el handle y
+            // avrdude no falla con "Acceso denegado" al abrir COMx.
             try {
-                vm.disconnectPeripheral(extensionId);
+                await vm.disconnectPeripheral(extensionId);
             } catch (e) {
                 // Ignore disconnect errors
             }
@@ -2852,13 +2940,16 @@ const GUIComponent = props => {
                 onSetUploadState({
                     state: 'success',
                     progress: 100,
-                    message: 'Código subido correctamente al dispositivo!'
+                    message: 'Código subido correctamente al dispositivo! Reconectando...'
                 });
+                // La placa reinicia tras el upload; reconectar en ~1.5s
+                schedulePostUploadReconnect(1500);
             } else {
                 onSetUploadState({
                     state: 'error',
                     message: ArduinoUploader.getErrorMessage(result.error || 'Error desconocido')
                 });
+                schedulePostUploadReconnect(2500);
             }
 
         } catch (error) {
@@ -2866,8 +2957,11 @@ const GUIComponent = props => {
                 state: 'error',
                 message: ArduinoUploader.getErrorMessage(error.toString())
             });
+            schedulePostUploadReconnect(2500);
+        } finally {
+            uploadInProgressRef.current = false;
         }
-    }, [deviceModeDevice, deviceModePort, vm, onSetUploadState, onAddUploadLog]);
+    }, [deviceModeDevice, deviceModePort, vm, onSetUploadState, onAddUploadLog, onSetConnectionState, onSetDevicePort]);
 
     // Handler for uploading realtime Firmata firmware
     const handleDeviceUploadFirmware = useCallback(async () => {
@@ -3514,6 +3608,9 @@ const GUIComponent = props => {
                 isOpen={debugModalVisible}
                 onClose={onRequestCloseDebugModal}
             />}
+            {bluetoothModalVisible ? (
+                <BluetoothModal vm={vm} />
+            ) : null}
             {backdropLibraryVisible ? (
                 <BackdropLibrary
                     vm={vm}
@@ -3678,6 +3775,7 @@ GUIComponent.propTypes = {
     canSave: PropTypes.bool,
     canShare: PropTypes.bool,
     canUseCloud: PropTypes.bool,
+    bluetoothModalVisible: PropTypes.bool,
     cardsVisible: PropTypes.bool,
     children: PropTypes.node,
     costumeLibraryVisible: PropTypes.bool,

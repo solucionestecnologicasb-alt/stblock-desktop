@@ -1,3 +1,4 @@
+import bindAll from 'lodash.bindall';
 import PropTypes from 'prop-types';
 import React from 'react';
 import {compose} from 'redux';
@@ -32,6 +33,13 @@ import {
     closeDeviceLibrary
 } from '../reducers/modals';
 
+import {
+    bluetoothConnecting,
+    bluetoothConnected,
+    bluetoothDisconnected,
+    bluetoothError
+} from '../reducers/bluetooth';
+
 import FontLoaderHOC from '../lib/font-loader-hoc.jsx';
 import LocalizationHOC from '../lib/localization-hoc.jsx';
 import SBFileUploaderHOC from '../lib/sb-file-uploader-hoc.jsx';
@@ -61,11 +69,69 @@ const setProjectIdMetadata = projectId => {
 };
 
 class GUI extends React.Component {
+    constructor (props) {
+        super(props);
+        bindAll(this, [
+            'handleBluetoothConnecting',
+            'handleBluetoothConnected',
+            'handleBluetoothDisconnected',
+            'handleBluetoothError',
+            'syncBluetoothState'
+        ]);
+    }
     componentDidMount () {
         setIsScratchDesktop(this.props.isScratchDesktop);
         this.props.onStorageInit(storage);
         this.props.onVmInit(this.props.vm);
         setProjectIdMetadata(this.props.projectId);
+
+        // Mantener el estado Redux de Bluetooth sincronizado con el periférico
+        // aunque el modal esté cerrado. Así el LED del botón y el modal reflejan
+        // desconexiones hechas desde un bloque, desde el modal o por caída del
+        // enlace, no solo mientras el modal está abierto.
+        const runtime = this.props.vm && this.props.vm.runtime;
+        if (runtime) {
+            runtime.on('BLUETOOTH_CONNECTING', this.handleBluetoothConnecting);
+            runtime.on('BLUETOOTH_CONNECTED', this.handleBluetoothConnected);
+            runtime.on('BLUETOOTH_DISCONNECTED', this.handleBluetoothDisconnected);
+            runtime.on('BLUETOOTH_ERROR', this.handleBluetoothError);
+            this.syncBluetoothState(runtime);
+        }
+    }
+    componentWillUnmount () {
+        const runtime = this.props.vm && this.props.vm.runtime;
+        if (runtime) {
+            runtime.removeListener('BLUETOOTH_CONNECTING', this.handleBluetoothConnecting);
+            runtime.removeListener('BLUETOOTH_CONNECTED', this.handleBluetoothConnected);
+            runtime.removeListener('BLUETOOTH_DISCONNECTED', this.handleBluetoothDisconnected);
+            runtime.removeListener('BLUETOOTH_ERROR', this.handleBluetoothError);
+        }
+    }
+    handleBluetoothConnecting () {
+        this.props.dispatch(bluetoothConnecting());
+    }
+    handleBluetoothConnected (data) {
+        const portName = data && data.portName ? data.portName : '';
+        const baudRate = data && typeof data.baudRate === 'number' ? data.baudRate : 9600;
+        this.props.dispatch(bluetoothConnected(portName, baudRate));
+    }
+    handleBluetoothDisconnected () {
+        this.props.dispatch(bluetoothDisconnected());
+    }
+    handleBluetoothError (error) {
+        const message = (error && error.message) ? error.message : String(error);
+        this.props.dispatch(bluetoothError(message));
+    }
+    syncBluetoothState (runtime) {
+        if (!runtime || typeof runtime.getPeripheralIsConnected !== 'function') return;
+        const peripheral = runtime.peripheralExtensions && runtime.peripheralExtensions.bluetooth;
+        if (runtime.getPeripheralIsConnected('bluetooth')) {
+            const name = peripheral && peripheral.getConnectedName ? peripheral.getConnectedName() : '';
+            const baud = peripheral && peripheral.getBaudRate ? peripheral.getBaudRate() : 9600;
+            this.props.dispatch(bluetoothConnected(name, baud));
+        } else {
+            this.props.dispatch(bluetoothDisconnected());
+        }
     }
     componentDidUpdate (prevProps) {
         if (this.props.projectId !== prevProps.projectId) {
@@ -123,8 +189,10 @@ class GUI extends React.Component {
 
 GUI.propTypes = {
     assetHost: PropTypes.string,
+    bluetoothModalVisible: PropTypes.bool,
     children: PropTypes.node,
     cloudHost: PropTypes.string,
+    dispatch: PropTypes.func.isRequired,
     error: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
     fetchingProject: PropTypes.bool,
     intl: intlShape,
@@ -173,6 +241,7 @@ const mapStateToProps = state => {
         connectionModalVisible: state.scratchGui.modals.connectionModal,
         costumeLibraryVisible: state.scratchGui.modals.costumeLibrary,
         debugModalVisible: state.scratchGui.modals.debugModal,
+        bluetoothModalVisible: state.scratchGui.modals.bluetoothModal,
         error: state.scratchGui.projectState.error,
         isError: getIsError(loadingState),
         isFullScreen: state.scratchGui.mode.isFullScreen,
@@ -195,6 +264,7 @@ const mapStateToProps = state => {
 };
 
 const mapDispatchToProps = dispatch => ({
+    dispatch: dispatch,
     onExtensionButtonClick: () => dispatch(openExtensionLibrary()),
     onActivateTab: tab => dispatch(activateTab(tab)),
     onRequestCloseBackdropLibrary: () => dispatch(closeBackdropLibrary()),

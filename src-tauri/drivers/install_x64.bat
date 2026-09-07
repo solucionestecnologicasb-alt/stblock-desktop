@@ -1,13 +1,66 @@
 @echo off
-if "%1"=="h" goto begin
-start mshta vbscript:createobject("wscript.shell").run("""%~nx0"" h",0)(window.close)&&exit
-:begin
+setlocal
+cd /d "%~dp0"
 
-call "./CP210x/CP210xVCPInstaller_x64.exe"
-call "./Arduino/dpinst-amd64.exe"
+>nul 2>&1 net session
+if %errorlevel% neq 0 (
+    echo Solicitando permisos de administrador...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+)
 
-call "./mbedWinSerial/mbedWinSerial_16466.exe"
-call "./FTDI USB Drivers/CDM21228_Setup.exe"
-call "./CH341SER/CH341SER.EXE"
+echo ============================================
+echo  STBlock - Instalador de drivers (x64)
+echo ============================================
+echo.
 
-exit
+set MISSING=0
+
+if exist ".\CP210x\CP210xVCPInstaller_x64.exe" (
+    echo [1/5] CP210x USB-Serial...
+    call ".\CP210x\CP210xVCPInstaller_x64.exe"
+) else (
+    echo [ERROR] Falta: .\CP210x\CP210xVCPInstaller_x64.exe
+    set MISSING=1
+)
+
+if exist ".\Arduino\dpinst-amd64.exe" (
+    echo [2/5] Arduino USB...
+    call ".\Arduino\dpinst-amd64.exe"
+) else (
+    echo [ERROR] Falta: .\Arduino\dpinst-amd64.exe
+    set MISSING=1
+)
+
+if exist ".\mbedWinSerial\mbedWinSerial_16466.exe" (
+    echo [3/5] mbed USB-Serial...
+    call ".\mbedWinSerial\mbedWinSerial_16466.exe"
+) else (
+    echo [ERROR] Falta: .\mbedWinSerial\mbedWinSerial_16466.exe
+    set MISSING=1
+)
+
+if exist ".\FTDI USB Drivers\CDM21228_Setup.exe" (
+    echo [4/5] FTDI USB-Serial...
+    call ".\FTDI USB Drivers\CDM21228_Setup.exe"
+) else (
+    echo [ERROR] Falta: .\FTDI USB Drivers\CDM21228_Setup.exe
+    set MISSING=1
+)
+
+if exist ".\CH341SER\CH341SER.EXE" (
+    echo [5/5] CH340/CH341 USB-Serial...
+    call ".\CH341SER\CH341SER.EXE"
+) else (
+    echo [ERROR] Falta: .\CH341SER\CH341SER.EXE
+    set MISSING=1
+)
+
+echo.
+if %MISSING%==1 (
+    echo Faltan archivos de drivers. Reinstala STBlock o copia la carpeta "drivers" completa.
+) else (
+    echo Instalacion de drivers completada.
+)
+echo.
+pause

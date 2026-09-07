@@ -8,6 +8,7 @@ import StopAll from '../stop-all/stop-all.jsx';
 import TurboMode from '../turbo-mode/turbo-mode.jsx';
 import DebugButton from '../debug-button/debug-button.jsx';
 import SpeedSelect from '../speed-select/speed-select.jsx';
+import BluetoothButton from '../bluetooth-button/bluetooth-button.jsx';
 
 import styles from './controls.css';
 
@@ -45,6 +46,12 @@ const Controls = function (props) {
         onDebugClick,
         onSpeedChange,
 
+        // Bluetooth props
+        bluetoothConnected,
+        bluetoothConnecting,
+        bluetoothEnabled,
+        onOpenBluetoothModal,
+
         ...componentProps
     } = props;
     return (
@@ -68,6 +75,14 @@ const Controls = function (props) {
                 title={intl.formatMessage(messages.debugTitle)}
                 onClick={onDebugClick}
             />
+            {bluetoothEnabled ? (
+                <BluetoothButton
+                    connected={bluetoothConnected}
+                    connecting={bluetoothConnecting}
+                    title="Bluetooth"
+                    onClick={onOpenBluetoothModal}
+                />
+            ) : null}
             {debugArmed || debugActive ? (
                 <SpeedSelect
                     debugSpeed={debugSpeed}
@@ -95,7 +110,13 @@ Controls.propTypes = {
     debugActive: PropTypes.bool,
     debugSpeed: PropTypes.number,
     onDebugClick: PropTypes.func,
-    onSpeedChange: PropTypes.func
+    onSpeedChange: PropTypes.func,
+
+    // Bluetooth props
+    bluetoothConnected: PropTypes.bool,
+    bluetoothConnecting: PropTypes.bool,
+    bluetoothEnabled: PropTypes.bool,
+    onOpenBluetoothModal: PropTypes.func
 };
 
 Controls.defaultProps = {
@@ -103,7 +124,10 @@ Controls.defaultProps = {
     turbo: false,
     debugArmed: false,
     debugActive: false,
-    debugSpeed: 100
+    debugSpeed: 100,
+    bluetoothConnected: false,
+    bluetoothConnecting: false,
+    bluetoothEnabled: false
 };
 
 export default injectIntl(Controls);
