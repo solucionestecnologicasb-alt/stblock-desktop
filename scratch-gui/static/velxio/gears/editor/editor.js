@@ -498,7 +498,8 @@
     }
     $('adminLogin').addEventListener('submit', function (event) {
       event.preventDefault();
-      if ($('adminPassword').value !== ADMIN_PASSWORD) {
+      var currentPass = getAdminPassword();
+      if ($('adminPassword').value !== currentPass) {
         $('loginError').textContent = 'Clave incorrecta.';
         $('adminPassword').select();
         return;
@@ -2768,39 +2769,344 @@
     };
   }
 
+  // --- Seguridad / Claves Functions ---
+  var cachedPythonKeyLock = null;
+
+  function getAdminPassword() {
+    try {
+      var custom = localStorage.getItem('stblock_custom_admin_password');
+      if (custom && typeof custom === 'string' && custom.trim().length > 0) {
+        return custom.trim();
+      }
+    } catch (e) {}
+    return 'STB.2023';
+  }
+
+  function setAdminPassword(newPassword) {
+    try {
+      if (!newPassword || newPassword === 'STB.2023') {
+        localStorage.removeItem('stblock_custom_admin_password');
+      } else {
+        localStorage.setItem('stblock_custom_admin_password', newPassword.trim());
+      }
+    } catch (e) {}
+  }
+
+  function getParentPythonKeyLock() {
+    try {
+      if (window.parent && typeof window.parent.__stblockGetPythonKeyLock === 'function') {
+        return window.parent.__stblockGetPythonKeyLock();
+      }
+    } catch (e) {}
+    try {
+      if (window.top && typeof window.top.__stblockGetPythonKeyLock === 'function') {
+        return window.top.__stblockGetPythonKeyLock();
+      }
+    } catch (e) {}
+    return cachedPythonKeyLock;
+  }
+
+  function setParentPythonKeyLock(key) {
+    cachedPythonKeyLock = key;
+    try {
+      if (window.parent && typeof window.parent.__stblockSetPythonKeyLock === 'function') {
+        window.parent.__stblockSetPythonKeyLock(key);
+      }
+    } catch (e) {}
+    try {
+      if (window.top && typeof window.top.__stblockSetPythonKeyLock === 'function') {
+        window.top.__stblockSetPythonKeyLock(key);
+      }
+    } catch (e) {}
+    try {
+      window.parent.postMessage({ type: 'stblock-set-python-key-lock', key: key }, '*');
+    } catch (e) {}
+  }
+
+  function clearParentPythonKeyLock() {
+    cachedPythonKeyLock = null;
+    try {
+      if (window.parent && typeof window.parent.__stblockClearPythonKeyLock === 'function') {
+        window.parent.__stblockClearPythonKeyLock();
+      }
+    } catch (e) {}
+    try {
+      if (window.top && typeof window.top.__stblockClearPythonKeyLock === 'function') {
+        window.top.__stblockClearPythonKeyLock();
+      }
+    } catch (e) {}
+    try {
+      window.parent.postMessage({ type: 'stblock-clear-python-key-lock' }, '*');
+    } catch (e) {}
+  }
+
+  function refreshAdminKeyState() {
+    var adminPass = getAdminPassword();
+    var isDefault = (adminPass === 'STB.2023');
+    if ($('adminKeyTypeBadge')) {
+      if (isDefault) {
+        $('adminKeyTypeBadge').textContent = 'Por Defecto (STB.2023)';
+        $('adminKeyTypeBadge').style.color = '#38bdf8';
+        $('adminKeyTypeBadge').style.background = '#1e293b';
+      } else {
+        $('adminKeyTypeBadge').textContent = 'Personalizada';
+        $('adminKeyTypeBadge').style.color = '#4ade80';
+        $('adminKeyTypeBadge').style.background = '#064e3b';
+      }
+    }
+    if ($('currentAdminKeyDisplay')) {
+      $('currentAdminKeyDisplay').value = adminPass;
+    }
+  }
+
+  function refreshSeguridadState() {
+    try {
+      window.parent.postMessage({ type: 'stblock-get-python-key-lock' }, '*');
+    } catch (e) {}
+
+    var key = getParentPythonKeyLock();
+    var badge = $('keyStatusBadge');
+    var text = $('keyStatusText');
+    var input = $('currentKeyInput');
+    var removeBtn = $('removeKeyBtn');
+    var copyBtn = $('copyKeyBtn');
+
+    if (key) {
+      if (badge) {
+        badge.style.background = '#0284c7';
+        badge.style.color = '#ffffff';
+        badge.textContent = '🔒 BLOQUEADO CON CLAVE';
+      }
+      if (text) text.textContent = 'El proyecto actual tiene el modo Python bloqueado con la clave mostrada abajo.';
+      if (input) input.value = key;
+      if (removeBtn) removeBtn.style.display = 'flex';
+      if (copyBtn) copyBtn.style.display = 'flex';
+    } else {
+      if (badge) {
+        badge.style.background = '#334155';
+        badge.style.color = '#94a3b8';
+        badge.textContent = '🔓 SIN BLOQUEO';
+      }
+      if (text) text.textContent = 'El proyecto actual no tiene ninguna clave de bloqueo activa (modo Python libre).';
+      if (input) input.value = '(Ninguna clave activa)';
+      if (removeBtn) removeBtn.style.display = 'none';
+      if (copyBtn) copyBtn.style.display = 'none';
+    }
+
+    refreshAdminKeyState();
+  }
+
+  function initSeguridadTab() {
+    window.addEventListener('message', function (event) {
+      if (event.data && event.data.type === 'stblock-python-key-lock-response') {
+        cachedPythonKeyLock = event.data.key;
+        refreshSeguridadState();
+      }
+    });
+
+    // --- Python Key Controls ---
+    if ($('copyKeyBtn')) {
+      $('copyKeyBtn').onclick = function () {
+        var key = getParentPythonKeyLock();
+        if (key) {
+          navigator.clipboard.writeText(key).then(function () {
+            toast('Clave Python copiada al portapapeles: ' + key);
+          }).catch(function () {
+            toast('Clave Python: ' + key);
+          });
+        }
+      };
+    }
+
+    if ($('removeKeyBtn')) {
+      $('removeKeyBtn').onclick = function () {
+        if (confirm('¿Estás seguro de que deseas quitar la clave de bloqueo de Python del proyecto actual?')) {
+          clearParentPythonKeyLock();
+          refreshSeguridadState();
+          toast('Clave Python removida del proyecto');
+        }
+      };
+    }
+
+    if ($('applyKeyAdminBtn')) {
+      $('applyKeyAdminBtn').onclick = function () {
+        var inputElem = $('newKeyAdminInput');
+        var newKey = inputElem ? inputElem.value.trim() : '';
+        if (!newKey) {
+          alert('Por favor ingresa una clave válida.');
+          return;
+        }
+        if (newKey.length < 4) {
+          alert('La clave debe tener al menos 4 caracteres.');
+          return;
+        }
+        setParentPythonKeyLock(newKey);
+        if (inputElem) inputElem.value = '';
+        refreshSeguridadState();
+        var fb = $('keyAdminFeedback');
+        if (fb) {
+          fb.textContent = '✅ Clave Python establecida correctamente: ' + newKey;
+          fb.style.display = 'block';
+          setTimeout(function () { fb.style.display = 'none'; }, 4000);
+        }
+        toast('Clave Python guardada en el proyecto actual');
+      };
+    }
+
+    if ($('refreshKeyLockBtn')) {
+      $('refreshKeyLockBtn').onclick = function () {
+        refreshSeguridadState();
+        toast('Estado actualizado');
+      };
+    }
+
+    // --- Admin Password Controls ---
+    if ($('toggleShowAdminKeyBtn')) {
+      $('toggleShowAdminKeyBtn').onclick = function () {
+        var display = $('currentAdminKeyDisplay');
+        if (display) {
+          if (display.type === 'password') {
+            display.type = 'text';
+            $('toggleShowAdminKeyBtn').textContent = '🙈 Ocultar';
+          } else {
+            display.type = 'password';
+            $('toggleShowAdminKeyBtn').textContent = '👁️ Mostrar';
+          }
+        }
+      };
+    }
+
+    if ($('copyAdminKeyBtn')) {
+      $('copyAdminKeyBtn').onclick = function () {
+        var adminPass = getAdminPassword();
+        navigator.clipboard.writeText(adminPass).then(function () {
+          toast('Clave de administrador copiada: ' + adminPass);
+        }).catch(function () {
+          toast('Clave: ' + adminPass);
+        });
+      };
+    }
+
+    if ($('resetAdminKeyBtn')) {
+      $('resetAdminKeyBtn').onclick = function () {
+        if (confirm('¿Restablecer la clave de administrador a la clave por defecto "STB.2023"?')) {
+          setAdminPassword('STB.2023');
+          refreshAdminKeyState();
+          var fb = $('adminKeyFeedback');
+          if (fb) {
+            fb.textContent = '✅ Clave de administrador restablecida a STB.2023';
+            fb.style.color = '#38bdf8';
+            fb.style.display = 'block';
+            setTimeout(function () { fb.style.display = 'none'; }, 4000);
+          }
+          toast('Clave restablecida a STB.2023');
+        }
+      };
+    }
+
+    if ($('saveNewAdminKeyBtn')) {
+      $('saveNewAdminKeyBtn').onclick = function () {
+        var oldInput = $('oldAdminKeyInput');
+        var newInput = $('newAdminKeyInput');
+        var confirmInput = $('confirmNewAdminKeyInput');
+        var fb = $('adminKeyFeedback');
+
+        var currentPass = getAdminPassword();
+        var oldVal = oldInput ? oldInput.value.trim() : '';
+        var newVal = newInput ? newInput.value.trim() : '';
+        var confirmVal = confirmInput ? confirmInput.value.trim() : '';
+
+        if (!oldVal || oldVal !== currentPass) {
+          if (fb) {
+            fb.textContent = '❌ La clave actual ingresada es incorrecta.';
+            fb.style.color = '#ef4444';
+            fb.style.display = 'block';
+          }
+          alert('La clave actual ingresada es incorrecta.');
+          if (oldInput) oldInput.focus();
+          return;
+        }
+
+        if (!newVal || newVal.length < 4) {
+          if (fb) {
+            fb.textContent = '❌ La nueva clave debe tener al menos 4 caracteres.';
+            fb.style.color = '#ef4444';
+            fb.style.display = 'block';
+          }
+          alert('La nueva clave debe tener al menos 4 caracteres.');
+          if (newInput) newInput.focus();
+          return;
+        }
+
+        if (newVal !== confirmVal) {
+          if (fb) {
+            fb.textContent = '❌ Las nuevas claves no coinciden.';
+            fb.style.color = '#ef4444';
+            fb.style.display = 'block';
+          }
+          alert('Las nuevas claves no coinciden.');
+          if (confirmInput) confirmInput.focus();
+          return;
+        }
+
+        setAdminPassword(newVal);
+        if (oldInput) oldInput.value = '';
+        if (newInput) newInput.value = '';
+        if (confirmInput) confirmInput.value = '';
+        refreshAdminKeyState();
+
+        if (fb) {
+          fb.textContent = '✅ ¡Clave de administrador actualizada correctamente!';
+          fb.style.color = '#22c55e';
+          fb.style.display = 'block';
+          setTimeout(function () { fb.style.display = 'none'; }, 5000);
+        }
+        toast('Clave de administrador actualizada');
+      };
+    }
+  }
+
   function initRobotEditor() {
     $('switchToMaps').onclick = function () {
       activeMode = 'maps';
+      sessionStorage.setItem('stblock_last_admin_tab', 'maps');
       $('switchToMaps').className = 'primary';
       $('switchToRobots').className = 'ghost';
       if ($('switchToParts')) $('switchToParts').className = 'ghost';
       if ($('switchToEvaluaciones')) $('switchToEvaluaciones').className = 'ghost';
+      if ($('switchToSeguridad')) $('switchToSeguridad').className = 'ghost';
       $('mapWorkspace').style.display = 'grid';
       $('robotWorkspace').style.display = 'none';
       if ($('pieceWorkspace')) $('pieceWorkspace').style.display = 'none';
       if ($('evaluacionesWorkspace')) $('evaluacionesWorkspace').style.display = 'none';
+      if ($('seguridadWorkspace')) $('seguridadWorkspace').style.display = 'none';
       $('mapActions').style.display = 'flex';
       $('robotActions').style.display = 'none';
       if ($('pieceActions')) $('pieceActions').style.display = 'none';
       if ($('evaluacionesActions')) $('evaluacionesActions').style.display = 'none';
+      if ($('seguridadActions')) $('seguridadActions').style.display = 'none';
       resizeCanvas();
     };
 
     $('switchToRobots').onclick = function () {
       console.log("[STBLOCK-DEBUG] Tab Switch to Robots clicked");
       activeMode = 'robots';
+      sessionStorage.setItem('stblock_last_admin_tab', 'robots');
       $('switchToMaps').className = 'ghost';
       $('switchToRobots').className = 'primary';
       if ($('switchToParts')) $('switchToParts').className = 'ghost';
       if ($('switchToEvaluaciones')) $('switchToEvaluaciones').className = 'ghost';
+      if ($('switchToSeguridad')) $('switchToSeguridad').className = 'ghost';
       $('mapWorkspace').style.display = 'none';
       $('robotWorkspace').style.display = 'grid';
       if ($('pieceWorkspace')) $('pieceWorkspace').style.display = 'none';
       if ($('evaluacionesWorkspace')) $('evaluacionesWorkspace').style.display = 'none';
+      if ($('seguridadWorkspace')) $('seguridadWorkspace').style.display = 'none';
       $('mapActions').style.display = 'none';
       $('robotActions').style.display = 'flex';
       if ($('pieceActions')) $('pieceActions').style.display = 'none';
       if ($('evaluacionesActions')) $('evaluacionesActions').style.display = 'none';
+      if ($('seguridadActions')) $('seguridadActions').style.display = 'none';
 
       console.log("[STBLOCK-DEBUG] robotCanvas client dimensions before defer:", robotCanvas.clientWidth, "x", robotCanvas.clientHeight);
 
@@ -2819,18 +3125,22 @@
     if ($('switchToParts')) {
       $('switchToParts').onclick = function () {
         activeMode = 'parts';
+        sessionStorage.setItem('stblock_last_admin_tab', 'parts');
         $('switchToMaps').className = 'ghost';
         $('switchToRobots').className = 'ghost';
         $('switchToParts').className = 'primary';
         if ($('switchToEvaluaciones')) $('switchToEvaluaciones').className = 'ghost';
+        if ($('switchToSeguridad')) $('switchToSeguridad').className = 'ghost';
         $('mapWorkspace').style.display = 'none';
         $('robotWorkspace').style.display = 'none';
         $('pieceWorkspace').style.display = 'grid';
         if ($('evaluacionesWorkspace')) $('evaluacionesWorkspace').style.display = 'none';
+        if ($('seguridadWorkspace')) $('seguridadWorkspace').style.display = 'none';
         $('mapActions').style.display = 'none';
         $('robotActions').style.display = 'none';
         $('pieceActions').style.display = 'flex';
         if ($('evaluacionesActions')) $('evaluacionesActions').style.display = 'none';
+        if ($('seguridadActions')) $('seguridadActions').style.display = 'none';
         setTimeout(function () {
           if (!pieceEngine) initPiece3DScene();
           if (pieceEngine) pieceEngine.resize();
@@ -2843,17 +3153,21 @@
     if ($('switchToEvaluaciones')) {
       $('switchToEvaluaciones').onclick = function () {
         activeMode = 'evaluaciones';
+        sessionStorage.setItem('stblock_last_admin_tab', 'evaluaciones');
         $('switchToMaps').className = 'ghost';
         $('switchToRobots').className = 'ghost';
         if ($('switchToParts')) $('switchToParts').className = 'ghost';
+        if ($('switchToSeguridad')) $('switchToSeguridad').className = 'ghost';
         $('switchToEvaluaciones').className = 'primary';
         $('mapWorkspace').style.display = 'none';
         $('robotWorkspace').style.display = 'none';
         if ($('pieceWorkspace')) $('pieceWorkspace').style.display = 'none';
+        if ($('seguridadWorkspace')) $('seguridadWorkspace').style.display = 'none';
         $('evaluacionesWorkspace').style.display = 'grid';
         $('mapActions').style.display = 'none';
         $('robotActions').style.display = 'none';
         if ($('pieceActions')) $('pieceActions').style.display = 'none';
+        if ($('seguridadActions')) $('seguridadActions').style.display = 'none';
         $('evaluacionesActions').style.display = 'flex';
 
         // Initialize evaluaciones editor if needed
@@ -2863,6 +3177,33 @@
         }, 50);
       };
     }
+
+    // --- SEGURIDAD / CLAVE PYTHON TAB ---
+    if ($('switchToSeguridad')) {
+      $('switchToSeguridad').onclick = function () {
+        activeMode = 'seguridad';
+        sessionStorage.setItem('stblock_last_admin_tab', 'seguridad');
+        $('switchToMaps').className = 'ghost';
+        $('switchToRobots').className = 'ghost';
+        if ($('switchToParts')) $('switchToParts').className = 'ghost';
+        if ($('switchToEvaluaciones')) $('switchToEvaluaciones').className = 'ghost';
+        $('switchToSeguridad').className = 'primary';
+        $('mapWorkspace').style.display = 'none';
+        $('robotWorkspace').style.display = 'none';
+        if ($('pieceWorkspace')) $('pieceWorkspace').style.display = 'none';
+        if ($('evaluacionesWorkspace')) $('evaluacionesWorkspace').style.display = 'none';
+        if ($('seguridadWorkspace')) $('seguridadWorkspace').style.display = 'block';
+        $('mapActions').style.display = 'none';
+        $('robotActions').style.display = 'none';
+        if ($('pieceActions')) $('pieceActions').style.display = 'none';
+        if ($('evaluacionesActions')) $('evaluacionesActions').style.display = 'none';
+        if ($('seguridadActions')) $('seguridadActions').style.display = 'flex';
+
+        refreshSeguridadState();
+      };
+    }
+
+    initSeguridadTab();
 
     // Chassis bindings
     ['chassisW', 'chassisD', 'chassisH', 'chassisYOffset', 'chassisMass', 'chassisFriction', 'chassisColor', 'robotChassisType', 'chassisDriftEnabled', 'chassisDriftLeft'].forEach(function(id) {
@@ -3044,7 +3385,17 @@
       var testWindow = createGearbotTestWindow('stblock-robot-test');
       try {
         toast('Preparando simulador...');
-        var saved = await saveAdminRobot();
+        if (selectedRobotPartId) syncRobotPartFromForm(activePartConnectionBoard);
+        syncRobotStateFromForm();
+        try {
+          localStorage.setItem('stblock_current_editing_robot', JSON.stringify(robotState));
+        } catch(e) {}
+        var saved = null;
+        try {
+          saved = await saveAdminRobot();
+        } catch (saveErr) {
+          console.warn('[STBLOCK-GEARBOT] Guardado en servidor omitido, usando local:', saveErr);
+        }
         var robotUrl = gearbotEntityUrl('robot', robotState.id, saved) + '?v=' + Date.now();
         var url = appendGearbotReturnParams('../index.html?stblockWebGL=1-v11&robotJSON=' + encodeURIComponent(robotUrl), 'robots', robotState.id);
         openGearbotTest(url, 'stblock-robot-test', testWindow);
@@ -5005,7 +5356,24 @@
       loadRobotForm();
       if (robotScene) renderRobot3D();
       toast('Robot cargado');
-    } catch(e) { toast('Error cargando el robot'); }
+    } catch(e) {
+      console.warn('[EDITOR] Error cargando robot desde URL, buscando copia local:', e);
+      try {
+        var backup = localStorage.getItem('stblock_current_editing_robot') || localStorage.getItem('stblock_active_robot_data');
+        if (backup) {
+          var parsed = JSON.parse(backup);
+          if (parsed && parsed.chassis) {
+            robotState = parsed;
+            loadRobotForm();
+            if (robotScene) renderRobot3D();
+            toast('Robot restaurado de memoria local');
+            return;
+          }
+        }
+      } catch(e2) {}
+      toast('Error cargando el robot');
+      throw e;
+    }
   }
 
   function bind() {
@@ -5413,7 +5781,8 @@
     };
   }
 
-  if (adminMode === 'robots') {
+  var targetInitialTab = adminMode || sessionStorage.getItem('stblock_last_admin_tab') || 'maps';
+  if (targetInitialTab === 'robots') {
     setTimeout(function () {
       $('switchToRobots').click();
       // Si hay tarjeta especificada, seleccionarla
@@ -5424,19 +5793,65 @@
         }
       }
       if (returnRobotId) {
-        loadRobotUrl(gearbotEntityUrl('robot', returnRobotId)).catch(function () {});
+        loadRobotUrl(gearbotEntityUrl('robot', returnRobotId)).catch(function () {
+          try {
+            var backup = localStorage.getItem('stblock_current_editing_robot');
+            if (backup) {
+              var parsed = JSON.parse(backup);
+              if (parsed && parsed.chassis) {
+                robotState = parsed;
+                loadRobotForm();
+                if (robotScene) renderRobot3D();
+                toast('Robot restaurado del editor');
+              }
+            }
+          } catch (e) {}
+        });
+      } else {
+        try {
+          var backup = localStorage.getItem('stblock_current_editing_robot');
+          if (backup) {
+            var parsed = JSON.parse(backup);
+            if (parsed && parsed.chassis) {
+              robotState = parsed;
+              loadRobotForm();
+              setTimeout(function () { if (robotScene) renderRobot3D(); }, 100);
+            }
+          }
+        } catch (e) {}
       }
     }, 60);
-  } else if (adminMode === 'maps') {
+  } else if (targetInitialTab === 'maps') {
     setTimeout(function () {
       $('switchToMaps').click();
       if (returnMapId) {
-        loadMapUrl(gearbotEntityUrl('map', returnMapId)).catch(function () {});
+        loadMapUrl(gearbotEntityUrl('map', returnMapId)).catch(function () {
+          try {
+            var backup = localStorage.getItem('stblock_current_editing_map');
+            if (backup) {
+              var parsed = JSON.parse(backup);
+              if (parsed && (parsed.metadata && parsed.metadata.id === returnMapId)) {
+                state = parsed;
+                loadFormFromState();
+                renderAll();
+                toast('Escenario restaurado del editor');
+              }
+            }
+          } catch (e) {}
+        });
       }
     }, 60);
-  } else if (adminMode === 'parts') {
+  } else if (targetInitialTab === 'parts') {
     setTimeout(function () {
       if ($('switchToParts')) $('switchToParts').click();
+    }, 60);
+  } else if (targetInitialTab === 'evaluaciones') {
+    setTimeout(function () {
+      if ($('switchToEvaluaciones')) $('switchToEvaluaciones').click();
+    }, 60);
+  } else if (targetInitialTab === 'seguridad') {
+    setTimeout(function () {
+      if ($('switchToSeguridad')) $('switchToSeguridad').click();
     }, 60);
   }
 

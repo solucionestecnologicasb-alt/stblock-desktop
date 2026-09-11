@@ -235,9 +235,9 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                     var pythonData = results[3];
                     self.props.onLoadingStarted();
                     try { localStorage.removeItem('ai_messages'); } catch (e) {}
-                    // Guardar los códigos Python ANTES de loadProject: el handler de
-                    // PROJECT_LOADED en gui.jsx los lee para restaurar el editor de
-                    // texto (los ids de target cambian al recargar).
+                    // Guardar los códigos Python y el candado con clave ANTES de loadProject:
+                    // el handler de PROJECT_LOADED en gui.jsx los lee para restaurar
+                    // el editor de texto y el estado de bloqueo del archivo cargado.
                     if (pythonData && pythonData.pythonCodes) {
                         try {
                             localStorage.setItem('stblock_python_project_codes',
@@ -247,6 +247,14 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                         // No es un .flynt con datos Python: descartar códigos
                         // antiguos para no restaurarlos en otro proyecto.
                         try { localStorage.removeItem('stblock_python_project_codes'); } catch (_) {}
+                    }
+                    if (pythonData && pythonData.pythonKeyLock) {
+                        try {
+                            localStorage.setItem('stblock_python_project_key_lock',
+                                String(pythonData.pythonKeyLock));
+                        } catch (_) {}
+                    } else {
+                        try { localStorage.removeItem('stblock_python_project_key_lock'); } catch (_) {}
                     }
                     var loadingSuccess = false;
                     self.props.vm.loadProject(buffer)
@@ -335,6 +343,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                         .catch(function (error) {
                             log.warn(error);
                             try { localStorage.removeItem('stblock_python_project_codes'); } catch (_) {}
+                            try { localStorage.removeItem('stblock_python_project_key_lock'); } catch (_) {}
                             alert(self.props.intl.formatMessage(messages.loadError)); // eslint-disable-line no-alert
                         })
                         .then(function () {

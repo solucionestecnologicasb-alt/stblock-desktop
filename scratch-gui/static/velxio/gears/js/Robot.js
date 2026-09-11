@@ -514,7 +514,7 @@ function Robot() {
           componentConfig.rotation,
           componentConfig.port || ('out' + PORT_LETTERS[(++self.motorCount)]),
           componentConfig.options);
-      } else if (componentConfig.type == 'ArmActuator') {
+      } else if (componentConfig.type == 'ArmActuator' || componentConfig.type == 'CustomServoActuator') {
         component = new ArmActuator(
           self.scene,
           parent,
@@ -530,8 +530,16 @@ function Robot() {
           componentConfig.rotation,
           componentConfig.port || ('in' + (++self.sensorCount)),
           componentConfig.options);
-      } else if (componentConfig.type == 'SwivelActuator') {
+      } else if (componentConfig.type == 'SwivelActuator' || componentConfig.type == 'CustomMotorActuator') {
         component = new SwivelActuator(
+          self.scene,
+          parent,
+          componentConfig.position,
+          componentConfig.rotation,
+          componentConfig.port || ('out' + PORT_LETTERS[(++self.motorCount)]),
+          componentConfig.options);
+      } else if (componentConfig.type == 'LinearActuator' || componentConfig.type == 'CustomLinearActuator') {
+        component = new LinearActuator(
           self.scene,
           parent,
           componentConfig.position,

@@ -659,10 +659,13 @@ class VirtualMachine extends EventEmitter {
             zip.file('sketchforge/project.skf', sketchforgeData.bytes);
         }
 
-        // Python editor data (code per target name) so the text editor can be
-        // restored on load. Keyed by target NAME because target ids are
-        // randomized each time a project is deserialized.
-        if (pythonData && pythonData.pythonCodes && Object.keys(pythonData.pythonCodes).length > 0) {
+        // Python editor data (code per target name and optional key lock) so the text
+        // editor and lock state can be restored on load. Keyed by target NAME because
+        // target ids are randomized each time a project is deserialized.
+        if (pythonData && (
+            (pythonData.pythonCodes && Object.keys(pythonData.pythonCodes).length > 0) ||
+            pythonData.pythonKeyLock
+        )) {
             zip.file('python/python-data.json', JSON.stringify(pythonData, null, 2));
         }
 

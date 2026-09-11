@@ -321,13 +321,13 @@ var main = new function() {
           Object.assign(compOpt, comp.options);
         }
         
-        if (comp.type === 'ArmActuator' || comp.type === 'SwivelActuator') {
+        if (comp.type === 'ArmActuator' || comp.type === 'SwivelActuator' || comp.type === 'CustomServoActuator' || comp.type === 'CustomMotorActuator') {
           compOpt.minAngle = (comp.options && typeof comp.options.minAngle !== 'undefined') ? comp.options.minAngle : -5;
           compOpt.maxAngle = (comp.options && typeof comp.options.maxAngle !== 'undefined') ? comp.options.maxAngle : 180;
           compOpt.startAngle = (comp.options && typeof comp.options.startAngle !== 'undefined') ? comp.options.startAngle : 0;
           compOpt.mass = (comp.options && typeof comp.options.mass !== 'undefined') ? comp.options.mass : 100;
           compOpt.models = comp.options ? comp.options.models : null;
-        } else if (comp.type === 'LinearActuator') {
+        } else if (comp.type === 'LinearActuator' || comp.type === 'CustomLinearActuator') {
           compOpt.min = (comp.options && typeof comp.options.minAngle !== 'undefined') ? comp.options.minAngle : -10;
           compOpt.max = (comp.options && typeof comp.options.maxAngle !== 'undefined') ? comp.options.maxAngle : 10;
           compOpt.startPos = (comp.options && typeof comp.options.startAngle !== 'undefined') ? comp.options.startAngle : 0;
@@ -358,11 +358,11 @@ var main = new function() {
 
       // Second pass: associate child components with their parents, or put them in the root
       Object.keys(compMap).forEach(id => {
-        let item = compMap[id];
-        if (item.parentId !== 'chassis' && compMap[item.parentId]) {
-          compMap[item.parentId].translated.components.push(item.translated);
+        let node = compMap[id];
+        if (node.parentId === 'chassis' || !compMap[node.parentId]) {
+          rootComponents.push(node.translated);
         } else {
-          rootComponents.push(item.translated);
+          compMap[node.parentId].translated.components.push(node.translated);
         }
       });
 
@@ -371,6 +371,42 @@ var main = new function() {
 
     return translated;
   }
+
+  // Load robot from file dialog
+  this.loadRobotDialog = function() {
+    let $dialog = $(
+      '<dialog class="loadRobotDialog">' +
+        '<div>' +
+          '<label for="robotFileInput">' + i18n.get('#main-load_robot_file#') + '</label>' +
+          '<input type="file" id="robotFileInput" accept=".json">' +
+        '</div>' +
+        '<div>' +
+          '<button id="loadRobotCancel">' + i18n.get('#sim-cancel#') + '</button>' +
+        '</div>' +
+      '</dialog>'
+    );
+
+    $('body').append($dialog);
+    $dialog[0].showModal();
+
+    $('#loadRobotCancel').click(function() {
+      $dialog[0].close();
+      $dialog.remove();
+    });
+
+    $('#robotFileInput').change(function(e) {
+      let file = e.target.files[0];
+      if (file) {
+        let reader = new FileReader();
+        reader.onload = function() {
+          self.loadRobot(this.result);
+          $dialog[0].close();
+          $dialog.remove();
+        };
+        reader.readAsText(file);
+      }
+    });
+  };
 
   // Load robot
   this.loadRobot = function(json) {
@@ -433,12 +469,23 @@ var main = new function() {
         if (response.ok) {
           return response.text();
         } else {
-          toastMsg(i18n.get('#sim-not_found#'));
-          return Promise.reject(new Error('invalid_robot'));
+          throw new Error('invalid_robot');
         }
       })
       .then(function(response) {
         self.loadRobot(response);
+      })
+      .catch(function(err) {
+        console.warn('[MAIN] fetch de robotURL falló, probando fallback de localStorage:', err);
+        try {
+          var backup = localStorage.getItem('stblock_active_robot_data') || localStorage.getItem('stblock_current_editing_robot');
+          if (backup) {
+            console.log('[MAIN] Robot cargado exitosamente desde localStorage');
+            self.loadRobot(backup);
+            return;
+          }
+        } catch(e) {}
+        toastMsg(i18n.get('#sim-not_found#'));
       });
   };
 

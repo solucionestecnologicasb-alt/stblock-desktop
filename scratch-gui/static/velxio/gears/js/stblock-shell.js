@@ -887,6 +887,41 @@
     findRobotAndPopulate();
   }
 
+  function checkAndAddReturnToEditorButton() {
+    var params = new URLSearchParams(window.location.search);
+    var returnTo = params.get('returnTo');
+    var adminTest = params.get('adminTest');
+    if (!returnTo && !adminTest) return;
+
+    if (document.getElementById('stblockReturnToEditorBtn')) return;
+
+    var btn = document.createElement('button');
+    btn.id = 'stblockReturnToEditorBtn';
+    btn.innerHTML = '← Volver al Editor';
+    btn.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 999999; ' +
+      'background: #4f46e5; color: white; border: 2px solid #818cf8; border-radius: 8px; ' +
+      'padding: 10px 18px; font-size: 14px; font-weight: bold; cursor: pointer; ' +
+      'box-shadow: 0 6px 18px rgba(0,0,0,0.6); display: flex; align-items: center; gap: 8px; transition: all 0.2s;';
+
+    btn.onmouseover = function() {
+      btn.style.background = '#4338ca';
+      btn.style.transform = 'scale(1.04)';
+    };
+    btn.onmouseout = function() {
+      btn.style.background = '#4f46e5';
+      btn.style.transform = 'scale(1)';
+    };
+
+    btn.onclick = function() {
+      if (returnTo) {
+        window.location.href = returnTo;
+      } else {
+        window.location.href = 'editor/index.html';
+      }
+    };
+    document.body.appendChild(btn);
+  }
+
   function initializeStblockShell() {
     document.body.classList.add('stblock-gears');
     localStorage.setItem('LANG', 'es');
@@ -912,12 +947,22 @@
     createControlDock();
     activateSimulator();
     initRobotTestPanel();
+    checkAndAddReturnToEditorButton();
   }
 
-  document.addEventListener('keydown', function (event) {
-    if (!event.ctrlKey || !event.altKey || event.code !== 'KeyE') return;
+  var handleIframeKeyDown = function (event) {
+    if (event.ctrlKey || event.altKey) {
+      console.log('[GEARBOT-DEBUG] Tecla en simulador detectada:', {
+        key: event.key,
+        code: event.code,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey
+      });
+    }
+    const isKeyE = event.code === 'KeyE' || (event.key && event.key.toLowerCase() === 'e') || event.key === '€';
+    if (!event.ctrlKey || !event.altKey || !isKeyE) return;
     event.preventDefault();
-    console.log('[GEARBOT] Ctrl+Alt+E detectado en stblock-shell');
+    console.log('[GEARBOT] ✅ Ctrl+Alt+E detectado en stblock-shell');
     if (window.parent !== window) {
       console.log('[GEARBOT] Enviando postMessage al padre');
       window.parent.postMessage({type: 'stblock-open-world-editor'}, '*');
@@ -925,7 +970,9 @@
       console.log('[GEARBOT] Abriendo editor directamente');
       window.open('/static/velxio/gears/editor/index.html', 'stblock-editor');
     }
-  });
+  };
+  window.addEventListener('keydown', handleIframeKeyDown, { capture: true });
+  document.addEventListener('keydown', handleIframeKeyDown, { capture: true });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeStblockShell);

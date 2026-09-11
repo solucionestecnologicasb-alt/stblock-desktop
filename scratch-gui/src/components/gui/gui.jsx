@@ -469,6 +469,8 @@ const GUIComponent = props => {
     const [mentorGuidanceMsg, setMentorGuidanceMsg] = useState();
     const [showSTBlockLinkPrompt, setShowSTBlockLinkPrompt] = useState(false);
     const [stbBoardPinoutVisible, setStbBoardPinoutVisible] = useState(false);
+    const [adminEditorModalOpen, setAdminEditorModalOpen] = useState(false);
+    const [adminEditorUrl, setAdminEditorUrl] = useState('static/velxio/gears/editor/index.html');
     const [updateInfo, setUpdateInfo] = useState(null);
     const [updateInstalling, setUpdateInstalling] = useState(false);
 
@@ -503,13 +505,36 @@ const GUIComponent = props => {
         userHasInteractedRef.current = true;
     }, []);
 
-    // El candado con clave es SOLO por sesión: NO se persiste en localStorage.
-    // Si se cierra y reabre la app (o se instala en otro equipo), el bloqueo
-    // desaparece y la app vuelve a funcionar con normalidad.
+    // El candado con clave vive solo en memoria para el proyecto activo y se
+    // serializa únicamente dentro del archivo del proyecto (.flynt).
+    // NO se persiste en localStorage global: si se abre un proyecto sin clave o
+    // nuevo, el bloqueo no existe.
     const [pythonKeyLock, setPythonKeyLock] = useState(null);
     const isPythonKeyLocked = pythonKeyLock !== null;
+    const pythonKeyLockRef = useRef(pythonKeyLock);
+    pythonKeyLockRef.current = pythonKeyLock;
     const [pythonKeyModalOpen, setPythonKeyModalOpen] = useState(false);
     const [pythonKeyModalMode, setPythonKeyModalMode] = useState('set');
+
+    useEffect(() => {
+        window.__stblockGetPythonKeyLock = () => pythonKeyLockRef.current;
+        window.__stblockSetPythonKeyLock = (k) => {
+            setPythonKeyLock(k);
+            if (k) {
+                setPythonPanelOpen(true);
+                setPythonPanelLocked(false);
+            }
+        };
+        window.__stblockClearPythonKeyLock = () => {
+            setPythonKeyLock(null);
+            setPythonPanelLocked(true);
+        };
+        return () => {
+            delete window.__stblockGetPythonKeyLock;
+            delete window.__stblockSetPythonKeyLock;
+            delete window.__stblockClearPythonKeyLock;
+        };
+    }, []);
 
     // Limpiar cualquier clave vieja que hubiera quedado guardada por versiones
     // anteriores del candado: libera a usuarios que quedaron atascados con el
@@ -1350,6 +1375,22 @@ const GUIComponent = props => {
                 }
             } catch (_) {}
 
+            // Restaurar candado con clave del archivo cargado (si el .flynt no
+            // tenía clave o es un proyecto nuevo, se libera el candado).
+            let storedKeyLock = null;
+            try {
+                storedKeyLock = localStorage.getItem('stblock_python_project_key_lock');
+                localStorage.removeItem('stblock_python_project_key_lock');
+            } catch (_) {}
+
+            if (storedKeyLock && typeof storedKeyLock === 'string') {
+                setPythonKeyLock(storedKeyLock);
+                setPythonPanelOpen(true);
+                setPythonPanelLocked(false);
+            } else {
+                setPythonKeyLock(null);
+            }
+
             const liveTargets = (vm.runtime.targets || []).filter(
                 t => !Object.prototype.hasOwnProperty.call(t, 'isOriginal') || t.isOriginal
             );
@@ -1675,97 +1716,40 @@ const GUIComponent = props => {
 
     // ── Gearbot secret editor: Ctrl+Alt+E ──
     useEffect(() => {
-        var editorUrl = 'static/velxio/gears/editor/index.html';
+        var openEditor = function (source, customUrl) {
+            console.log('[DEBUG-STB] 🚀 openEditor invocado desde:', source || 'desconocido');
+            const targetUrl = customUrl || 'static/velxio/gears/editor/index.html';
+            setAdminEditorUrl(targetUrl);
+            setAdminEditorModalOpen(true);
+            console.log('[DEBUG-STB] ✅ Modal de Administración abierto con URL:', targetUrl);
+        };
 
-        var openEditor = function () {
-            
-            // En Tauri: usar WebviewWindow API para crear ventana hija
-            if (window.__TAURI__ && window.__TAURI__.webviewWindow) {
-                try {
-                    // Si ya existe una ventana con esa label, Tauri lanza error -> recreamos con label unico
-                    new window.__TAURI__.webviewWindow.WebviewWindow('stblock-editor', {
-                        url: editorUrl,
-                        title: 'Editor de escenarios STBlock',
-                        width: 1200,
-                        height: 800,
-                        center: true,
-                        resizable: true
-                    });
-                    return;
-                } catch (e) {
-                    // Si la label ya existe, crear con label nuevo
-                    try {
-                        new window.__TAURI__.webviewWindow.WebviewWindow('stblock-editor-' + Date.now(), {
-                            url: editorUrl,
-                            title: 'Editor de escenarios STBlock',
-                            width: 1200,
-                            height: 800,
-                            center: true,
-                            resizable: true
-                        });
-                        return;
-                    } catch (e2) {
-                        console.warn('[GUI] Error creando WebviewWindow:', e2);
-                    }
-                }
-            }
-            // Fallback para web: window.open
-            window.open(editorUrl, 'stblock-editor');
+        window.__openSTBEditor = function(customUrl) {
+            openEditor('consola-manual', customUrl);
         };
 
         var handleKeyDown = function (event) {
-            if (!event.ctrlKey || !event.altKey || event.code !== 'KeyE') return;
+            const isKeyE = event.code === 'KeyE' || (event.key && event.key.toLowerCase() === 'e') || event.key === '€';
+            if (!event.ctrlKey || !event.altKey || !isKeyE) return;
+
+            console.log('[DEBUG-STB] ✅ ¡Combinación Ctrl+Alt+E detectada correctamente!');
             event.preventDefault();
-            
-            openEditor();
+            event.stopPropagation();
+            openEditor('atajo-teclado-gui');
         };
 
-        var handleMessage = function (event) {
+        var handleMessage = async function (event) {
             if (event.data && event.data.type === 'stblock-open-world-editor') {
-                
-                openEditor();
+                console.log('[DEBUG-STB] Mensaje postMessage stblock-open-world-editor recibido');
+                openEditor('postMessage-world-editor', 'static/velxio/gears/editor/index.html');
             }
             if (event.data && event.data.type === 'stblock-open-robot-editor') {
-                
-                // Use the path provided by main.js or construct it
+                console.log('[DEBUG-STB] Mensaje postMessage stblock-open-robot-editor recibido');
                 var robotEditorUrl = event.data.editorPath || 'static/velxio/gears/editor/index.html?mode=robots';
-                
-
-                // En Tauri: usar WebviewWindow API para crear ventana hija
-                if (window.__TAURI__ && window.__TAURI__.webviewWindow) {
-                    try {
-                        new window.__TAURI__.webviewWindow.WebviewWindow('stblock-robot-editor', {
-                            url: robotEditorUrl,
-                            title: 'Editor de Robots - STBlock',
-                            width: 1200,
-                            height: 800,
-                            center: true,
-                            resizable: true
-                        });
-                        return;
-                    } catch (e) {
-                        // Si la label ya existe, crear con label nuevo
-                        try {
-                            new window.__TAURI__.webviewWindow.WebviewWindow('stblock-robot-editor-' + Date.now(), {
-                                url: robotEditorUrl,
-                                title: 'Editor de Robots - STBlock',
-                                width: 1200,
-                                height: 800,
-                                center: true,
-                                resizable: true
-                            });
-                            return;
-                        } catch (e2) {
-                            console.warn('[GUI] Error creando WebviewWindow para robot editor:', e2);
-                        }
-                    }
-                }
-                // Fallback para web: window.open
-                window.open(robotEditorUrl, 'stblock-robot-editor');
+                openEditor('postMessage-robot-editor', robotEditorUrl);
             }
             if (event.data && event.data.type === 'stblock-save-json') {
                 const { json, filename } = event.data;
-                
                 
                 const isTauri = typeof window !== 'undefined' && window.__TAURI__ !== undefined;
                 if (isTauri) {
@@ -1806,12 +1790,47 @@ const GUIComponent = props => {
                 a.remove();
                 setTimeout(() => URL.revokeObjectURL(url), 1000);
             }
+            if (event.data && event.data.type === 'stblock-get-python-key-lock') {
+                if (event.source && event.source.postMessage) {
+                    event.source.postMessage({
+                        type: 'stblock-python-key-lock-response',
+                        key: pythonKeyLockRef.current
+                    }, '*');
+                }
+            }
+            if (event.data && event.data.type === 'stblock-set-python-key-lock') {
+                const newKey = event.data.key;
+                if (newKey) {
+                    setPythonKeyLock(String(newKey));
+                    setPythonPanelOpen(true);
+                    setPythonPanelLocked(false);
+                } else {
+                    setPythonKeyLock(null);
+                    setPythonPanelLocked(true);
+                }
+                if (event.source && event.source.postMessage) {
+                    event.source.postMessage({
+                        type: 'stblock-python-key-lock-response',
+                        key: newKey || null
+                    }, '*');
+                }
+            }
+            if (event.data && event.data.type === 'stblock-clear-python-key-lock') {
+                setPythonKeyLock(null);
+                setPythonPanelLocked(true);
+                if (event.source && event.source.postMessage) {
+                    event.source.postMessage({
+                        type: 'stblock-python-key-lock-response',
+                        key: null
+                    }, '*');
+                }
+            }
         };
 
-        document.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
         window.addEventListener('message', handleMessage);
         return function () {
-            document.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keydown', handleKeyDown, { capture: true });
             window.removeEventListener('message', handleMessage);
         };
     }, []);
@@ -1937,9 +1956,11 @@ const GUIComponent = props => {
             deviceProjects,
             // Códigos Python indexados por NOMBRE de target para persistir en el
             // .flynt (los ids de target cambian al recargar el proyecto).
-            pythonCodes: pythonCodesByName(vm, pythonCodePerTargetRef.current)
+            pythonCodes: pythonCodesByName(vm, pythonCodePerTargetRef.current),
+            // Clave de bloqueo de modo Python asociada al proyecto actual
+            pythonKeyLock: pythonKeyLock
         };
-    }, [deviceMode, deviceModeDevice, deviceModeProjects, hasBlocksInWorkspace, vm]);
+    }, [deviceMode, deviceModeDevice, deviceModeProjects, hasBlocksInWorkspace, vm, pythonKeyLock]);
 
     const loadProgrammingProject = useCallback(() => {
         if (!programmingProjectRef.current) return Promise.resolve();
@@ -3751,6 +3772,129 @@ const GUIComponent = props => {
                         style={{filter: 'brightness(0) invert(1)'}}
                     />
                 </button>
+            )}
+            {adminEditorModalOpen && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        width: '100vw',
+                        height: '100vh',
+                        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                        zIndex: 999999,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}
+                >
+                    <div
+                        style={{
+                            width: '96vw',
+                            height: '94vh',
+                            backgroundColor: '#0f172a',
+                            borderRadius: '12px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overflow: 'hidden',
+                            boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.85)',
+                            border: '1px solid #334155'
+                        }}
+                    >
+                        <div
+                            style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '10px 18px',
+                                background: '#1e293b',
+                                borderBottom: '1px solid #334155',
+                                color: '#f8fafc',
+                                fontWeight: '600',
+                                fontSize: '15px'
+                            }}
+                        >
+                            <span style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                                <span style={{fontSize: '18px'}}>🛠️</span> Panel de Administración STBlock (Escenarios, Robots, Evaluaciones)
+                            </span>
+                            <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                                <button
+                                    onClick={() => {
+                                        const iframe = document.getElementById('stblockAdminIframe');
+                                        if (iframe) {
+                                            iframe.src = 'static/velxio/gears/editor/index.html?v=' + Date.now();
+                                        }
+                                    }}
+                                    style={{
+                                        background: '#4f46e5',
+                                        border: 'none',
+                                        color: '#ffffff',
+                                        padding: '5px 14px',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontSize: '13px',
+                                        fontWeight: '600',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}
+                                    title="Volver a la vista del editor"
+                                >
+                                    🏠 Editor
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const iframe = document.getElementById('stblockAdminIframe');
+                                        if (iframe) iframe.src = iframe.src;
+                                    }}
+                                    style={{
+                                        background: '#334155',
+                                        border: 'none',
+                                        color: '#cbd5e1',
+                                        padding: '5px 12px',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontSize: '13px'
+                                    }}
+                                    title="Recargar panel"
+                                >
+                                    🔄 Recargar
+                                </button>
+                                <button
+                                    onClick={() => setAdminEditorModalOpen(false)}
+                                    style={{
+                                        background: '#ef4444',
+                                        border: 'none',
+                                        color: 'white',
+                                        padding: '5px 14px',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold',
+                                        fontSize: '13px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}
+                                >
+                                    ✕ Cerrar
+                                </button>
+                            </div>
+                        </div>
+                        <iframe
+                            id="stblockAdminIframe"
+                            src={adminEditorUrl}
+                            style={{
+                                width: '100%',
+                                height: '100%',
+                                border: 'none',
+                                flex: 1,
+                                background: '#0d1424'
+                            }}
+                            title="Panel de Administración STBlock"
+                        />
+                    </div>
+                </div>
             )}
         </Box>
     );
