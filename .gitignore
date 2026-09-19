@@ -56,3 +56,5 @@ tmp-chrome-profile/
 *.instrument-backup
 *.pre-*
 
+# Nix
+.direnv/
