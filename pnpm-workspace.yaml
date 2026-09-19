@@ -4,7 +4,6 @@ packages:
   - "sketchforge"
 
 allowBuilds:
-  chromedriver: set this to true or false
   core-js: true
   esbuild: true
   "@tailwindcss/oxide": true

@@ -48,6 +48,7 @@
     "cookie": "^0.6.0",
     "copy-webpack-plugin": "^6.4.1",
     "core-js": "^2.5.7",
+    "cross-fetch": "^4.1.0",
     "css-loader": "5.2.7",
     "dapjs": "^2.3.0",
     "es6-object-assign": "^1.1.0",
