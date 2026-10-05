@@ -22,7 +22,10 @@ const TabBar = ({
     onDragToSplitPanel,
     rtl
 }) => {
-    const activeTabOrder = tabOrder.filter(idx => idx < tabs.length);
+    const activeTabOrder = [
+        ...tabOrder.filter(idx => idx < tabs.length),
+        ...tabs.map((_, i) => i).filter(i => !tabOrder.includes(i))
+    ];
     const cachedPair = useRef(null);
     const [, rerender] = useState(0);
     const tabListRef = useRef(null);
@@ -138,7 +141,7 @@ const TabBar = ({
                     // Left half: dropped tab becomes PRIMARY, active becomes SECONDARY
                     var origActive = activeTabIndex;
                     onActivateTab(d.panelIdx);
-                    onSetSecondaryTab(origActive);
+                    onSetSecondaryTab(origActive, d.panelIdx);
                 } else {
                     // Right half: active stays PRIMARY, dropped becomes SECONDARY
                     onSetSecondaryTab(d.panelIdx);

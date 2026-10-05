@@ -338,6 +338,7 @@ export type WorkplaneShape = {
     baseWidth: number;
     baseDepth: number;
     baseHeight: number;
+    editFaceGroups?: number[][];
     triangleCount: number;
     sourceFormat: "stl" | "obj" | "svg" | "json" | "step";
     offsetX?: number;

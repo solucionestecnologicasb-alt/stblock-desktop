@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const normalizeCategory = require('../scratch-vm/src/devices/normalize-manifest');
 
 const root = path.resolve(__dirname, '..');
 const sourceRoot = path.resolve(root, '..', '..', 'openblock-desktop-main', 'openblock-desktop-main');
@@ -37,7 +38,7 @@ const VM = require(vmEntry);
 const importDevice = async ([deviceId, type]) => {
     const vm = new VM();
     await vm.extensionManager.loadDeviceURL({deviceId, type});
-    const categories = JSON.parse(JSON.stringify(vm.runtime._deviceBlockInfo));
+    const categories = JSON.parse(JSON.stringify(vm.runtime._deviceBlockInfo)).map(normalizeCategory);
     const manifest = {
         schemaVersion: 1,
         deviceId,

@@ -4,15 +4,28 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {buildSearchIndex, searchBlocks} from '../../lib/block-search-index.js';
 import styles from './block-search.css';
 
-const BlockSearch = ({workspace, ScratchBlocks, toolboxXML, onSearch}) => {
+const BlockSearch = ({workspace, ScratchBlocks, toolboxXML, onSearch, vm}) => {
     const [query, setQuery] = useState('');
     const inputRef = useRef(null);
     const debounceRef = useRef(null);
+    const [revision, setRevision] = useState(0);
+    useEffect(() => {
+        if (!workspace) return undefined;
+        const changed = event => {
+            if (['var_create', 'var_delete', 'var_rename', 'create', 'delete', 'change'].includes(event.type)) {
+                setRevision(value => value + 1);
+            }
+        };
+        workspace.addChangeListener(changed);
+        return () => workspace.removeChangeListener(changed);
+    }, [workspace]);
 
     const index = useMemo(() => {
         if (!workspace || !ScratchBlocks) return null;
-        return buildSearchIndex(workspace, ScratchBlocks, toolboxXML);
-    }, [workspace, ScratchBlocks, toolboxXML]);
+        const runtime = vm && vm.runtime;
+        const blockInfo = runtime ? (runtime._blockInfo || []).concat(runtime._deviceBlockInfo || []) : [];
+        return buildSearchIndex(workspace, ScratchBlocks, toolboxXML, blockInfo);
+    }, [workspace, ScratchBlocks, toolboxXML, vm, revision]);
 
     useEffect(() => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -51,7 +64,7 @@ const BlockSearch = ({workspace, ScratchBlocks, toolboxXML, onSearch}) => {
                     ref={inputRef}
                     className={styles.input}
                     type="text"
-                    placeholder="Search"
+                    placeholder="Buscar bloques"
                     value={query}
                     onChange={handleInputChange}
                 />
@@ -65,6 +78,7 @@ const BlockSearch = ({workspace, ScratchBlocks, toolboxXML, onSearch}) => {
 
 BlockSearch.propTypes = {
     workspace: PropTypes.object,
+    vm: PropTypes.object,
     ScratchBlocks: PropTypes.object,
     toolboxXML: PropTypes.string,
     onSearch: PropTypes.func

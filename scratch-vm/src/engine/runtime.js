@@ -12,6 +12,8 @@ const execute = require('./execute.js');
 const ScratchBlocksConstants = require('./scratch-blocks-constants');
 const TargetType = require('../extension-support/target-type');
 const deviceManifests = require('../devices/device-manifests');
+const deviceExtensionCatalog = require('../devices/extension-catalog.json');
+const {buildExtensionCategoryInfo} = require('../devices/device-extensions');
 if (typeof window !== 'undefined') {
     window.deviceManifests = deviceManifests;
 }
@@ -202,6 +204,7 @@ class Runtime extends EventEmitter {
         this._deviceProfile = null;
         this._programMode = null;
         this._deviceBlockInfo = [];
+        this._deviceExtensionIds = [];
         this._hardwareModeActive = false;
 
         /**
@@ -956,8 +959,29 @@ class Runtime extends EventEmitter {
         return this._monitorState;
     }
 
+    getDeviceExtensionIds () {
+        return this._deviceExtensionIds.slice();
+    }
+
+    setDeviceExtensionIds (ids, emitProjectChanged = true) {
+        const allowed = new Set(deviceExtensionCatalog.map(extension => extension.extensionId));
+        this._deviceExtensionIds = [...new Set((Array.isArray(ids) ? ids : []).filter(id => allowed.has(id)))];
+        this._deviceBlockInfo = this._deviceBlockInfo.filter(category => !allowed.has(category.id));
+        this._deviceExtensionIds.forEach(id => {
+            const category = buildExtensionCategoryInfo(deviceExtensionCatalog.find(extension => extension.extensionId === id));
+            this._deviceBlockInfo.push(category);
+            this.emit(Runtime.BLOCKSINFO_UPDATE, category);
+        });
+        // Invalidate the toolbox even when the last extension was removed.
+        this.emit(Runtime.BLOCKSINFO_UPDATE, {id: 'deviceExtensions', blocks: [], menus: [], customFieldTypes: {}});
+        this.emit('DEVICE_EXTENSIONS_CHANGED', this.getDeviceExtensionIds());
+        if (emitProjectChanged) this.emitProjectChanged();
+    }
+
     setDeviceProfile (device, programMode = null, emitProjectChanged = true) {
         this._deviceProfile = device ? JSON.parse(JSON.stringify(device)) : null;
+        this._programMode = this._deviceProfile ?
+            (programMode || this._deviceProfile.defaultProgramMode || 'upload') : null;
         const manifest = this._deviceProfile ? deviceManifests[this._deviceProfile.deviceId] : null;
         // Deep-clone del manifiesto: los push de inyección de bloques (STBoardV2)
         // se hacen sobre _deviceBlockInfo, así que cada setDeviceProfile trabaja
@@ -1120,6 +1144,10 @@ class Runtime extends EventEmitter {
             }
         }
 
+        this._deviceExtensionIds.forEach(id => {
+            const extension = deviceExtensionCatalog.find(item => item.extensionId === id);
+            if (extension) this._deviceBlockInfo.push(buildExtensionCategoryInfo(extension));
+        });
         this._deviceBlockInfo.forEach(categoryInfo => {
             this.emit(Runtime.BLOCKSINFO_UPDATE, categoryInfo);
         });
@@ -1127,6 +1155,7 @@ class Runtime extends EventEmitter {
             (programMode || this._deviceProfile.defaultProgramMode || 'upload') :
             null;
         if (emitProjectChanged) this.emitProjectChanged();
+        this.emit('DEVICE_EXTENSIONS_CHANGED', this.getDeviceExtensionIds());
     }
 
     setHardwareModeActive (active) {

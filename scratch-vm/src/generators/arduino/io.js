@@ -218,10 +218,17 @@ module.exports = {
     // Multi serial print (STBoard style)
     multiSerialPrint (block, blocks) {
         const serialNo = this.getFieldValue(block, 'NO') || '0';
-        const text = this.normalizeArduinoPrintValue(this.generateValue(block, 'VALUE', blocks) || '""');
-        const eol = this.getFieldValue(block, 'EOL') || 'warp';
+        const rawText = this.generateValue(block, 'VALUE', blocks) ||
+            this.generateValue(block, 'TEXT', blocks) ||
+            this.generateValue(block, 'TEXTO', blocks) || '""';
+        const text = this.normalizeArduinoPrintValue(rawText);
+        const eolField = this.getFieldValue(block, 'EOL');
+        const isPrintln = (block.opcode && block.opcode.toLowerCase().includes('println')) ||
+            eolField === 'warp' || eolField === 'newline';
+        const eol = eolField ? (eolField === 'warp' || eolField === 'newline') : isPrintln;
         const serialName = serialNo === '0' ? 'Serial' : `Serial${serialNo}`;
-        if (eol === 'warp' || eol === 'newline') {
+        this.addSetupCode(serialNo === '0' ? 'Serial.begin(9600);' : `Serial${serialNo}.begin(9600);`);
+        if (eol) {
             return `${serialName}.println(${text});\n`;
         }
         return `${serialName}.print(${text});\n`;

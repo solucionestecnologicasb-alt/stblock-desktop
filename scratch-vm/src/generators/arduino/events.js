@@ -9,6 +9,14 @@ module.exports = {
         // This is a hat block - handled in main generator
         return '';
     },
+    arduino_whenArduinoBegin (block, blocks) {
+        // This is a hat block - handled in main generator
+        return '';
+    },
+    whenArduinoBegin (block, blocks) {
+        // This is a hat block - handled in main generator
+        return '';
+    },
 
     // When flag clicked (treated as setup)
     event_whenflagclicked (block, blocks) {

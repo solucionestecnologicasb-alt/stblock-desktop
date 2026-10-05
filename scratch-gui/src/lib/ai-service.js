@@ -184,8 +184,8 @@ function buildPythonModePrompt() {
 
 function buildDeviceModePrompt() {
     var lines = [];
-    lines.push('=== MODO ELECTRÓNICA (Arduino C++ + Gearbot/Velxio) ===');
-    lines.push('Generá código Arduino C++ en el campo "arduinoCode". Se compila/ejecuta en el modo Electrónica y en los simuladores embebidos (stblock-execute).');
+    lines.push('=== MODO ELECTRÓNICA (Arduino C++ + Gearbot) ===');
+    lines.push('Generá código Arduino C++ en el campo "arduinoCode". Se compila/ejecuta en el modo Electrónica y en el simulador Gearbot (stblock-execute).');
     lines.push('');
     lines.push('REGLAS C++ ARDUINO (Arduino UNO):');
     lines.push('- Todo programa tiene void setup() y void loop().');
@@ -193,7 +193,7 @@ function buildDeviceModePrompt() {
     lines.push('- Pines UNO: digitales 2-13; analógicos A0-A5; PWM: 3, 5, 6, 9, 10, 11.');
     lines.push('- Usá delay() con moderación (bloquea el programa).');
     lines.push('');
-    lines.push('=== GEARBOT (robot simulador embebido en static/velxio/gears/index.html) ===');
+    lines.push('=== GEARBOT (robot simulador embebido en static/gears/index.html) ===');
     lines.push('- Es un robot "singleFollower" programado en C++ (el simulador lo traduce a Python vía Skulpt).');
     lines.push('- Motores: motor A y motor B (base de tracción). El electroimán va en el puerto C.');
     lines.push('- Sensores en puertos 1-4 (según el mundo cargado).');
@@ -208,12 +208,6 @@ function buildDeviceModePrompt() {
     lines.push('  * beep(frecuencia, duracion_ms).');
     lines.push('  * radio_* : enviar/recibir mensajes entre robots.');
     lines.push('- Ejemplo "robot que esquiva obstáculos": leé ultrasonic_sensor en el puerto delantero y usá move_steering para girar cuando la distancia es corta.');
-    lines.push('');
-    lines.push('=== VELXIO (simulador de circuitos embebido) ===');
-    lines.push('- Recibe el mismo C++ vía stblock-execute.');
-    lines.push('- Componentes disponibles: LED, resistencia, botón, buzzer, servo, sensores.');
-    lines.push('- Reglas de pines y Serial iguales a Arduino UNO (ver arriba).');
-    lines.push('- El simulador muestra la salida Serial en su consola.');
     lines.push('');
     lines.push('CONTRATO: respondé con {"mode":"device","arduinoCode":"<código C++>","explanation":"..."}.');
     lines.push('');
@@ -274,13 +268,13 @@ function buildAppSystemPrompt(trainingExamples, sessionSummary, activeMode) {
     activeMode = activeMode || 'blocks';
     if (!trainingExamples && !sessionSummary && _appPromptCacheByMode[activeMode]) return _appPromptCacheByMode[activeMode];
     var lines = [
-        'Eres asistente STBlock. PODÉS crear/editar bloques reales y código según el modo activo: bloques Scratch (modo Juego), código Python (modo Programación), código Arduino C++ (modo Electrónica + Gearbot/Velxio) o modelos 3D procedurales (modo Diseño 3D).',
+        'Eres asistente STBlock. PODÉS crear/editar bloques reales y código según el modo activo: bloques Scratch (modo Juego), código Python (modo Programación), código Arduino C++ (modo Electrónica + Gearbot) o modelos 3D procedurales (modo Diseño 3D).',
         '',
         'CAPACIDADES:',
         '- Crear bloques de Scratch (movimiento, apariencia, sonido, eventos, control, sensores, operadores, variables, lápiz, música)',
         '- Crear bloques de Arduino (digitalWrite, digitalRead, analogWrite, analogRead, servo, serial, etc.), ESP32 (WiFi, touch, DAC, etc.) y Micro:bit (matriz LED, botones, acelerómetro, etc.)',
         '- Generar código Python para el panel de Programación (se ejecuta con Pyodide)',
-        '- Generar código Arduino C++ para el modo Electrónica y los simuladores Gearbot/Velxio',
+        '- Generar código Arduino C++ para el modo Electrónica y el simulador Gearbot',
         '- Generar modelos 3D procedurales para SketchForge (modo Diseño 3D)',
         '',
         'DEBES responder SIEMPRE en formato JSON con la siguiente estructura. Solo el campo correspondiente al MODO ACTIVO va lleno; los demás van vacíos u omitidos:',

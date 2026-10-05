@@ -134,10 +134,15 @@ class MenuBar extends React.Component {
         super(props);
         this.state = {
             hasSaveTarget: false,
-            isSavingToTarget: false
+            isSavingToTarget: false,
+            isAutoSaving: false,
+            lastAutoSaveTime: null
         };
         this.savedFileHandle = null;
         this.savedFilePath = null;
+        this.hasPendingChanges = false;
+        this.autoSaveDebounceTimer = null;
+        this.autoSaveIntervalTimer = null;
         bindAll(this, [
             'handleClickNew',
             'handleClickRemix',
@@ -146,17 +151,122 @@ class MenuBar extends React.Component {
             'handleSetMode',
             'handleKeyPress',
             'handleSaveToComputer',
-            'handleQuickSave',
-            'handleDeviceModeChange'
+            'handleDeviceModeChange',
+            'scheduleAutoSave',
+            'performAutoSave',
+            'handleProjectLoaded',
+            'attachVmAutoSaveListeners',
+            'detachVmAutoSaveListeners'
         ]);
     }
     componentDidMount () {
         document.addEventListener('keydown', this.handleKeyPress);
+        window.addEventListener('stblock-project-changed', this.scheduleAutoSave);
+        window.addEventListener('stblock-circuit-changed', this.scheduleAutoSave);
+        window.addEventListener('stblock-python-changed', this.scheduleAutoSave);
+        this.attachVmAutoSaveListeners(this.props.vm);
+
+        // Intervalo periódico de auto-guardado cada 30 segundos si hay cambios pendientes
+        this.autoSaveIntervalTimer = setInterval(() => {
+            if (this.state.hasSaveTarget && this.hasPendingChanges && !this.state.isSavingToTarget) {
+                this.performAutoSave();
+            }
+        }, 30000);
+    }
+    componentDidUpdate (prevProps) {
+        if (prevProps.vm !== this.props.vm) {
+            this.detachVmAutoSaveListeners(prevProps.vm);
+            this.attachVmAutoSaveListeners(this.props.vm);
+        }
+        if (
+            prevProps.deviceCodeContent !== this.props.deviceCodeContent ||
+            prevProps.deviceProjects !== this.props.deviceProjects ||
+            prevProps.deviceModeSelectedDevice !== this.props.deviceModeSelectedDevice ||
+            prevProps.circuitData !== this.props.circuitData
+        ) {
+            this.scheduleAutoSave();
+        }
     }
     componentWillUnmount () {
         document.removeEventListener('keydown', this.handleKeyPress);
+        window.removeEventListener('stblock-project-changed', this.scheduleAutoSave);
+        window.removeEventListener('stblock-circuit-changed', this.scheduleAutoSave);
+        window.removeEventListener('stblock-python-changed', this.scheduleAutoSave);
+        this.detachVmAutoSaveListeners(this.props.vm);
+
+        if (this.autoSaveDebounceTimer) {
+            clearTimeout(this.autoSaveDebounceTimer);
+            this.autoSaveDebounceTimer = null;
+        }
+        if (this.autoSaveIntervalTimer) {
+            clearInterval(this.autoSaveIntervalTimer);
+            this.autoSaveIntervalTimer = null;
+        }
+    }
+    attachVmAutoSaveListeners (vm) {
+        if (!vm) return;
+        vm.on('PROJECT_CHANGED', this.scheduleAutoSave);
+        vm.on('workspaceUpdate', this.scheduleAutoSave);
+        vm.on('targetsUpdate', this.scheduleAutoSave);
+        if (vm.runtime) {
+            vm.runtime.on('PROJECT_LOADED', this.handleProjectLoaded);
+        }
+    }
+    detachVmAutoSaveListeners (vm) {
+        if (!vm) return;
+        vm.removeListener('PROJECT_CHANGED', this.scheduleAutoSave);
+        vm.removeListener('workspaceUpdate', this.scheduleAutoSave);
+        vm.removeListener('targetsUpdate', this.scheduleAutoSave);
+        if (vm.runtime) {
+            vm.runtime.removeListener('PROJECT_LOADED', this.handleProjectLoaded);
+        }
+    }
+    scheduleAutoSave () {
+        if (!this.state.hasSaveTarget) return;
+        this.hasPendingChanges = true;
+
+        if (this.autoSaveDebounceTimer) {
+            clearTimeout(this.autoSaveDebounceTimer);
+        }
+        // Esperar 2.5 segundos tras el último cambio/arrastre de bloque antes de guardar
+        this.autoSaveDebounceTimer = setTimeout(() => {
+            this.performAutoSave();
+        }, 2500);
+    }
+    async performAutoSave () {
+        if (this.state.isSavingToTarget || !this.state.hasSaveTarget || !this.hasPendingChanges) return;
+        if (this.autoSaveDebounceTimer) {
+            clearTimeout(this.autoSaveDebounceTimer);
+            this.autoSaveDebounceTimer = null;
+        }
+        this.hasPendingChanges = false;
+        try {
+            await this.saveProjectToComputer(true, true /* isAutoSave */);
+        } catch (err) {
+            console.warn('[AutoSave] Error en auto-guardado en segundo plano:', err);
+            this.hasPendingChanges = true;
+        }
+    }
+    handleProjectLoaded () {
+        if (this.autoSaveDebounceTimer) {
+            clearTimeout(this.autoSaveDebounceTimer);
+            this.autoSaveDebounceTimer = null;
+        }
+        this.hasPendingChanges = false;
     }
     handleClickNew () {
+        if (this.autoSaveDebounceTimer) {
+            clearTimeout(this.autoSaveDebounceTimer);
+            this.autoSaveDebounceTimer = null;
+        }
+        this.savedFilePath = null;
+        this.savedFileHandle = null;
+        this.hasPendingChanges = false;
+        this.setState({
+            hasSaveTarget: false,
+            lastAutoSaveTime: null
+        });
+
         // if the project is dirty, and user owns the project, we will autosave.
         // but if they are not logged in and can't save, user should consider
         // downloading or logging in first.
@@ -204,7 +314,7 @@ class MenuBar extends React.Component {
         const modifier = bowser.mac ? event.metaKey : event.ctrlKey;
         if (modifier && event.key === 's') {
             if (this.state.hasSaveTarget) {
-                this.handleQuickSave();
+                this.saveProjectToComputer(true);
             } else {
                 this.props.onClickSave();
             }
@@ -214,12 +324,10 @@ class MenuBar extends React.Component {
     handleSaveToComputer () {
         return this.saveProjectToComputer(false);
     }
-    handleQuickSave () {
-        if (this.state.isSavingToTarget || !this.state.hasSaveTarget) return;
-        return this.saveProjectToComputer(true);
-    }
-    async saveProjectToComputer (reuseSavedTarget) {
-        this.props.onRequestCloseFile();
+    async saveProjectToComputer (reuseSavedTarget, isAutoSave = false) {
+        if (!isAutoSave) {
+            this.props.onRequestCloseFile();
+        }
         const tauriRuntime = hasTauriRuntime();
         const filename = this.getProjectFilename();
         let browserFileHandle = reuseSavedTarget ? this.savedFileHandle : null;
@@ -250,7 +358,10 @@ class MenuBar extends React.Component {
             }
         }
 
-        this.setState({isSavingToTarget: true});
+        this.setState({
+            isSavingToTarget: true,
+            isAutoSaving: Boolean(isAutoSave)
+        });
         try {
             var workspaceState = null;
             if (this.props.onRequestWorkspaceState) {
@@ -296,11 +407,19 @@ class MenuBar extends React.Component {
                 }
             } catch (_) {}
 
-            // Gather Velxio circuit/simulation state for the .flynt bundle
+            // Gather circuit state for the .flynt bundle
             var circuitData = null;
             try {
                 if (this.props.onRequestCircuitState) {
                     circuitData = await this.props.onRequestCircuitState();
+                }
+            } catch (_) {}
+
+            // Gather Circuito 3D state for the .flynt bundle
+            var circuit3dData = null;
+            try {
+                if (this.props.onRequestCircuit3DState) {
+                    circuit3dData = await this.props.onRequestCircuit3DState();
                 }
             } catch (_) {}
 
@@ -322,10 +441,11 @@ class MenuBar extends React.Component {
                 workspaceState && {
                     pythonCodes: workspaceState.pythonCodes,
                     pythonKeyLock: workspaceState.pythonKeyLock || null
-                }
+                },
+                circuit3dData
             );
             const contentBytes = await getFlyntBytes(content);
-            console.info('[Flynt] Proyecto listo para guardar', { // eslint-disable-line no-console
+            console.info(isAutoSave ? '[AutoSave] Auto-guardado en proceso...' : '[Flynt] Proyecto listo para guardar', { // eslint-disable-line no-console
                 filename,
                 bytes: contentBytes.byteLength,
                 runtime: tauriRuntime ? 'tauri' : 'browser',
@@ -345,7 +465,10 @@ class MenuBar extends React.Component {
                             filters: [{name: 'Flynt Project', extensions: ['flynt']}]
                         });
                         if (!filePath) {
-                            this.setState({isSavingToTarget: false});
+                            this.setState({
+                                isSavingToTarget: false,
+                                isAutoSaving: false
+                            });
                             return;
                         }
                     }
@@ -361,12 +484,24 @@ class MenuBar extends React.Component {
                 downloadProjectInBrowser(contentBytes, filename);
             }
 
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+            this.hasPendingChanges = false;
             this.setState({
                 hasSaveTarget: Boolean(this.savedFilePath || this.savedFileHandle),
-                isSavingToTarget: false
+                isSavingToTarget: false,
+                isAutoSaving: false,
+                lastAutoSaveTime: timeStr
             });
         } catch (e) {
-            this.setState({isSavingToTarget: false});
+            this.setState({
+                isSavingToTarget: false,
+                isAutoSaving: false
+            });
+            if (isAutoSave) {
+                console.warn('[AutoSave] Auto save failed:', e);
+                return;
+            }
             if (e instanceof Error && e.message === 'NotInvoking') {
                 // User cancelled the dialog
                 return;
@@ -704,16 +839,28 @@ class MenuBar extends React.Component {
                     </div>
                 </div>
                 {this.state.hasSaveTarget ? (
-                    <div className={classNames(styles.menuBarItem, styles.titleFieldCentered)}>
-                        <button
-                            className={styles.quickSaveButton}
-                            disabled={this.state.isSavingToTarget}
-                            title="Sobrescribir el Proyecto STBlock guardado"
-                            type="button"
-                            onClick={this.handleQuickSave}
-                        >
-                            {this.state.isSavingToTarget ? 'Guardando…' : 'Guardar'}
-                        </button>
+                    <div className={classNames(styles.menuBarItem, styles.titleFieldCentered)} style={{display: 'flex', alignItems: 'center'}}>
+                        <span style={{
+                            fontSize: '11px',
+                            color: this.state.isSavingToTarget ? '#38bdf8' : '#86efac',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontWeight: '600',
+                            userSelect: 'none',
+                            background: 'rgba(0, 0, 0, 0.25)',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(255, 255, 255, 0.12)'
+                        }}>
+                            {this.state.isSavingToTarget ? (
+                                <><span>🔄</span> Guardando...</>
+                            ) : this.state.lastAutoSaveTime ? (
+                                <><span>✓</span> Auto-guardado ({this.state.lastAutoSaveTime})</>
+                            ) : (
+                                <><span>⚡</span> Auto-guardado activo</>
+                            )}
+                        </span>
                     </div>
                 ) : ((!this.props.canEditTitle &&
                     this.props.authorUsername &&
@@ -797,6 +944,7 @@ MenuBar.propTypes = {
     onSetTimeTravelMode: PropTypes.func,
     onStartSelectingFileUpload: PropTypes.func,
     onRequestCircuitState: PropTypes.func,
+    onRequestCircuit3DState: PropTypes.func,
     onRequestSketchforgeSkf: PropTypes.func,
     onRequestWorkspaceState: PropTypes.func,
     projectTitle: PropTypes.string,

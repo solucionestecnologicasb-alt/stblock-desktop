@@ -33,7 +33,8 @@ $policy = [ordered]@{
 # causando 404 en la app.
 $temp = Join-Path $env:TEMP "policy.json"
 $jsonPolicy = $policy | ConvertTo-Json -Depth 5
-[System.IO.File]::WriteAllText($temp, $jsonPolicy)
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[System.IO.File]::WriteAllText($temp, $jsonPolicy, $utf8NoBom)
 
 gh release view $Tag --repo $Repo | Out-Null
 $releaseExists = ($LASTEXITCODE -eq 0)

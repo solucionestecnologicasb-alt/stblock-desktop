@@ -14,12 +14,19 @@ const stbv2Generators = require('./stbv2');
 const arraysGenerators = require('./arrays');
 const extrasGenerators = require('./extras');
 const stbextGenerators = require('./stbext');
+const deviceExtensionGenerators = require('./device-extensions');
+const boardFixGenerators = require('./board-fixes');
+const extensionCatalog = require('../../devices/extension-catalog.json');
+const extensionCompatible = require('../../devices/extension-compatibility');
+const extensionByOpcode = new Map(extensionCatalog.flatMap(extension => extension.blocks.map(block =>
+    [`${extension.extensionId}_${block.opcode}`, extension.extensionId])));
 
 /**
  * Arduino Code Generator Class
  */
 class ArduinoGenerator {
     constructor () {
+        this.errors = new Set();
         this.includes = new Set();
         this.globalVars = new Map();
         this.definitions = new Map();
@@ -41,7 +48,9 @@ class ArduinoGenerator {
             ...stbv2Generators,
             ...arraysGenerators,
             ...extrasGenerators,
-            ...stbextGenerators
+            ...stbextGenerators,
+            ...deviceExtensionGenerators,
+            ...boardFixGenerators
         };
 
         // Assign helper functions to the instance.
@@ -329,6 +338,12 @@ class ArduinoGenerator {
             'arduino_stb_establecerLedRGB': 'establecerLedRGB',
             'arduino_stb_leerDHT': 'leerDHT',
             'arduino_stb_leerUltrasonico': 'leerUltrasonico',
+            'ultrasonic_readDistance': 'leerUltrasonico',
+            'ultrasonic_ultrasonic_readDistance': 'leerUltrasonico',
+            'arduino_ultrasonic_readDistance': 'leerUltrasonico',
+            'arduino_ultrasonic_ultrasonic_readDistance': 'leerUltrasonico',
+            'arduino_whenArduinoBegin': 'arduino_whenArduinoBegin',
+            'whenArduinoBegin': 'arduino_whenArduinoBegin',
             'arduino_stb_iniciarI2C': 'iniciarI2C',
             'arduino_stb_escribirI2C': 'escribirI2C',
             'arduino_stb_initBootScreen': 'stbBoardV2_initBootScreen',
@@ -579,8 +594,10 @@ class ArduinoGenerator {
             'arduino_stbv2puertos_isColor': 'stbV2Color_isColor',
 
             // Serial (categoría separada)
-            'arduino_serial_serialPrint': 'stbV2Serial_serialPrint',
-            'arduino_serial_serialPrintln': 'stbV2Serial_serialPrintln',
+            'arduino_serial_serialPrint': 'multiSerialPrint',
+            'arduino_serial_serialPrintln': 'multiSerialPrint',
+            'stbV2Serial_serialPrint': 'stbV2Serial_serialPrint',
+            'stbV2Serial_serialPrintln': 'stbV2Serial_serialPrintln',
 
             // Short aliases (STBV2 blocks without prefix)
             'configurarMotores': 'stbv2motores_configurarMotores',
@@ -650,6 +667,7 @@ class ArduinoGenerator {
      * Reset generator state
      */
     reset () {
+        this.errors = new Set();
         this.includes = new Set();
         this.globalVars = new Map();
         this.definitions = new Map();
@@ -890,7 +908,7 @@ class ArduinoGenerator {
         let generator = this.generators[opcode];
 
         if (generator) {
-            return generator.call(this, block, blocks);
+            return this.runBlockGenerator(generator, block, blocks);
         }
 
         // Try opcode alias map (old STBlock opcodes → current names)
@@ -902,14 +920,15 @@ class ArduinoGenerator {
                     .replace(/^arduino_/, '')
                     .replace(/_/g, ' ')
                     .replace(/\b\w/g, c => c.toUpperCase());
-                return `// ${stubComment}: no implementado\n`;
+                this.errors.add(`${stubComment}: no implementado`);
+                return '0';
             }
             // Apply field remapping if configured for this alias
             const fieldMapping = this._aliasFieldMappings[opcode];
             const aliasedBlock = fieldMapping ? this._remapBlockFields(block, fieldMapping) : block;
             generator = this.generators[alias];
             if (generator) {
-                return generator.call(this, aliasedBlock, blocks);
+                return this.runBlockGenerator(generator, aliasedBlock, blocks);
             }
         }
 
@@ -921,13 +940,32 @@ class ArduinoGenerator {
                 const camelCase = stripped.charAt(0).toLowerCase() + stripped.slice(1);
                 generator = this.generators[stripped] || this.generators[camelCase];
                 if (generator) {
-                    return generator.call(this, block, blocks);
+                    return this.runBlockGenerator(generator, block, blocks);
                 }
             }
         }
 
         // Unknown block - add comment
-        return `// Bloque no soportado: ${opcode}\n`;
+        if (opcode.includes('_menu_') && block.fields) {
+            const field = Object.values(block.fields)[0];
+            if (field) return String(field.value);
+        }
+        if (!this.errors) this.errors = new Set();
+        this.errors.add(`Bloque no soportado: ${opcode}`);
+        return '0';
+    }
+
+    runBlockGenerator (generator, block, blocks) {
+        try {
+            const extensionId = extensionByOpcode.get(block.opcode);
+            if (extensionId && this.deviceProfile && !extensionCompatible(extensionId, this.deviceProfile)) {
+                throw new Error(`la extension ${extensionId} no es compatible con esta tarjeta`);
+            }
+            return generator.call(this, block, blocks);
+        } catch (error) {
+            this.errors.add(`${block.opcode}: ${error.message}`);
+            return '0';
+        }
     }
 
     /**
@@ -1138,6 +1176,18 @@ class ArduinoGenerator {
      */
     generateCode (blocks, runtime) {
         this.reset();
+        this.deviceProfile = runtime && runtime.getDeviceProfile ? runtime.getDeviceProfile() : null;
+        // Declare configured peripherals before traversing procedures. A function
+        // may be stored before setup in the SB3 even though setup initializes the
+        // peripheral before calling it. Runtime init statements stay in their stack.
+        const configurationOpcodes = new Set([
+            'stepper_stepper_init', 'rfid_rfid_init', 'keypad_keypad_init',
+            'oled_oled_init', 'lcd_i2c_lcd_init', 'neopixel_neopixel_init',
+            'tm1637_tm1637_showNumber'
+        ]);
+        for (const block of Object.values(blocks)) {
+            if (block && block.parent && configurationOpcodes.has(block.opcode)) this.generateBlock(block, blocks);
+        }
 
         // Pre-populate variables from the workspace targets to ensure they are all declared
         if (runtime && runtime.targets) {
@@ -1306,6 +1356,9 @@ class ArduinoGenerator {
      */
     buildFinalCode () {
         let code = '// generado por STB academy\n';
+        for (const error of this.errors || []) {
+            code += `#error STBlock: ${String(error).replace(/[\r\n]/g, ' ')}\n`;
+        }
 
         // Includes
         for (const include of this.includes) {
@@ -1335,9 +1388,15 @@ class ArduinoGenerator {
             code += '\n';
         }
 
+        // Custom functions (also placed before setup() so prototypes are always available)
+        for (const [name, funcCode] of this.functions) {
+            code += funcCode + '\n\n';
+        }
+
         // Setup function
         code += 'void setup() {\n';
         if (this.setupCode.length > 0) {
+            const seenLines = new Set();
             for (const line of this.setupCode) {
                 const parts = line.split('\n');
                 // Remove trailing empty from split artifact
@@ -1345,7 +1404,16 @@ class ArduinoGenerator {
                     parts.pop();
                 }
                 for (const l of parts) {
-                    if (l.trim()) {
+                    const trimmed = l.trim();
+                    if (trimmed) {
+                        // Deduplicate Serial.begin and pinMode to prevent hardware glitches (e.g. avr8js UART deadlock)
+                        if (trimmed.startsWith('Serial') && trimmed.includes('.begin(')) {
+                            if (seenLines.has(trimmed)) continue;
+                            seenLines.add(trimmed);
+                        } else if (trimmed.startsWith('pinMode(')) {
+                            if (seenLines.has(trimmed)) continue;
+                            seenLines.add(trimmed);
+                        }
                         code += `  ${l}\n`;
                     } else {
                         code += '\n';
@@ -1378,14 +1446,6 @@ class ArduinoGenerator {
             code += '  // Codigo principal\n';
         }
         code += '}\n';
-
-        // Custom functions
-        for (const [name, funcCode] of this.functions) {
-            code += '\n' + funcCode;
-        }
-        if (this.functions.size > 0) {
-            code += '\n';
-        }
 
         return code;
     }

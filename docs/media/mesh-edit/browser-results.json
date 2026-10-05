@@ -1,0 +1,13 @@
+{
+  "passed": 8,
+  "checks": [
+    "Vertex drag changes the rendered surface before pointerup",
+    "Undo/redo restores exact mesh snapshots",
+    "G X 5 previews exact units; Escape restores without committing",
+    "Edge drag is live and pointer transaction can be cancelled",
+    "Face scale and axis rotation accept keyboard values",
+    "Extrusion previews connected walls, cancels cleanly, and ignores zero distance",
+    "Piece mode round-trip preserves the edited geometry and polygon groups",
+    "SKF bridge export/import preserves geometry and editable faces"
+  ]
+}

@@ -27,6 +27,7 @@ import {
     appendTerminalOutput,
     restoreDeviceState,
     setCircuitData,
+    setCircuit3dData,
     setSketchforgeData
 } from '../reducers/device-mode';
 
@@ -319,9 +320,13 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                                     if (deviceData.connectionState) {
                                         self.props.onRestoreDeviceState(deviceData.connectionState);
                                     }
-                                    // Restore circuit data (Velxio state)
+                                    // Restore circuit data (legacy state)
                                     if (deviceData.circuitData) {
                                         self.props.onSetCircuitData(deviceData.circuitData);
+                                    }
+                                    // Restore Circuito 3D data (Electronics Lab state)
+                                    if (deviceData.circuit3dData) {
+                                        self.props.onSetCircuit3dData(deviceData.circuit3dData);
                                     }
                                     // Restore AI conversation to localStorage
                                     if (deviceData.conversation) {
@@ -454,8 +459,10 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         onAppendTerminal: line => dispatch(appendTerminalOutput(line)),
         // Restore connection state (selected device, port, settings)
         onRestoreDeviceState: deviceState => dispatch(restoreDeviceState(deviceState)),
-        // Restore circuit data (Velxio state)
+        // Restore circuit data (legacy state)
         onSetCircuitData: circuitData => dispatch(setCircuitData(circuitData)),
+        // Restore Circuito 3D data (Electronics Lab state)
+        onSetCircuit3dData: circuit3dData => dispatch(setCircuit3dData(circuit3dData)),
         // Restore 3D SketchForge project (.skf)
         onSetSketchforgeData: sketchforgeData => dispatch(setSketchforgeData(sketchforgeData))
     });

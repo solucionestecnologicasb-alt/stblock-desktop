@@ -23,6 +23,16 @@ class Storage extends ScratchStorage {
         }
     }
     addOfficialScratchWebStores () {
+        // Biblioteca sin conexión: los assets de la biblioteca de Scratch
+        // (sprites, disfraces, fondos y sonidos) viven en static/scratch-assets/.
+        // Se generan con `node scripts/sync-scratch-assets.mjs`.
+        // WebHelper.load prueba los stores en orden de registro, así que
+        // registrarlo primero le da prioridad y deja el CDN de MIT como
+        // último recurso para assets que no estén en el espejo local.
+        this.addWebStore(
+            [this.AssetType.ImageVector, this.AssetType.ImageBitmap, this.AssetType.Sound],
+            this.getLocalAssetGetConfig.bind(this)
+        );
         this.addWebStore(
             [this.AssetType.Project],
             this.getProjectGetConfig.bind(this),
@@ -68,6 +78,11 @@ class Storage extends ScratchStorage {
     }
     setAssetHost (assetHost) {
         this.assetHost = assetHost;
+    }
+    getLocalAssetGetConfig (asset) {
+        // Ruta relativa: funciona igual servido desde la raíz, desde un
+        // subdirectorio (WordPress) o desde el esquema tauri:// del escritorio.
+        return `static/scratch-assets/${asset.assetId}.${asset.dataFormat}`;
     }
     getAssetGetConfig (asset) {
         return `${this.assetHost}/internalapi/asset/${asset.assetId}.${asset.dataFormat}/get/`;

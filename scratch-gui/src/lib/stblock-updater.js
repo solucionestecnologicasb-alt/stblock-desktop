@@ -67,6 +67,34 @@ export const dismissRecommendedUpdate = version => {
     }
 };
 
+export const cleanSpanishText = text => {
+    if (!text || typeof text !== 'string') return text;
+    let s = text;
+    try {
+        if (/[\u00C0-\u00FF]/.test(s) && /[\u0080-\u00BF]/.test(s)) {
+            const decoded = decodeURIComponent(escape(s));
+            if (decoded && !decoded.includes('\uFFFD')) {
+                s = decoded;
+            }
+        }
+    } catch (_) {}
+
+    return s
+        .replace(/Ã¡/g, 'á').replace(/Ã/g, 'Á')
+        .replace(/Ã©/g, 'é').replace(/Ã‰/g, 'É')
+        .replace(/Ã­/g, 'í').replace(/Ã/g, 'Í')
+        .replace(/Ã³/g, 'ó').replace(/Ã“/g, 'Ó')
+        .replace(/Ãº/g, 'ú').replace(/Ãš/g, 'Ú')
+        .replace(/Ã±/g, 'ñ').replace(/Ã‘/g, 'Ñ')
+        .replace(/Actualizaci[\?oó\uFFFD]+n/gi, 'Actualización')
+        .replace(/Versi[\?oó\uFFFD]+n/gi, 'Versión')
+        .replace(/autom[\?aá\uFFFD]+ticas/gi, 'automáticas')
+        .replace(/pol[\?ií\uFFFD]+tica/gi, 'política')
+        .replace(/m[\?aá\uFFFD]+s/gi, 'más')
+        .replace(/est[\?aá\uFFFD]+/gi, 'está')
+        .replace(/despu[\?eé\uFFFD]+s/gi, 'después');
+};
+
 export const checkForSTBlockUpdates = async ({manual = false} = {}) => {
     if (!isDesktopApp()) {
         return {
@@ -126,13 +154,17 @@ export const checkForSTBlockUpdates = async ({manual = false} = {}) => {
             status: 'current',
             currentVersion,
             latestVersion,
-            title: 'STBlock está actualizado',
-            message: 'Ya tienes instalada la versión más reciente disponible para este canal.',
+            title: cleanSpanishText((policy && policy.title) || 'STBlock está actualizado'),
+            message: cleanSpanishText((policy && policy.message) || 'Ya tienes instalada la versión más reciente disponible para este canal.'),
             policy,
-            policyError: policyError ? policyError.message : null,
-            updateError: updateError ? updateError.message : null
+            policyError: policyError ? cleanSpanishText(policyError.message) : null,
+            updateError: updateError ? cleanSpanishText(updateError.message) : null
         };
     }
+
+    const rawTitle = (policy && policy.title) || (mandatory ? 'Actualización obligatoria' : 'Actualización disponible');
+    const rawMessage = (policy && policy.message) || 'Hay una nueva versión de STBlock disponible.';
+    const rawNotes = (policy && (policy.notes || policy.body)) || (update && update.body) || '';
 
     return {
         status: 'available',
@@ -140,21 +172,213 @@ export const checkForSTBlockUpdates = async ({manual = false} = {}) => {
         latestVersion,
         mandatory,
         canInstall: Boolean(update),
-        title: (policy && policy.title) || (mandatory ? 'Actualización obligatoria' : 'Actualización disponible'),
-        message: (policy && policy.message) || 'Hay una nueva versión de STBlock disponible.',
+        title: cleanSpanishText(rawTitle),
+        message: cleanSpanishText(rawMessage),
         releaseUrl: policy && policy.releaseUrl,
-        notes: (policy && (policy.notes || policy.body)) || (update && update.body) || '',
+        notes: cleanSpanishText(rawNotes),
         policy,
-        policyError: policyError ? policyError.message : null,
-        updateError: updateError ? updateError.message : null
+        policyError: policyError ? cleanSpanishText(policyError.message) : null,
+        updateError: updateError ? cleanSpanishText(updateError.message) : null
     };
 };
 
-export const installPendingSTBlockUpdate = async () => {
-    if (!pendingUpdate) {
+export const formatBytes = bytes => {
+    if (!bytes || isNaN(bytes) || bytes <= 0) return '0 MB';
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1) {
+        const kb = bytes / 1024;
+        return `${kb.toFixed(1)} KB`;
+    }
+    return `${mb.toFixed(1)} MB`;
+};
+
+export const formatSpeed = bytesPerSec => {
+    if (!bytesPerSec || isNaN(bytesPerSec) || bytesPerSec <= 0) return '0 KB/s';
+    const mb = bytesPerSec / (1024 * 1024);
+    if (mb >= 1) {
+        return `${mb.toFixed(1)} MB/s`;
+    }
+    const kb = bytesPerSec / 1024;
+    return `${kb.toFixed(0)} KB/s`;
+};
+
+export const formatEta = seconds => {
+    if (!seconds || isNaN(seconds) || seconds <= 0 || !isFinite(seconds)) return null;
+    if (seconds < 60) {
+        return `Quedan ~${Math.round(seconds)} s`;
+    }
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `Quedan ~${mins}m ${secs}s`;
+};
+
+export const installPendingSTBlockUpdate = async onProgress => {
+    let update = pendingUpdate;
+    if (!update && isDesktopApp()) {
+        try {
+            const updater = await import('@tauri-apps/plugin-updater');
+            update = await updater.check();
+            pendingUpdate = update || null;
+        } catch (_e) {
+            // Error checked below
+        }
+    }
+
+    if (!update) {
         throw new Error('No hay un paquete de actualización firmado disponible para instalar.');
     }
-    await pendingUpdate.downloadAndInstall();
+
+    let totalBytes = 0;
+    let downloadedBytes = 0;
+    let lastBytes = 0;
+    let lastSpeedSampleTime = Date.now();
+    let lastUiUpdateTime = 0;
+    let smoothedSpeed = 0;
+
+    const reportProgress = data => {
+        if (typeof onProgress === 'function') {
+            try {
+                onProgress(data);
+            } catch (err) {
+                console.error('[STBlock Updater] Error in progress callback:', err);
+            }
+        }
+    };
+
+    reportProgress({
+        stage: 'connecting',
+        percent: 0,
+        downloadedBytes: 0,
+        totalBytes: 0,
+        downloadedFormatted: '0 MB',
+        totalFormatted: 'Calculando...',
+        speedFormatted: '--',
+        etaFormatted: null,
+        statusText: 'Conectando con el servidor de descargas...'
+    });
+
+    try {
+        await update.downloadAndInstall(event => {
+            if (event.event === 'Started') {
+                totalBytes = (event.data && typeof event.data.contentLength === 'number') ?
+                    event.data.contentLength : 0;
+                lastSpeedSampleTime = Date.now();
+                lastBytes = 0;
+                reportProgress({
+                    stage: 'downloading',
+                    percent: 0,
+                    downloadedBytes: 0,
+                    totalBytes,
+                    downloadedFormatted: '0 MB',
+                    totalFormatted: totalBytes > 0 ? formatBytes(totalBytes) : 'Desconocido',
+                    speedFormatted: 'Iniciando...',
+                    etaFormatted: null,
+                    statusText: 'Iniciando descarga...'
+                });
+            } else if (event.event === 'Progress') {
+                const chunk = (event.data && typeof event.data.chunkLength === 'number') ?
+                    event.data.chunkLength : 0;
+                downloadedBytes += chunk;
+
+                const now = Date.now();
+                const elapsedSpeed = (now - lastSpeedSampleTime) / 1000;
+
+                // Actualizar velocidad cada 300ms para amortiguar saltos
+                if (elapsedSpeed >= 0.3) {
+                    const bytesDiff = downloadedBytes - lastBytes;
+                    const instantSpeed = elapsedSpeed > 0 ? (bytesDiff / elapsedSpeed) : 0;
+                    smoothedSpeed = smoothedSpeed === 0 ?
+                        instantSpeed :
+                        (smoothedSpeed * 0.65 + instantSpeed * 0.35);
+                    lastBytes = downloadedBytes;
+                    lastSpeedSampleTime = now;
+                }
+
+                // Limitar actualizaciones de UI a ~8 veces por segundo para mantener React a 60fps
+                if (now - lastUiUpdateTime >= 120) {
+                    lastUiUpdateTime = now;
+
+                    const percent = totalBytes > 0 ?
+                        Math.min(99, Math.max(0, Math.round((downloadedBytes / totalBytes) * 100))) :
+                        0;
+
+                    const remainingBytes = totalBytes > downloadedBytes ? totalBytes - downloadedBytes : 0;
+                    const etaSeconds = (smoothedSpeed > 0 && remainingBytes > 0) ?
+                        (remainingBytes / smoothedSpeed) :
+                        null;
+
+                    reportProgress({
+                        stage: 'downloading',
+                        percent,
+                        downloadedBytes,
+                        totalBytes,
+                        downloadedFormatted: formatBytes(downloadedBytes),
+                        totalFormatted: totalBytes > 0 ? formatBytes(totalBytes) : 'Desconocido',
+                        speedFormatted: formatSpeed(smoothedSpeed),
+                        etaFormatted: formatEta(etaSeconds),
+                        statusText: `Descargando actualización (${percent}%)...`
+                    });
+                }
+            } else if (event.event === 'Finished') {
+                reportProgress({
+                    stage: 'installing',
+                    percent: 100,
+                    downloadedBytes: totalBytes || downloadedBytes,
+                    totalBytes: totalBytes || downloadedBytes,
+                    downloadedFormatted: formatBytes(totalBytes || downloadedBytes),
+                    totalFormatted: formatBytes(totalBytes || downloadedBytes),
+                    speedFormatted: 'Completado',
+                    etaFormatted: null,
+                    statusText: 'Descarga finalizada. Preparando instalación...'
+                });
+            }
+        });
+    } catch (err) {
+        // Limpiar referencia para que el siguiente reintento pida una sesión limpia
+        pendingUpdate = null;
+
+        const rawMsg = err && err.message ? err.message : String(err);
+        const lower = rawMsg.toLowerCase();
+        let userMsg = rawMsg;
+
+        if (
+            lower.includes('connect') ||
+            lower.includes('network') ||
+            lower.includes('timed out') ||
+            lower.includes('dns') ||
+            lower.includes('unreachable') ||
+            lower.includes('failed to send') ||
+            lower.includes('tcp') ||
+            lower.includes('socket') ||
+            lower.includes('connection reset') ||
+            lower.includes('broken pipe')
+        ) {
+            userMsg = 'Error de conexión: No se pudo conectar al servidor de descargas o la red se interrumpió. Comprueba tu conexión a internet e inténtalo de nuevo.';
+        } else if (lower.includes('signature') || lower.includes('pubkey') || lower.includes('hash')) {
+            userMsg = 'Error de seguridad: La firma digital de la actualización no es válida o no coincide.';
+        } else if (lower.includes('permission') || lower.includes('access') || lower.includes('denied')) {
+            userMsg = 'Error de permisos: El sistema no permitió guardar el instalador. Prueba ejecutando STBlock como Administrador.';
+        } else if (lower.includes('space') || lower.includes('disk')) {
+            userMsg = 'Error de espacio en disco: No hay suficiente espacio para descargar e instalar la nueva versión.';
+        }
+
+        const friendlyError = new Error(userMsg);
+        friendlyError.originalError = err;
+        throw friendlyError;
+    }
+
+    reportProgress({
+        stage: 'restarting',
+        percent: 100,
+        downloadedBytes: totalBytes || downloadedBytes,
+        totalBytes: totalBytes || downloadedBytes,
+        downloadedFormatted: formatBytes(totalBytes || downloadedBytes),
+        totalFormatted: formatBytes(totalBytes || downloadedBytes),
+        speedFormatted: 'Listo',
+        etaFormatted: null,
+        statusText: 'Reiniciando STBlock...'
+    });
+
     const process = await import('@tauri-apps/plugin-process');
     await process.relaunch();
 };

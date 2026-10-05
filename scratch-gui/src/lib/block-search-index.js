@@ -33,14 +33,8 @@ function getBlockName(type, ScratchBlocks) {
     return type;
 }
 
-function extractBlockTypesFromXML(xml) {
-    const types = [];
-    const regex = /<block[^>]*\stype="([^"]+)"/g;
-    let m;
-    while ((m = regex.exec(xml)) !== null) {
-        if (!types.includes(m[1])) types.push(m[1]);
-    }
-    return types;
+function normalizeSearchText(text) {
+    return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
 function getVariableBlocks(workspace) {
@@ -122,24 +116,36 @@ function categorizeType(type) {
     return map[prefix] || 'other';
 }
 
-export function buildSearchIndex(workspace, ScratchBlocks, toolboxXML) {
+export function buildSearchIndex(workspace, ScratchBlocks, toolboxXML, blockInfo = []) {
     const idx = {blocks: [], variables: [], procedures: []};
     const seen = new Set();
+    const definitions = new Map();
+    blockInfo.forEach(category => (category.blocks || []).forEach(block => {
+        if (block.json) definitions.set(block.json.type, block.json);
+    }));
 
     if (toolboxXML) {
-        const types = extractBlockTypesFromXML(toolboxXML);
-        for (const type of types) {
+        const doc = new DOMParser().parseFromString(toolboxXML, 'text/xml');
+        const blocks = Array.from(doc.querySelectorAll('category > block'));
+        for (const block of blocks) {
+            const type = block.getAttribute('type');
+            if (!type) continue;
             if (seen.has(type)) continue;
             seen.add(type);
             const cat = categorizeType(type);
             // Skip dynamic blocks (data_, procedures_) — handled below
             if (cat === 'variables' || cat === 'myBlocks') continue;
+            const category = block.parentNode;
+            const json = definitions.get(type);
+            const label = json && typeof json.message0 === 'string' ?
+                json.message0.replace(/%\{BKY_(\w+)\}/g, (match, key) => ScratchBlocks.Msg[key] || match) : '';
             idx.blocks.push({
                 type: type,
-                name: getBlockName(type, ScratchBlocks),
-                category: cat,
-                color: (CATEGORY_META[cat] || {}).color || '#575E75',
-                categoryLabel: (CATEGORY_META[cat] || {}).label || cat,
+                name: stripPlaceholders(label) || getBlockName(type, ScratchBlocks),
+                category: category.getAttribute('id') || cat,
+                color: category.getAttribute('colour') || (CATEGORY_META[cat] || {}).color || '#575E75',
+                categoryLabel: category.getAttribute('name') || (CATEGORY_META[cat] || {}).label || cat,
+                xml: new XMLSerializer().serializeToString(block),
                 blockType: 'static'
             });
         }
@@ -153,12 +159,13 @@ export function buildSearchIndex(workspace, ScratchBlocks, toolboxXML) {
 
 export function searchBlocks(index, query, limit) {
     if (!query || query.length < 2) return [];
-    const q = query.toLowerCase();
+    const q = normalizeSearchText(query);
+    if (q.length < 2) return [];
     const results = [];
 
     const pushResult = (item, catOrder) => {
-        const name = (item.name || '').toLowerCase();
-        const type = item.type.toLowerCase();
+        const name = normalizeSearchText(item.name);
+        const type = normalizeSearchText(item.type);
         const score = name.startsWith(q) ? 0 : type.startsWith(q) ? 1 :
             name.includes(q) ? 2 : type.includes(q) ? 3 : -1;
         if (score >= 0) {
@@ -186,13 +193,36 @@ export function searchBlocks(index, query, limit) {
 }
 
 export function buildSearchToolboxXML(results) {
-    if (!results || results.length === 0) return null;
-    const blockElements = results
-        .filter(r => r.blockType === 'static')
-        .map(r => `<block type="${r.type}"/>`)
+    const blockElements = (results || [])
+        .map(resultBlockXML)
         .join('');
-    if (!blockElements) return null;
-    return `<xml style="display: none"><category name="Results" id="searchResults" colour="#4C97FF" secondaryColour="#3373CC">${blockElements}</category></xml>`;
+    return `<xml style="display: none"><category name="Resultados" id="searchResults" colour="#4C97FF" secondaryColour="#3373CC">${blockElements || '<label text="Sin resultados"/>'}</category></xml>`;
+}
+
+const escapeXML = value => String(value === undefined || value === null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+function resultBlockXML(item) {
+    if (item.xml) return item.xml;
+    if (item.blockType === 'variable' || item.blockType === 'list') {
+        const field = item.blockType === 'list' ? 'LIST' : 'VARIABLE';
+        return `<block type="${item.type}"><field name="${field}" id="${escapeXML(item.id)}" variabletype="${item.blockType === 'list' ? 'list' : ''}">${escapeXML(item.name)}</field></block>`;
+    }
+    if (item.blockType === 'procedure') {
+        const mutation = item.mutationXml || '';
+        const doc = new DOMParser().parseFromString(mutation, 'text/xml');
+        const node = doc.documentElement;
+        let inputs = '';
+        try {
+            const ids = JSON.parse(node.getAttribute('argumentids') || '[]');
+            const defaults = JSON.parse(node.getAttribute('argumentdefaults') || '[]');
+            const types = (node.getAttribute('proccode') || '').match(/%[snb]/g) || [];
+            inputs = ids.map((id,i) => types[i] === '%b' ? `<value name="${escapeXML(id)}"/>` :
+                `<value name="${escapeXML(id)}"><shadow type="text"><field name="TEXT">${escapeXML(defaults[i])}</field></shadow></value>`).join('');
+        } catch (e) { /* Keep the procedure mutation if it has no argument metadata. */ }
+        return `<block type="procedures_call">${mutation}${inputs}</block>`;
+    }
+    return `<block type="${escapeXML(item.type)}"/>`;
 }
 
 export function buildSingleCategoryXML(fullXML, categoryId) {
@@ -227,18 +257,8 @@ export function createBlockOnWorkspace(workspace, ScratchBlocks, item) {
     if (!workspace || !ScratchBlocks) return null;
     try {
         let block;
-        if (item.blockType === 'variable' || item.blockType === 'list') {
-            const blockType = item.blockType === 'variable' ? 'data_variable' : 'data_listcontents';
-            const xmlStr = `<xml><block type="${blockType}"><field name="VARIABLE">${item.name}</field></block></xml>`;
-            const dom = ScratchBlocks.Xml.textToDom(xmlStr);
-            block = ScratchBlocks.Xml.domToBlock(dom.firstChild, workspace);
-        } else if (item.blockType === 'procedure') {
-            const xmlStr = `<xml><block type="procedures_call">${item.mutationXml || ''}</block></xml>`;
-            const dom = ScratchBlocks.Xml.textToDom(xmlStr);
-            block = ScratchBlocks.Xml.domToBlock(dom.firstChild, workspace);
-        } else {
-            block = workspace.newBlock(item.type);
-        }
+        const dom = ScratchBlocks.Xml.textToDom(`<xml>${resultBlockXML(item)}</xml>`);
+        block = ScratchBlocks.Xml.domToBlock(dom.firstChild, workspace);
 
         if (block) {
             block.initSvg();

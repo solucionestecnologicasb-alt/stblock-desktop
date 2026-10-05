@@ -754,8 +754,8 @@ export function SketchWorkspace({
           {closedRegionCount ? `${closedRegionCount} región${closedRegionCount === 1 ? "" : "es"} 3D lista${closedRegionCount === 1 ? "" : "s"}` : "Perfil abierto · cierra un contorno"}
         </div>
       ) : (
-        <div className="sketch-region-badge ready">
-          Trayecto de tubería listo
+        <div className={`sketch-region-badge ${profile.segments.length ? "ready" : "open"}`}>
+          {profile.segments.length ? "Trayecto de tubería listo" : "Dibuja un trayecto para crear la tubería"}
         </div>
       )}
       {operation === "revolve" ? <SketchRevolvePreview positions={revolvePreviewPositions} /> : null}

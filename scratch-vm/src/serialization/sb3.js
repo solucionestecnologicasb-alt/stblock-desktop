@@ -16,6 +16,8 @@ const uid = require('../util/uid');
 const MathUtil = require('../util/math-util');
 const StringUtil = require('../util/string-util');
 const VariableUtil = require('../util/variable-util');
+const deviceExtensionOpcodes = new Map(require('../devices/extension-catalog.json').flatMap(extension =>
+    extension.blocks.map(block => [`${extension.extensionId}_${block.opcode}`, extension.extensionId])));
 
 const {loadCostume} = require('../import/load-costume.js');
 const {loadSound} = require('../import/load-sound.js');
@@ -280,6 +282,7 @@ const compressInputTree = function (block, blocks) {
  * @return {?string} The extension ID, if it exists and is not a core extension.
  */
 const getExtensionIdForOpcode = function (opcode) {
+    if (deviceExtensionOpcodes.has(opcode)) return deviceExtensionOpcodes.get(opcode);
     // Allowed ID characters are those matching the regular expression [\w-]: A-Z, a-z, 0-9, and hyphen ("-").
     const index = opcode.indexOf('_');
     const forbiddenSymbols = /[^\w-]/g;
@@ -575,6 +578,7 @@ const serialize = function (runtime, targetId) {
     // STBlock-compatible hardware metadata. Scratch ignores unknown project fields.
     obj.device = runtime.getDeviceProfile();
     obj.programMode = runtime.getProgramMode();
+    obj.deviceExtensions = runtime.getDeviceExtensionIds();
 
     // Assemble extension list
     obj.extensions = Array.from(extensions);

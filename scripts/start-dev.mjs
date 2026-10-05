@@ -3,8 +3,11 @@
 //   - sketchforge (Next dev server) en http://localhost:3000
 // Reemplaza el beforeDevCommand de un solo server en tauri.conf.json.
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 
 const isWindows = process.platform === "win32";
+
+const electronicsLabDir = "C:\\Users\\bello\\OneDrive\\Desktop\\prueba\\electronics-lab";
 
 // Comandos completos: con `shell: true` se evita pasar un array de args (Node
 // emite DEP0190 con args+shell). Los comandos son constantes, sin input del
@@ -14,27 +17,33 @@ const servers = [
   { name: "sketchforge", command: "pnpm --filter sketchforge dev", port: 3000 },
 ];
 
+if (existsSync(electronicsLabDir)) {
+  servers.push({
+    name: "electronics-lab",
+    command: `npm --prefix "${electronicsLabDir}" run dev`,
+    port: 5173
+  });
+}
+
 const children = [];
 
 // Detiene backends STBlock que quedaron vivos de una sesión anterior.
 // Al cerrar tauri dev con Ctrl+C o taskkill, `kill_all_backends` (Rust) no
-// siempre corre, y los procesos `compile-proxy.exe` / `stblock-backend-server.exe`
-// sobreviven apuntando a `src-tauri/backends/`. Si un build posterior intenta leer
-// esos archivos (tauri_build los lee como recursos) falla con "os error 32":
+// siempre corre, y el proceso `stblock-backend-server.exe`
+// sobrevive apuntando a `src-tauri/backends/`. Si un build posterior intenta leer
+// ese archivo (tauri_build los lee como recursos) falla con "os error 32":
 //   El proceso no tiene acceso al archivo porque está siendo utilizado por otro proceso.
-// Estos nombres de proceso son exclusivos de STBlock, así que no hay riesgo de
+// Este nombre de proceso es exclusivo de STBlock, así que no hay riesgo de
 // matar procesos ajenos.
 function killStBlockBackends() {
   if (isWindows) {
     try {
-      spawnSync("taskkill", ["/F", "/T", "/IM", "compile-proxy.exe"], { stdio: "ignore" });
       spawnSync("taskkill", ["/F", "/T", "/IM", "stblock-backend-server.exe"], { stdio: "ignore" });
-      console.log("[start-dev] Backends STBlock anteriores detenidos (evita lock de archivos).");
+      console.log("[start-dev] Backend STBlock anterior detenido (evita lock de archivos).");
     } catch {
       // si ya no existen, no pasa nada
     }
   } else {
-    try { spawnSync("pkill", ["-f", "compile-proxy"]); } catch {}
     try { spawnSync("pkill", ["-f", "stblock-backend-server"]); } catch {}
   }
 }
@@ -124,3 +133,6 @@ process.on("SIGTERM", () => shutdown(0));
 console.log("[start-dev] Lanzando servidores de desarrollo:");
 console.log("  - STBlock GUI  -> http://localhost:8601");
 console.log("  - SketchForge  -> http://localhost:3000");
+if (existsSync(electronicsLabDir)) {
+  console.log("  - Circuito 3D  -> http://localhost:5173");
+}

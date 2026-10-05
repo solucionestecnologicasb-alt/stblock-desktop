@@ -389,16 +389,7 @@ pub fn run() {
                 vec![("PORT", "3001".to_string())],
             );
 
-            // Compile proxy (port 8000) — Arduino compilation for Velxio
-            launch_backend(
-                handle,
-                "Compile Proxy",
-                "compile-proxy.exe",
-                8000,
-                vec![],
-            );
-
-            println!("[launcher] Backends lanzados. La app puede tardar unos segundos en estar lista.");
+            println!("[launcher] Backend lanzado. La app puede tardar unos segundos en estar lista.");
 
             Ok(())
         })

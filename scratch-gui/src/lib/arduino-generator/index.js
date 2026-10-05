@@ -184,10 +184,19 @@ const initArduinoGenerator = (ScratchBlocks) => {
         // Setup function
         finalCode += 'void setup() {\n';
         if (this.setupCode_.length > 0) {
+            const seenLines = new Set();
             for (const line of this.setupCode_) {
                 const lines = line.split('\n');
                 for (const l of lines) {
-                    if (l.trim()) {
+                    const trimmed = l.trim();
+                    if (trimmed) {
+                        if (trimmed.startsWith('Serial') && trimmed.includes('.begin(')) {
+                            if (seenLines.has(trimmed)) continue;
+                            seenLines.add(trimmed);
+                        } else if (trimmed.startsWith('pinMode(')) {
+                            if (seenLines.has(trimmed)) continue;
+                            seenLines.add(trimmed);
+                        }
                         finalCode += `  ${l}\n`;
                     } else {
                         finalCode += '\n';
@@ -541,26 +550,53 @@ const initArduinoGenerator = (ScratchBlocks) => {
 
     // Serial
     Arduino['arduino_serialPrint'] = function (block) {
-        const text = this.valueToCode(block, 'TEXT', this.ORDER_ATOMIC) || '""';
+        const text = this.valueToCode(block, 'TEXT', this.ORDER_ATOMIC) ||
+            this.valueToCode(block, 'VALUE', this.ORDER_ATOMIC) ||
+            this.valueToCode(block, 'TEXTO', this.ORDER_ATOMIC) || '""';
         this.addSetupCode('Serial.begin(9600);');
         return `Serial.print(${text});\n`;
     };
 
     Arduino['arduino_serialPrintln'] = function (block) {
-        const text = this.valueToCode(block, 'TEXT', this.ORDER_ATOMIC) || '""';
+        const text = this.valueToCode(block, 'TEXT', this.ORDER_ATOMIC) ||
+            this.valueToCode(block, 'VALUE', this.ORDER_ATOMIC) ||
+            this.valueToCode(block, 'TEXTO', this.ORDER_ATOMIC) || '""';
         this.addSetupCode('Serial.begin(9600);');
         return `Serial.println(${text});\n`;
+    };
+
+    Arduino['arduino_serial_serialPrint'] = function (block) {
+        const text = this.valueToCode(block, 'VALUE', this.ORDER_ATOMIC) ||
+            this.valueToCode(block, 'TEXT', this.ORDER_ATOMIC) ||
+            this.valueToCode(block, 'TEXTO', this.ORDER_ATOMIC) || '""';
+        const eol = (block.getFieldValue && block.getFieldValue('EOL')) || 'warp';
+        this.addSetupCode('Serial.begin(9600);');
+        if (eol === 'noWarp') {
+            return `Serial.print(${text});\n`;
+        }
+        return `Serial.println(${text});\n`;
+    };
+
+    Arduino['arduino_serial_serialPrintln'] = Arduino['arduino_serialPrintln'];
+
+    Arduino['arduino_serial_serialBegin'] = function (block) {
+        const baud = (block.getFieldValue && block.getFieldValue('VALUE')) || '9600';
+        this.addSetupCode(`Serial.begin(${baud});`);
+        return `Serial.begin(${baud});\n`;
     };
 
     Arduino['arduino_serialAvailable'] = function (block) {
         this.addSetupCode('Serial.begin(9600);');
         return ['Serial.available()', this.ORDER_ATOMIC];
     };
+    Arduino['arduino_serial_serialAvailable'] = Arduino['arduino_serialAvailable'];
 
     Arduino['arduino_serialRead'] = function (block) {
         this.addSetupCode('Serial.begin(9600);');
         return ['Serial.read()', this.ORDER_ATOMIC];
     };
+    Arduino['arduino_serial_serialReadAByte'] = Arduino['arduino_serialRead'];
+    Arduino['arduino_serial_serialReadData'] = Arduino['arduino_serialRead'];
 
     // --- Servo Blocks ---
 
@@ -731,13 +767,27 @@ const initArduinoGenerator = (ScratchBlocks) => {
     };
 
     // Ultrasonic Sensor
-    Arduino['leerUltrasonico'] = function (block) {
+    const ultrasonicGen = function (block) {
         const trigPin = block.getFieldValue('TRIG') || this.valueToCode(block, 'TRIG', this.ORDER_ATOMIC) || '9';
         const echoPin = block.getFieldValue('ECHO') || this.valueToCode(block, 'ECHO', this.ORDER_ATOMIC) || '10';
-        this.addSetupCode(`pinMode(${trigPin}, OUTPUT);`);
-        this.addSetupCode(`pinMode(${echoPin}, INPUT);`);
-        return [`([]() { digitalWrite(${trigPin}, LOW); delayMicroseconds(2); digitalWrite(${trigPin}, HIGH); delayMicroseconds(10); digitalWrite(${trigPin}, LOW); return pulseIn(${echoPin}, HIGH) * 0.034 / 2; })()`, this.ORDER_ATOMIC];
+        this.definitions_.set('readUltrasonicDistance', `float readUltrasonicDistance(int triggerPin, int echoPin) {
+  pinMode(triggerPin, OUTPUT);
+  digitalWrite(triggerPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(triggerPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(triggerPin, LOW);
+  pinMode(echoPin, INPUT);
+  return pulseIn(echoPin, HIGH) * 0.01723;
+}`);
+        return [`readUltrasonicDistance(${trigPin}, ${echoPin})`, this.ORDER_ATOMIC];
     };
+    Arduino['leerUltrasonico'] = ultrasonicGen;
+    Arduino['ultrasonic_readDistance'] = ultrasonicGen;
+    Arduino['ultrasonic_ultrasonic_readDistance'] = ultrasonicGen;
+    Arduino['arduino_ultrasonic_readDistance'] = ultrasonicGen;
+    Arduino['arduino_ultrasonic_ultrasonic_readDistance'] = ultrasonicGen;
+    Arduino['arduino_stb_leerUltrasonico'] = ultrasonicGen;
 
     // Buzzer / Tone
     Arduino['reproducirTono'] = function (block) {

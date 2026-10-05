@@ -1,4 +1,5 @@
 "use client";
+import { editableMeshToShape } from "@/lib/editableMeshShape";
 
 import { Check, CloudUpload, Download, FileImage, FolderOpen, Hexagon, Minus, Pencil, Scissors, Triangle, Type, X } from "lucide-react";
 import type manifoldModule from "manifold-3d";
@@ -54,7 +55,11 @@ import {
   ToolbarWorkplaneIcon,
 } from "./icons";
 import { WorkplaneViewport } from "./WorkplaneViewport";
+import { createEditableMesh, type EditableMesh, type EditSelectionMode } from "@/lib/editableMesh";
+import "./mesh-edit.css";
 import { ShapeLibrary } from "./ShapeLibrary";
+import "./normal-editor-improvements.css";
+import type { ReactNode } from "react";
 import type { SketchMeasurement, SketchSelection, SketchTool } from "./SketchWorkspace";
 import {
   canonicalizeShape,
@@ -88,7 +93,6 @@ import {
 import { cloneWorkplaneShapeSnapshot, compactEdgeTreatmentHistory, edgeTreatmentAppliedFrame, restoreShapeBeforeEdgeTreatment } from "@/lib/edgeTreatmentHistory";
 import { appendEditorHistorySnapshot, boundedEditorHistoryState, editorHistoryEntry, editorHistoryForExport, hydrateEditorHistoryState, projectShapesFingerprint, type EditorHistoryEntry, type EditorHistoryExportLimit, type EditorHistoryState } from "@/lib/editorHistory";
 import { snapShapeFootprintToVisibleGrid, visibleGridStep } from "@/lib/gridSnap";
-import { alignTargetValue, snapToGridValue } from "@/lib/meshTopologyEdit";
 import { createLocalId } from "@/lib/localIds";
 import { projectExportFileName } from "@/lib/exportNames";
 import { attachProjectAsset, dedupeProjectAssets, projectAssetFromBytes, sourceFormatForFileName } from "@/lib/projectAssets";
@@ -115,11 +119,11 @@ import {
   type SketchForgeMcpShapeSummary,
   type SketchForgeMcpViewFace,
 } from "@/lib/sketchforgeMcpProtocol";
-import type { CadModifierComponentMesh, CadModifierDisplayEdge, CadModifierEdge, CadModifierKind, CadModifierMeshPart, CadModifierPrimitivePart, CadModifierQuality, CadModifierWorkerRequest, CadModifierWorkerResponse, CadTopologyEdge, CadTopologyFace, CadTopologyPick, CadTopologyPickKind, CadTopologyVertex } from "@/lib/cadModifierTypes";
+import type { CadModifierComponentMesh, CadModifierDisplayEdge, CadModifierEdge, CadModifierKind, CadModifierMeshPart, CadModifierPrimitivePart, CadModifierQuality, CadModifierWorkerRequest, CadModifierWorkerResponse } from "@/lib/cadModifierTypes";
 import type { AlignAxis, AlignHandleStatus, AlignTarget, CapDocument, CapSection, CapSectionUnionMode, GridSize, ProjectAsset, ShapeAsset, SketchEntity, SketchImage, SketchOperation, SketchPoint, SketchProfile, SketchRevolveSettings, SketchSegment, SketchShapeBuildOptions, WorkplanePlane, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
 
 const SketchWorkspace = dynamic(() => import("./SketchWorkspace").then((module) => module.SketchWorkspace), { ssr: false });
-const TopologyInspector = dynamic(() => import("./TopologyInspector").then((module) => module.TopologyInspector), { ssr: false });
+const MeshEditWorkspace = dynamic(() => import("./MeshEditWorkspace").then(module => module.MeshEditWorkspace), { ssr: false });
 const EdgeModifierPanel = dynamic(() => import("./workplane/EdgeModifierPanel").then((module) => module.EdgeModifierPanel), { ssr: false });
 
 export { importedShapeFromStl, importedShapeFromSvg };
@@ -2316,45 +2320,6 @@ function facePlaneUpFromNormal(normal: [number, number, number]): [number, numbe
   return [up[0] / upLength, up[1] / upLength, up[2] / upLength];
 }
 
-function shapeTopologySignature(shape: WorkplaneShape): string {
-  return JSON.stringify({
-    id: shape.id,
-    kind: shape.kind,
-    x: shape.x,
-    z: shape.z,
-    elevation: shape.elevation ?? 0,
-    rotation: shape.rotation,
-    rotationX: shape.rotationX ?? 0,
-    rotationZ: shape.rotationZ ?? 0,
-    mirrorX: shape.mirrorX ?? false,
-    mirrorY: shape.mirrorY ?? false,
-    mirrorZ: shape.mirrorZ ?? false,
-    width: shape.width,
-    depth: shape.depth,
-    height: shape.height,
-    radius: shape.radius,
-    steps: shape.steps,
-    sides: shape.sides,
-    bevel: shape.bevel,
-    segments: shape.segments,
-    topRadius: shape.topRadius,
-    baseRadius: shape.baseRadius,
-    teeth: shape.teeth,
-    toothSize: shape.toothSize,
-    toothWidth: shape.toothWidth,
-    centerHoleSize: shape.centerHoleSize,
-    helixAngle: shape.helixAngle,
-    helixQuality: shape.helixQuality,
-    groupCount: shape.groupedShapes?.length ?? 0,
-    brep: shape.cadBrep ? shape.cadBrep.length : 0,
-    partitions: shape.constructionEdges?.filter((edge) => edge.partition).length ?? 0,
-    // Mesh edits change `importedMesh.positions` without touching width/depth/
-    // height, so the fingerprint must be part of the signature or the stale
-    // topology would never be re-collected after a mesh-mode edit.
-    meshFingerprint: importedMeshContentFingerprint(shape.importedMesh),
-  });
-}
-
 function importedMeshContentFingerprint(mesh: WorkplaneShape["importedMesh"]): string {
   if (!mesh || mesh.positions.length === 0) return "";
   let hash = 2166136261;
@@ -2869,84 +2834,6 @@ function alignmentStatuses(selection: WorkplaneShape[], anchorId: string | null)
   );
 }
 
-type TopologyShapeLike = {
-  faces: CadTopologyFace[];
-  vertices: CadTopologyVertex[];
-  edges: CadTopologyEdge[];
-};
-
-function coordinateForAxis(point: { x: number; y: number; z: number }, axis: AlignAxis) {
-  return axis === "x" ? point.x : axis === "y" ? point.y : point.z;
-}
-
-/**
- * Representative points for the topology selection: vertex → its position,
- * edge → its center, face → its center. Returns `null` when any pick cannot be
- * resolved against the (possibly stale) topology.
- */
-function topologySelectionReps(topology: TopologyShapeLike, selection: CadTopologyPick[]): { x: number; y: number; z: number }[] | null {
-  const reps: { x: number; y: number; z: number }[] = [];
-  for (const pick of selection) {
-    if (pick.kind === "vertex") {
-      const vertex = topology.vertices.find((entry) => entry.id === pick.id);
-      if (!vertex) return null;
-      reps.push({ x: vertex.x, y: vertex.y, z: vertex.z });
-    } else if (pick.kind === "edge") {
-      const edge = topology.edges.find((entry) => entry.id === pick.id);
-      if (!edge) return null;
-      reps.push({ x: edge.center.x, y: edge.center.y, z: edge.center.z });
-    } else {
-      const face = topology.faces.find((entry) => entry.id === pick.id);
-      if (!face) return null;
-      reps.push({ x: face.center.x, y: face.center.y, z: face.center.z });
-    }
-  }
-  return reps;
-}
-
-function topologySelectionControlPoints(topology: TopologyShapeLike, selection: CadTopologyPick[]) {
-  const unique = new Map<string, { x: number; y: number; z: number }>();
-  const add = (point: { x: number; y: number; z: number }) => {
-    const key = `${point.x.toFixed(5)}:${point.y.toFixed(5)}:${point.z.toFixed(5)}`;
-    if (!unique.has(key)) unique.set(key, { x: point.x, y: point.y, z: point.z });
-  };
-  selection.forEach((pick) => {
-    if (pick.kind === "vertex") {
-      const vertex = topology.vertices.find((entry) => entry.id === pick.id);
-      if (vertex) add(vertex);
-    } else if (pick.kind === "edge") {
-      topology.edges.find((entry) => entry.id === pick.id)?.endpoints.forEach(add);
-    } else {
-      const face = topology.faces.find((entry) => entry.id === pick.id);
-      if (!face) return;
-      for (let index = 0; index + 2 < face.points.length; index += 3) add({ x: face.points[index], y: face.points[index + 1], z: face.points[index + 2] });
-    }
-  });
-  return [...unique.values()];
-}
-
-function topologyPointsCenter(points: Array<{ x: number; y: number; z: number }>) {
-  const divisor = Math.max(1, points.length);
-  return points.reduce((center, point) => ({ x: center.x + point.x / divisor, y: center.y + point.y / divisor, z: center.z + point.z / divisor }), { x: 0, y: 0, z: 0 });
-}
-
-function topologyWorldPointToShapeLocal(shape: WorkplaneShape, point: { x: number; y: number; z: number }) {
-  const center = new THREE.Vector3(shape.x, (shape.elevation ?? 0) + shape.height / 2, shape.z);
-  const inverseRotation = new THREE.Quaternion()
-    .setFromEuler(new THREE.Euler(
-      THREE.MathUtils.degToRad(shape.rotationX ?? 0),
-      THREE.MathUtils.degToRad(shape.rotation ?? 0),
-      THREE.MathUtils.degToRad(shape.rotationZ ?? 0),
-      "XYZ",
-    ))
-    .invert();
-  const local = new THREE.Vector3(point.x, point.y, point.z).sub(center).applyQuaternion(inverseRotation);
-  if (shape.mirrorX) local.x *= -1;
-  if (shape.mirrorY) local.y *= -1;
-  if (shape.mirrorZ) local.z *= -1;
-  return { x: local.x, y: local.y, z: local.z };
-}
-
 function topologyShapeLocalPointToWorld(shape: WorkplaneShape, point: { x: number; y: number; z: number }) {
   const local = new THREE.Vector3(
     point.x * (shape.mirrorX ? -1 : 1),
@@ -2962,205 +2849,6 @@ function topologyShapeLocalPointToWorld(shape: WorkplaneShape, point: { x: numbe
   local.applyQuaternion(rotation);
   local.add(new THREE.Vector3(shape.x, (shape.elevation ?? 0) + shape.height / 2, shape.z));
   return { x: local.x, y: local.y, z: local.z };
-}
-
-function constructionTopologyVertices(shape: WorkplaneShape): CadTopologyVertex[] {
-  return (shape.constructionVertices ?? []).map((vertex) => {
-    const world = topologyShapeLocalPointToWorld(shape, vertex.position);
-    return { id: vertex.topologyId, x: world.x, y: world.y, z: world.z };
-  });
-}
-
-function constructionEdgeTopologyId(edge: NonNullable<WorkplaneShape["constructionEdges"]>[number], index: number) {
-  return edge.topologyId ?? (-1_000_001 - index);
-}
-
-function constructionTopologyEdges(shape: WorkplaneShape): CadTopologyEdge[] {
-  return (shape.constructionEdges ?? []).map((edge, index) => ({ edge, index })).filter(({ edge }) => !edge.partition).map(({ edge, index }) => {
-    const start = topologyShapeLocalPointToWorld(shape, edge.start);
-    const end = topologyShapeLocalPointToWorld(shape, edge.end);
-    return {
-      id: constructionEdgeTopologyId(edge, index),
-      center: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2, z: (start.z + end.z) / 2 },
-      points: [start.x, start.y, start.z, end.x, end.y, end.z],
-      endpoints: [start, end],
-    };
-  });
-}
-
-function constructionEdgeByTopologyId(shape: WorkplaneShape, topologyId: number) {
-  const index = (shape.constructionEdges ?? []).findIndex((edge, edgeIndex) => constructionEdgeTopologyId(edge, edgeIndex) === topologyId);
-  return index >= 0 ? { edge: shape.constructionEdges![index], index } : null;
-}
-
-function moveConstructionEdgeToWorldEndpoints(
-  shape: WorkplaneShape,
-  topologyId: number,
-  endpoints: Array<{ to: { x: number; y: number; z: number } }>,
-) {
-  const match = constructionEdgeByTopologyId(shape, topologyId);
-  if (!match || endpoints.length < 2) return null;
-  const start = topologyWorldPointToShapeLocal(shape, endpoints[0].to);
-  const end = topologyWorldPointToShapeLocal(shape, endpoints[1].to);
-  const constructionEdges = (shape.constructionEdges ?? []).map((edge, index) => index === match.index ? { ...edge, start, end } : edge);
-  const constructionVertices = (shape.constructionVertices ?? []).map((vertex) => {
-    if (vertex.id === match.edge.startVertexId) return { ...vertex, position: start };
-    if (vertex.id === match.edge.endVertexId) return { ...vertex, position: end };
-    return vertex;
-  });
-  return { constructionEdges, constructionVertices, edge: match.edge };
-}
-
-function constructionVertexNearWorld(shape: WorkplaneShape, point: { x: number; y: number; z: number }, tolerance = 0.15) {
-  return (shape.constructionVertices ?? []).find((vertex) => {
-    const world = topologyShapeLocalPointToWorld(shape, vertex.position);
-    return Math.hypot(world.x - point.x, world.y - point.y, world.z - point.z) <= tolerance;
-  }) ?? null;
-}
-
-function topologyWithConstructionVertices(shape: WorkplaneShape, topology: TopologyShapeLike): TopologyShapeLike {
-  return {
-    ...topology,
-    vertices: [...topology.vertices, ...constructionTopologyVertices(shape)],
-    edges: [...topology.edges, ...constructionTopologyEdges(shape)],
-  };
-}
-
-function transformSelectedConstructionVertices(
-  shape: WorkplaneShape,
-  selection: CadTopologyPick[],
-  transform: (point: { x: number; y: number; z: number }) => { x: number; y: number; z: number },
-) {
-  const selectedVertexIds = new Set(selection.filter((pick) => pick.kind === "vertex").map((pick) => pick.id));
-  const selectedEdgeIds = new Set(selection.filter((pick) => pick.kind === "edge").map((pick) => pick.id));
-  const movedLocalById = new Map<string, { x: number; y: number; z: number }>();
-  let constructionVertices = (shape.constructionVertices ?? []).map((vertex) => {
-    if (!selectedVertexIds.has(vertex.topologyId)) return vertex;
-    const world = topologyShapeLocalPointToWorld(shape, vertex.position);
-    const nextWorld = transform(world);
-    if (Math.hypot(nextWorld.x - world.x, nextWorld.y - world.y, nextWorld.z - world.z) <= ALIGN_EPSILON) return vertex;
-    const position = topologyWorldPointToShapeLocal(shape, nextWorld);
-    movedLocalById.set(vertex.id, position);
-    return { ...vertex, position };
-  });
-  let movedEdges = 0;
-  const constructionEdges = shape.constructionEdges?.map((edge, index) => {
-    if (!selectedEdgeIds.has(constructionEdgeTopologyId(edge, index))) {
-      return {
-        ...edge,
-        start: edge.startVertexId && movedLocalById.has(edge.startVertexId) ? movedLocalById.get(edge.startVertexId)! : edge.start,
-        end: edge.endVertexId && movedLocalById.has(edge.endVertexId) ? movedLocalById.get(edge.endVertexId)! : edge.end,
-      };
-    }
-    const startWorld = topologyShapeLocalPointToWorld(shape, edge.start);
-    const endWorld = topologyShapeLocalPointToWorld(shape, edge.end);
-    const nextStart = transform(startWorld);
-    const nextEnd = transform(endWorld);
-    const start = topologyWorldPointToShapeLocal(shape, nextStart);
-    const end = topologyWorldPointToShapeLocal(shape, nextEnd);
-    if (edge.startVertexId) movedLocalById.set(edge.startVertexId, start);
-    if (edge.endVertexId) movedLocalById.set(edge.endVertexId, end);
-    movedEdges += 1;
-    return { ...edge, start, end };
-  });
-  if (movedLocalById.size > 0) {
-    constructionVertices = constructionVertices.map((vertex) => movedLocalById.has(vertex.id) ? { ...vertex, position: movedLocalById.get(vertex.id)! } : vertex);
-  }
-  if (movedLocalById.size === 0 && movedEdges === 0) return { shape, moved: 0 };
-  return {
-    shape: { ...shape, constructionVertices, constructionEdges },
-    moved: movedLocalById.size + movedEdges,
-  };
-}
-
-/**
- * Points used to measure the extreme Y of a topology selection: vertex → its
- * position, edge → its endpoints, face → its sampled boundary polyline.
- * Returns `null` when any pick cannot be resolved.
- */
-function topologyExtremePoints(topology: TopologyShapeLike, selection: CadTopologyPick[]): { x: number; y: number; z: number }[] | null {
-  const points: { x: number; y: number; z: number }[] = [];
-  for (const pick of selection) {
-    if (pick.kind === "vertex") {
-      const vertex = topology.vertices.find((entry) => entry.id === pick.id);
-      if (!vertex) return null;
-      points.push({ x: vertex.x, y: vertex.y, z: vertex.z });
-    } else if (pick.kind === "edge") {
-      const edge = topology.edges.find((entry) => entry.id === pick.id);
-      if (!edge) return null;
-      points.push(...edge.endpoints.map((endpoint) => ({ x: endpoint.x, y: endpoint.y, z: endpoint.z })));
-    } else {
-      const face = topology.faces.find((entry) => entry.id === pick.id);
-      if (!face) return null;
-      for (let index = 0; index + 2 < face.points.length; index += 3) {
-        points.push({ x: face.points[index], y: face.points[index + 1], z: face.points[index + 2] });
-      }
-    }
-  }
-  return points;
-}
-
-/**
- * The nine alignment statuses for a topology selection (no anchor concept).
- * With fewer than two entities every handle is disabled.
- */
-function topologyAlignmentStatuses(topology: TopologyShapeLike, selection: CadTopologyPick[]): AlignHandleStatus[] {
-  const reps = topologySelectionReps(topology, selection);
-  if (!reps || reps.length < 2) {
-    return ALIGN_AXES.flatMap((axis) =>
-      ALIGN_TARGETS.map((target) => ({
-        axis,
-        target,
-        aligned: false,
-        disabled: true,
-        title: "Selecciona al menos dos entes para alinear",
-      })),
-    );
-  }
-  return ALIGN_AXES.flatMap((axis) =>
-    ALIGN_TARGETS.map((target) => {
-      const values = reps.map((point) => coordinateForAxis(point, axis));
-      const targetValue = alignTargetValue(values, target);
-      const aligned = values.every((value) => Math.abs(value - targetValue) <= ALIGN_EPSILON);
-      const label = alignmentLabel(axis, target);
-      return {
-        axis,
-        target,
-        aligned,
-        disabled: aligned,
-        title: aligned ? `Ya alineado ${label}` : `Alinear ${label}`,
-      };
-    }),
-  );
-}
-
-/**
- * Builds the reselect anchors for a topology selection displaced by `delta`.
- * Used after a nudge/transform commit so the (hash-instability-prone) ids can
- * be re-resolved by position once the fresh topology arrives.
- */
-function topologyReselectAnchors(
-  topology: TopologyShapeLike,
-  selection: CadTopologyPick[],
-  delta: { x: number; y: number; z: number },
-): Array<{ kind: CadTopologyPickKind; anchor: { x: number; y: number; z: number } }> {
-  const anchors: Array<{ kind: CadTopologyPickKind; anchor: { x: number; y: number; z: number } }> = [];
-  for (const pick of selection) {
-    if (pick.kind === "vertex") {
-      const vertex = topology.vertices.find((entry) => entry.id === pick.id);
-      if (!vertex) continue;
-      anchors.push({ kind: "vertex", anchor: { x: vertex.x + delta.x, y: vertex.y + delta.y, z: vertex.z + delta.z } });
-    } else if (pick.kind === "edge") {
-      const edge = topology.edges.find((entry) => entry.id === pick.id);
-      if (!edge) continue;
-      anchors.push({ kind: "edge", anchor: { x: edge.center.x + delta.x, y: edge.center.y + delta.y, z: edge.center.z + delta.z } });
-    } else {
-      const face = topology.faces.find((entry) => entry.id === pick.id);
-      if (!face) continue;
-      anchors.push({ kind: "face", anchor: { x: face.center.x + delta.x, y: face.center.y + delta.y, z: face.center.z + delta.z } });
-    }
-  }
-  return anchors;
 }
 
 function alignedShapesForSelection(
@@ -5788,6 +5476,13 @@ export function SketchForgeEditor({
   const [systemClipboardSupported, setSystemClipboardSupported] = useState(false);
   const [history, setHistory] = useState<EditorHistoryEntry[]>(() => (initialHistoryStateRef.current as EditorHistoryState).entries);
   const [historyIndex, setHistoryIndex] = useState(() => (initialHistoryStateRef.current as EditorHistoryState).index);
+  const [pendingPlacement, setPendingPlacement] = useState<WorkplaneShape | null>(null);
+  const pendingPlacementRef = useRef<WorkplaneShape | null>(null);
+  const placementRequestRef = useRef(0);
+  const placementLoadingRef = useRef(false);
+  pendingPlacementRef.current = pendingPlacement;
+  const cancelPlacement = useCallback(() => { placementRequestRef.current++; placementLoadingRef.current = false; pendingPlacementRef.current = null; setPendingPlacement(null); }, []);
+  useEffect(() => { cancelPlacement(); return () => { placementRequestRef.current++; }; }, [projectId, cancelPlacement]);
   const [placementElevation, setPlacementElevation] = useState(() => Number.isFinite(initialPlacementElevation) ? initialPlacementElevation : 0);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkplaneWorkspaceSettings>(() => normalizeWorkspaceSettings(initialWorkspace));
   const [snapGrid, setSnapGrid] = useState<GridSize>(() => normalizeSnapGrid(initialSnap));
@@ -5876,57 +5571,8 @@ export function SketchForgeEditor({
   const cadModifierBaseFingerprintRef = useRef("");
   const cadModifierSourcePartsRef = useRef<WorkplaneShape[]>([]);
   const cadModifierWatchdogRef = useRef<{ requestId: number; phase: CadModifierRequestPhase; timer: number } | null>(null);
-  const [topologyMode, setTopologyMode] = useState<"shape" | "face" | "vertex" | "edge">("shape");
-  const [topologyVertexPlacementActive, setTopologyVertexPlacementActive] = useState(false);
-  const [shapeTopology, setShapeTopology] = useState<{
-    shapeId: string;
-    signature: string;
-    mode: "occt" | "mesh";
-    faces: CadTopologyFace[];
-    vertices: CadTopologyVertex[];
-    edges: CadTopologyEdge[];
-  } | null>(null);
-  const [topologySelection, setTopologySelection] = useState<CadTopologyPick[]>([]);
-  const topologySelectionRef = useRef<CadTopologyPick[]>([]);
-  const primaryTopologyPick = topologySelection.at(-1) ?? null;
-  const [topologyAlignPreview, setTopologyAlignPreview] = useState<{ axis: AlignAxis; target: AlignTarget } | null>(null);
-  const [topologyMirrorPreviewAxis, setTopologyMirrorPreviewAxis] = useState<AlignAxis | null>(null);
   const [pushPullDistance, setPushPullDistance] = useState("");
-  const [topologyEditPreview, setTopologyEditPreview] = useState<{ positions: Float32Array; normals: Float32Array; indices: Uint32Array } | null>(null);
-  const [topologyInspectorPreviewActive, setTopologyInspectorPreviewActive] = useState(false);
-  const topologyEditSessionRef = useRef(0);
-  const constructionVertexDragIdRef = useRef<string | null>(null);
-  const topologyEditInFlightRef = useRef(false);
-  const topologyEditPendingRef = useRef<{
-    request: CadModifierWorkerPayload;
-    transfer: Transferable[];
-    commit: boolean;
-    label: string;
-    session: number;
-    shape?: WorkplaneShape;
-  } | null>(null);
   const cadModifierWorkerRestartRef = useRef<() => Worker | null>(() => null);
-  const topologyNudgeRef = useRef<{
-    kind: "vertex" | "edge" | "face";
-    vertices: CadTopologyVertex[];
-    edges: CadTopologyEdge[];
-    faces: CadTopologyFace[];
-    deltaX: number;
-    deltaZ: number;
-    timer: number;
-  } | null>(null);
-  // After a nudge commit the topology is re-collected and the hash-based ids
-  // change, so the selection is re-resolved by matching each entity's new
-  // position/center against its anchor once the fresh topology arrives.
-  const topologyReselectRef = useRef<Array<{ kind: CadTopologyPickKind; anchor: { x: number; y: number; z: number } }> | null>(null);
-
-  useEffect(() => {
-    if (topologyMode !== "vertex") setTopologyVertexPlacementActive(false);
-  }, [topologyMode]);
-  // Tracks whether the current topology came from OCCT or the approximate mesh
-  // fallback, so the "topología en modo malla" notice fires only on the
-  // occt -> mesh transition (not on every re-collection in mesh mode).
-  const shapeTopologyModeRef = useRef<"occt" | "mesh" | null>(null);
   const lastMcpErrorRef = useRef<string | null>(null);
   const executeMcpCommandRef = useRef<((command: SketchForgeMcpCommand) => Promise<unknown>) | null>(null);
 
@@ -6295,8 +5941,9 @@ export function SketchForgeEditor({
 
   const selectedShapes = useMemo(() => shapes.filter((shape) => selectedIds.includes(shape.id)), [selectedIds, shapes]);
   const selectedShape = selectedShapes.at(-1) ?? null;
+  const [meshEditSession, setMeshEditSession] = useState<{ id: string; name: string; color: string; mode: EditSelectionMode; mesh: EditableMesh; context: Array<{ mesh: EditableMesh; color: string }> } | null>(null);
+  useEffect(() => { if (toolbarMode !== "geometry" || sketchActive || capSketchActive || meshEditSession) cancelPlacement(); }, [toolbarMode, sketchActive, capSketchActive, meshEditSession, cancelPlacement]);
   const hasSelection = selectedShapes.length > 0;
-  const selectedTopologyShape = topologyMode === "shape" || selectedShapes.length !== 1 ? null : selectedShapes[0];
   const activeCapSection = capDocument?.sections.find((section) => section.id === capDocument.activeSectionId) ?? null;
   const modifierAvailableEdgeIds = useMemo(
     () => edgeModifier ? edgeModifier.edges.filter((edge) => selectableCadModifierEdge(edge, edgeModifier.sharpAngle)).map((edge) => edge.id) : [],
@@ -6334,23 +5981,16 @@ export function SketchForgeEditor({
     [alignAnchorId, selectedShapes],
   );
   const alignHandleStatuses = useMemo(() => (alignMode ? alignmentStatuses(selectedShapes, effectiveAlignAnchorId) : []), [alignMode, effectiveAlignAnchorId, selectedShapes]);
-  const topologyAlignActive = topologyMode !== "shape" && topologySelection.length > 0;
-  const canTopologyAlign = topologyAlignActive && topologySelection.length >= 2;
-  const hasTopologySelection = topologyAlignActive;
-  // While a topology align/mirror overlay is active the bodies must NOT be
-  // ghosted by the body alignment preview (the orange preview is the mesh).
   const viewportShapes = useMemo(
     () =>
-      topologyAlignActive
-        ? shapes
-        : edgeModifier?.preview && cadModifierBaseShapeRef.current
+      edgeModifier?.preview && cadModifierBaseShapeRef.current
           ? shapes.map((shape) => shape.id === cadModifierBaseShapeRef.current?.id ? edgeModifier.preview as WorkplaneShape : shape)
           : alignMode && alignPreview
             ? alignedShapesForSelection(shapes, selectedIds, selectedShapes, effectiveAlignAnchorId, alignPreview.axis, alignPreview.target).nextShapes
             : mirrorMode && mirrorPreviewAxis
               ? mirroredShapesForSelection(shapes, selectedIds, selectedShapes, mirrorPreviewAxis).nextShapes
               : shapes,
-    [alignMode, alignPreview, edgeModifier?.preview, effectiveAlignAnchorId, mirrorMode, mirrorPreviewAxis, selectedIds, selectedShapes, shapes, topologyAlignActive],
+    [alignMode, alignPreview, edgeModifier?.preview, effectiveAlignAnchorId, mirrorMode, mirrorPreviewAxis, selectedIds, selectedShapes, shapes],
   );
   const debugState = useMemo(
     () =>
@@ -7470,15 +7110,27 @@ export function SketchForgeEditor({
 
   const addLibraryAsset = useCallback(
     async (asset: ShapeAsset, point?: { x: number; z: number; elevation?: number }) => {
+      cancelPlacement(); setGeometryDrawTool(null); setAlignMode(false); setMirrorMode(false); setWorkplaneMode(false);
+      const request = placementRequestRef.current; placementLoadingRef.current = true;
       const full = findLibraryAsset(asset.id) ?? asset;
-      const nextShape = await buildLibraryShape(full, point ?? { x: 0, z: 0, elevation: placementElevation });
-      commitShapes([...shapes, nextShape], nextShape.id, `${full.name} agregado`);
+      try {
+        const nextShape = await buildLibraryShape(full, point ?? { x: 0, z: 0, elevation: placementElevationRef.current });
+        if (request !== placementRequestRef.current) return;
+        if (point) commitShapes([...shapesRef.current, nextShape], nextShape.id, full.name + " agregado");
+        else { pendingPlacementRef.current = nextShape; setPendingPlacement(nextShape); setNotice("Colocar " + full.name + ": mueve el cursor al plano y haz clic · Esc cancela"); }
+      } finally { if (request === placementRequestRef.current) placementLoadingRef.current = false; }
     },
-    [commitShapes, placementElevation, shapes],
+    [cancelPlacement, commitShapes],
   );
+  const confirmPlacement = useCallback((point: { x: number; z: number; elevation?: number }) => {
+    const pending = pendingPlacementRef.current; if (!pending) return;
+    const placed = canonicalizeShape({ ...pending, ...point }); cancelPlacement();
+    commitShapes([...shapesRef.current, placed], placed.id, placed.name + " colocado");
+  }, [cancelPlacement, commitShapes]);
 
   const handleImportStlFile = useCallback(
     async (file: File) => {
+      cancelPlacement(); const request = placementRequestRef.current; placementLoadingRef.current = true;
       try {
         const buffer = await file.arrayBuffer();
         const imported = importedShapeFromStl(file.name, buffer);
@@ -7488,17 +7140,19 @@ export function SketchForgeEditor({
           z: 0,
           elevation: placementElevation,
         });
-        commitShapes([...shapes, placed], placed.id, `STL importado: ${placed.name}`);
+        if (request !== placementRequestRef.current) return;
+        pendingPlacementRef.current = placed; setPendingPlacement(placed); setNotice("Coloca el STL con un clic en el plano · Esc cancela");
       } catch (error) {
         const message = error instanceof Error ? error.message : "error desconocido";
         setNotice(`No se pudo importar el STL: ${message}`);
-      }
+      } finally { if (request === placementRequestRef.current) placementLoadingRef.current = false; }
     },
-    [commitShapes, placementElevation, shapes],
+    [cancelPlacement, placementElevation],
   );
 
   const handleImportStlUrl = useCallback(
     async (url: string) => {
+      cancelPlacement(); const request = placementRequestRef.current; placementLoadingRef.current = true;
       try {
         const response = await fetch(url);
         if (!response.ok) {
@@ -7513,13 +7167,14 @@ export function SketchForgeEditor({
           z: 0,
           elevation: placementElevation,
         });
-        commitShapes([...shapes, placed], placed.id, `STL descargado: ${placed.name}`);
+        if (request !== placementRequestRef.current) return;
+        pendingPlacementRef.current = placed; setPendingPlacement(placed); setNotice("Coloca el STL con un clic en el plano · Esc cancela");
       } catch (error) {
         const message = error instanceof Error ? error.message : "error desconocido";
         setNotice(`No se pudo descargar el STL. La URL debe permitir CORS. (${message})`);
-      }
+      } finally { if (request === placementRequestRef.current) placementLoadingRef.current = false; }
     },
-    [commitShapes, placementElevation, shapes],
+    [cancelPlacement, placementElevation],
   );
 
   const scheduleRevolveShapeUpdate = useCallback((id: string, settings: SketchRevolveSettings) => {
@@ -7811,24 +7466,23 @@ export function SketchForgeEditor({
   }, [invalidateCadModifierSession, syncProjectShapes]);
 
   const toggleAlignMode = useCallback(() => {
-    const topologyActive = topologyMode !== "shape" && topologySelection.length > 0;
-    if (!topologyActive && selectedShapes.length < 2) {
+    if (selectedShapes.length < 2) {
       setNotice("Selecciona al menos dos formas para alinear");
       return;
     }
     setAlignMode((active) => {
       const next = !active;
       setAlignPreview(null);
-      setTopologyAlignPreview(null);
+
       if (next) {
         setMirrorMode(false);
         setMirrorPreviewAxis(null);
-        setTopologyMirrorPreviewAxis(null);
+
       }
       setNotice(next ? "Alinear: elige un punto de los nueve" : "Alineación cancelada");
       return next;
     });
-  }, [selectedShapes.length, topologyMode, topologySelection.length]);
+  }, [selectedShapes.length]);
 
   const chooseAlignAnchor = useCallback(
     (id: string) => {
@@ -7877,25 +7531,24 @@ export function SketchForgeEditor({
   }, []);
 
   const toggleMirrorMode = useCallback(() => {
-    const topologyActive = topologyMode !== "shape" && topologySelection.length > 0;
-    if (!topologyActive && !hasSelection) {
+    if (!hasSelection) {
       setNotice("Selecciona una forma primero");
       return;
     }
     setMirrorMode((active) => {
       const next = !active;
       setMirrorPreviewAxis(null);
-      setTopologyMirrorPreviewAxis(null);
+
       if (next) {
         setAlignMode(false);
         setAlignAnchorId(null);
         setAlignPreview(null);
-        setTopologyAlignPreview(null);
+
       }
       setNotice(next ? "Reflejar: elige una flecha de eje" : "Reflejo cancelado");
       return next;
     });
-  }, [hasSelection, topologyMode, topologySelection.length]);
+  }, [hasSelection]);
 
   const mirrorSelectionAcross = useCallback(
     (axis: AlignAxis) => {
@@ -7944,7 +7597,7 @@ export function SketchForgeEditor({
     }
     const requestId = cadModifierRequestRef.current + 1;
     cadModifierRequestRef.current = requestId;
-    
+
     return new Promise<CadModifierWorkerResponse>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         if (!cadModifierPendingRef.current.has(requestId)) return;
@@ -7975,1456 +7628,39 @@ export function SketchForgeEditor({
     });
   }, []);
 
-  const collectShapeTopology = useCallback(async (shape: WorkplaneShape) => {
-    if (shape.locked || shape.hole || edgeModifierRef.current) {
-      setShapeTopology(null);
-      return;
-    }
-    const sourceParts = shape.groupedShapes?.length ? restoreGroupedChildren(shape) : [shape];
-    const parts: CadModifierMeshPart[] = sourceParts.map((part) => {
-      const partitionEdges = (part.constructionEdges ?? []).filter((edge) => edge.partition).map((edge) => ({
-        id: edge.id,
-        start: topologyShapeLocalPointToWorld(part, edge.start),
-        end: topologyShapeLocalPointToWorld(part, edge.end),
-      }));
-      const common = { hole: Boolean(part.hole), preservePartitions: Boolean(part.cadPartitioned || partitionEdges.length), partitionEdges };
-      if (part.cadBrep && part.cadBrepFrame) {
-        return { ...common, brep: part.cadBrep, brepTransform: cadBrepTransformForShape(part) };
-      }
-      const primitive = cadModifierPrimitiveForShape(part);
-      if (primitive) return { ...common, primitive };
-      return { ...common, ...meshDataToCadTransfer(meshForShape(part)) };
-    });
-    if (parts.length === 0) {
-      setShapeTopology(null);
-      return;
-    }
-    try {
-      const response = await postCadModifierRequestAsync(
-        { type: "collectTopology", parts },
-        parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []),
-        30000,
-      );
-      if (response.type === "topology") {
-        const previousMode = shapeTopologyModeRef.current;
-        shapeTopologyModeRef.current = response.mode;
-        if (response.mode === "mesh" && previousMode !== "mesh") {
-          setNotice("Topología en modo malla: aproximada");
-        }
-        setShapeTopology({ shapeId: shape.id, signature: shapeTopologySignature(shape), mode: response.mode, faces: response.faces, vertices: response.vertices, edges: response.edges });
-      } else {
-        setShapeTopology(null);
-      }
-    } catch {
-      setShapeTopology(null);
-    }
-  }, [postCadModifierRequestAsync]);
-
-  useEffect(() => {
-    if (!selectedTopologyShape) {
-      setShapeTopology(null);
-      return;
-    }
-    const signature = shapeTopologySignature(selectedTopologyShape);
-    if (shapeTopology?.shapeId === selectedTopologyShape.id && shapeTopology.signature === signature) return;
-    void collectShapeTopology(selectedTopologyShape);
-  }, [collectShapeTopology, selectedTopologyShape, shapeTopology?.shapeId, shapeTopology?.signature]);
-  useEffect(() => {
-    if (!selectedTopologyShape || topologyMode === "shape") {
-      setTopologyEditPreview(null);
-    }
-  }, [selectedTopologyShape, topologyMode]);
-  const handleTopologyPick = useCallback((target: CadTopologyPick | null, additive?: boolean) => {
-    const nudge = topologyNudgeRef.current;
-    if (nudge) {
-      window.clearTimeout(nudge.timer);
-      topologyNudgeRef.current = null;
-    }
-    if (!target) {
-      // A plain (non-additive) click on empty space clears the selection; a
-      // Shift+click on empty space starts/continues a marquee instead.
-      if (!additive) {
-        setTopologySelection([]);
-      }
-      return;
-    }
-    setTopologySelection((current) => {
-      if (additive) {
-        const exists = current.some((pick) => pick.kind === target.kind && pick.id === target.id);
-        const next = exists
-          ? current.filter((pick) => !(pick.kind === target.kind && pick.id === target.id))
-          : [...current, target];
-        setNotice(next.length ? `${next.length} ente${next.length === 1 ? "" : "s"} de topología seleccionado${next.length === 1 ? "" : "s"}` : "Selección de topología borrada");
-        return next;
-      }
-      const exists = current.some((pick) => pick.kind === target.kind && pick.id === target.id);
-      if (exists) {
-        // Keep the multi-selection so dragging the already-selected entity
-        // moves the whole selection.
-        setNotice(`${current.length} ente${current.length === 1 ? "" : "s"} de topología seleccionado${current.length === 1 ? "" : "s"}`);
-        return current;
-      }
-      setNotice("Ente de topología seleccionado");
-      return [target];
-    });
-  }, []);
-  const handleTopologyPickMany = useCallback((targets: CadTopologyPick[], additive?: boolean) => {
-    const nudge = topologyNudgeRef.current;
-    if (nudge) {
-      window.clearTimeout(nudge.timer);
-      topologyNudgeRef.current = null;
-    }
-    setTopologySelection((current) => {
-      if (!additive) {
-        setNotice(targets.length ? `${targets.length} ente${targets.length === 1 ? "" : "s"} de topología seleccionado${targets.length === 1 ? "" : "s"}` : "Selección de topología borrada");
-        return targets;
-      }
-      const existing = new Set(current.map((pick) => `${pick.kind}:${pick.id}`));
-      const merged = [...current];
-      for (const pick of targets) {
-        const key = `${pick.kind}:${pick.id}`;
-        if (!existing.has(key)) {
-          merged.push(pick);
-          existing.add(key);
-        }
-      }
-      setNotice(`${merged.length} ente${merged.length === 1 ? "" : "s"} de topología seleccionado${merged.length === 1 ? "" : "s"}`);
-      return merged;
-    });
-  }, []);
   const handleTopologyModeChange = useCallback((mode: "shape" | "face" | "vertex" | "edge") => {
-    if (mode !== "shape" && (selectedShapes.length !== 1 || !selectedShape || selectedShape.locked || selectedShape.hole)) {
-      setNotice("Selecciona una sola pieza desbloqueada para elegir caras, líneas o vértices");
-      return;
+    if (mode === "shape") { setMeshEditSession(null); return; }
+    if (selectedShapes.length !== 1 || !selectedShape || selectedShape.locked || selectedShape.hole) {
+      setNotice("Selecciona una sola pieza sólida desbloqueada para editar su malla"); return;
     }
-    setTopologyMode(mode);
-    setTopologySelection([]);
-    setTopologyAlignPreview(null);
-    setTopologyMirrorPreviewAxis(null);
-    const nudge = topologyNudgeRef.current;
-    if (nudge) {
-      window.clearTimeout(nudge.timer);
-      topologyNudgeRef.current = null;
-    }
-    if (mode === "vertex") {
-      setNotice("Vértice: arrastra un vértice para moverlo; clic en una arista inserta un vértice");
-    } else if (mode === "face") {
-      setNotice("Cara: arrastra para empujar/estirar; Alt+arrastra para deslizar la cara en su plano");
-    } else if (mode === "edge") {
-      setNotice("Líneas: arrastra una arista para moverla y estirar las caras adyacentes");
-    } else {
-      setNotice("Cuerpo seleccionado");
-    }
-  }, [selectedShape, selectedShapes.length]);
-  const canTopologyPick = Boolean(selectedTopologyShape && !selectedTopologyShape.locked && !selectedTopologyShape.hole);
-  const facePlaneDraft = useMemo<WorkplanePlane | null>(() => {
-    if (!primaryTopologyPick || primaryTopologyPick.kind !== "face") return null;
-    const face = shapeTopology?.faces.find((entry) => entry.id === primaryTopologyPick.id);
-    if (!face || !selectedTopologyShape) return null;
-    const normal: [number, number, number] = [face.normal.x, face.normal.y, face.normal.z];
-    return {
-      kind: "face",
-      shapeId: selectedTopologyShape.id,
-      topologyId: String(face.id),
-      center: [face.center.x, face.center.y, face.center.z],
-      normal,
-      up: facePlaneUpFromNormal(normal),
-    };
-  }, [selectedTopologyShape, shapeTopology?.faces, primaryTopologyPick]);
-  const pushPullTarget = useMemo(() => {
-    if (topologyMode !== "face" || !primaryTopologyPick || primaryTopologyPick.kind !== "face") return null;
-    const face = shapeTopology?.faces.find((entry) => entry.id === primaryTopologyPick.id);
-    if (!face || !selectedTopologyShape || selectedTopologyShape.locked || selectedTopologyShape.hole) return null;
-    return {
-      shapeId: selectedTopologyShape.id,
-      faceId: face.id,
-      center: { x: face.center.x, y: face.center.y, z: face.center.z },
-      normal: { x: face.normal.x, y: face.normal.y, z: face.normal.z },
-    };
-  }, [selectedTopologyShape, shapeTopology?.faces, topologyMode, primaryTopologyPick]);
-  const canPushPull = Boolean(pushPullTarget);
-
-  const applyPushPullFace = useCallback(async (distance: number) => {
-    const shape = selectedShapes[0];
-    if (!pushPullTarget || !shape || shape.id !== pushPullTarget.shapeId) {
-      setNotice("Selecciona la cara que quieres empujar o estirar");
-      return;
-    }
-    const magnitude = Math.abs(distance);
-    if (magnitude < 0.01) {
-      setNotice("Arrastra la cara más de 0.01 mm para empujarla o estirarla");
-      return;
-    }
-    const sourceParts = shape.groupedShapes?.length ? restoreGroupedChildren(shape) : [shape];
-    const parts: CadModifierMeshPart[] = sourceParts.map((part) => ({ ...meshDataToCadTransfer(meshForShape(part)), hole: Boolean(part.hole) }));
     try {
-      const response = await postCadModifierRequestAsync(
-        { type: "extrudeFace", parts, faceCenter: pushPullTarget.center, distance },
-        parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []),
-        30000,
-      );
-      if (response.type !== "preview") {
-        throw new Error("El empujado/estirado no devolvió un sólido");
-      }
-      const preview = shapeFromCadMesh(shape, response.positions, response.normals, response.indices, response.brep);
-      if (!preview) {
-        throw new Error("El sólido resultante no se pudo construir");
-      }
-      const combined = canonicalizeShape({
-        ...preview,
-        cadDisplayEdges: cadDisplayEdgesForShape(preview, response.displayEdges),
-        cadDisplayEdgesVersion: 2 as const,
+      const source = meshDataToCadTransfer(meshForShape(selectedShape));
+      const mesh = createEditableMesh(source.positions, source.indices, selectedShape.importedMesh?.editFaceGroups);
+      const context = shapes.filter(shape => shape.id !== selectedShape.id && !shape.hidden).map(shape => {
+        const geometry = meshDataToCadTransfer(meshForShape(shape));
+        return { mesh: { ...geometry, faces: [] }, color: shape.color };
       });
-      commitShapes(
-        shapesRef.current.map((candidate) => candidate.id === shape.id ? combined : candidate),
-        combined.id,
-        distance > 0
-          ? `Cara estirada ${magnitude.toFixed(1)} mm`
-          : `Cara empujada ${magnitude.toFixed(1)} mm`,
-      );
-      setTopologySelection([]);
-      setTopologyMode("shape");
-      setPushPullDistance("");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "No se pudo empujar o estirar la cara");
-    }
-  }, [commitShapes, postCadModifierRequestAsync, pushPullTarget, selectedShapes]);
-
-  const handlePushPullApply = useCallback(() => {
-    const distance = Number.parseFloat(pushPullDistance);
-    if (!Number.isFinite(distance)) {
-      setNotice("Escribe una distancia en mm (negativa para empujar, positiva para estirar)");
-      return;
-    }
-    void applyPushPullFace(distance);
-  }, [applyPushPullFace, pushPullDistance]);
-
-  const topologyEditPartsForShape = useCallback((shape: WorkplaneShape): CadModifierMeshPart[] => {
-    const sourceParts = shape.groupedShapes?.length ? restoreGroupedChildren(shape) : [shape];
-    return sourceParts.map((part) => {
-      const partitionEdges = (part.constructionEdges ?? []).filter((edge) => edge.partition).map((edge) => ({
-        id: edge.id,
-        start: topologyShapeLocalPointToWorld(part, edge.start),
-        end: topologyShapeLocalPointToWorld(part, edge.end),
-      }));
-      const common = {
-        hole: Boolean(part.hole),
-        preservePartitions: Boolean(part.cadPartitioned || partitionEdges.length),
-        partitionEdges,
-      };
-      if (part.cadBrep && part.cadBrepFrame) {
-        return { ...common, brep: part.cadBrep, brepTransform: cadBrepTransformForShape(part) };
-      }
-      const primitive = cadModifierPrimitiveForShape(part);
-      if (primitive) return { ...common, primitive };
-      return { ...common, ...meshDataToCadTransfer(meshForShape(part)) };
-    });
-  }, []);
-
-  const applyTopologyEditResult = useCallback(async (
-    response: Extract<CadModifierWorkerResponse, { type: "preview" }>,
-    shape: WorkplaneShape,
-    label: string,
-  ) => {
-    const preview = shapeFromCadMesh(shape, response.positions, response.normals, response.indices, response.brep);
-    if (!preview) throw new Error("El sólido resultante no se pudo construir");
-    const guideEdges = (shape.constructionEdges ?? []).filter((edge) => !edge.partition);
-    const partitionEdges = response.partitionEdges?.map((partition) => ({
-      id: partition.id,
-      partition: true as const,
-      start: topologyWorldPointToShapeLocal(preview, partition.start),
-      end: topologyWorldPointToShapeLocal(preview, partition.end),
-    }));
-    const combined = canonicalizeShape({
-      ...preview,
-      constructionEdges: partitionEdges ? [...guideEdges, ...partitionEdges] : preview.constructionEdges,
-      cadPartitioned: partitionEdges ? partitionEdges.length > 0 : preview.cadPartitioned,
-      cadDisplayEdges: cadDisplayEdgesForShape(preview, response.displayEdges),
-      cadDisplayEdgesVersion: 2 as const,
-    });
-    commitShapes(
-      shapesRef.current.map((candidate) => candidate.id === shape.id ? combined : candidate),
-      combined.id,
-      label,
-    );
-    
-    // A nudge/transform commit re-resolves the selection once the fresh
-    // topology arrives; any other edit clears the selection so the user has to
-    // pick the entity again.
-    if (!topologyReselectRef.current) {
-      setTopologySelection([]);
-    }
-  }, [commitShapes]);
-
-  const dispatchTopologyEdit = useCallback(async (
-    request: CadModifierWorkerPayload,
-    transfer: Transferable[],
-    commit: boolean,
-    label: string,
-    session: number,
-    shape?: WorkplaneShape,
-  ) => {
-    topologyEditInFlightRef.current = true;
-    try {
-      const response = await postCadModifierRequestAsync(request, transfer, 30000);
-      if (session !== topologyEditSessionRef.current) {
-        
-        return;
-      }
-      if (response.type !== "preview") {
-        throw new Error("La edición de topología no devolvió un sólido");
-      }
-      if (commit) {
-        if (!shape) throw new Error("Selecciona una pieza para editarla");
-        await applyTopologyEditResult(response, shape, label);
-        topologyEditSessionRef.current += 1;
-        setTopologyEditPreview(null);
-      } else {
-        
-        setTopologyEditPreview({
-          positions: response.positions,
-          normals: response.normals,
-          indices: response.indices,
-        });
-      }
-    } catch (error) {
-      console.error(`[TopoEdit] dispatch error: type=${request.type} session=${session} commit=${commit}:`, error instanceof Error ? error.message : error);
-      if (commit) {
-        topologyReselectRef.current = null;
-        setNotice(error instanceof Error ? error.message : "No se pudo editar la topología");
-      }
-    } finally {
-      topologyEditInFlightRef.current = false;
-      const pending = topologyEditPendingRef.current;
-      topologyEditPendingRef.current = null;
-      if (pending && pending.session === topologyEditSessionRef.current) {
-        void dispatchTopologyEdit(pending.request, pending.transfer, pending.commit, pending.label, pending.session, pending.shape);
-      }
-    }
-  }, [applyTopologyEditResult, postCadModifierRequestAsync]);
-
-  const sendTopologyEdit = useCallback((
-    request: CadModifierWorkerPayload,
-    transfer: Transferable[] = [],
-    commit = false,
-    label = "",
-    shape?: WorkplaneShape,
-  ) => {
-    const session = topologyEditSessionRef.current;
-    if (topologyEditInFlightRef.current) {
-      
-      topologyEditPendingRef.current = { request, transfer, commit, label, session, shape };
-      return;
-    }
-    
-    void dispatchTopologyEdit(request, transfer, commit, label, session, shape);
-  }, [dispatchTopologyEdit]);
-
-  /**
-   * Sends a single topology edit request that displaces the whole current
-   * selection by `delta` (vertices/edges → `moveTopologyVertices`, faces →
-   * `moveTopologyFaces`). On commit it stores reselect anchors for every moved
-   * entity so the selection survives the topology re-collection.
-   */
-  const topologyDeltaRequest = useCallback((
-    shape: WorkplaneShape,
-    delta: { x: number; y: number; z: number },
-    commit: boolean,
-    label: string,
-  ) => {
-    const topology = shapeTopology;
-    if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
-    const customResult = commit
-      ? transformSelectedConstructionVertices(shape, topologySelectionRef.current, (point) => ({ x: point.x + delta.x, y: point.y + delta.y, z: point.z + delta.z }))
-      : { shape, moved: 0 };
-    if (customResult.moved > 0) updateShape(shape.id, {
-      constructionVertices: customResult.shape.constructionVertices,
-      constructionEdges: customResult.shape.constructionEdges,
-    });
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
-    const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-    const selection = topologySelectionRef.current;
-    const updates: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }> = [];
-    const faces: Array<{ center: { x: number; y: number; z: number }; offset: { x: number; y: number; z: number } }> = [];
-    for (const pick of selection) {
-      if (pick.kind === "vertex") {
-        const vertex = topology.vertices.find((entry) => entry.id === pick.id);
-        if (!vertex) continue;
-        const from = { x: vertex.x, y: vertex.y, z: vertex.z };
-        updates.push({ from, to: { x: from.x + delta.x, y: from.y + delta.y, z: from.z + delta.z } });
-      } else if (pick.kind === "edge") {
-        const edge = topology.edges.find((entry) => entry.id === pick.id);
-        if (!edge) continue;
-        for (const endpoint of edge.endpoints) {
-          const from = { x: endpoint.x, y: endpoint.y, z: endpoint.z };
-          updates.push({ from, to: { x: from.x + delta.x, y: from.y + delta.y, z: from.z + delta.z } });
-        }
-      } else {
-        const face = topology.faces.find((entry) => entry.id === pick.id);
-        if (!face) continue;
-        faces.push({ center: { x: face.center.x, y: face.center.y, z: face.center.z }, offset: { x: delta.x, y: delta.y, z: delta.z } });
-      }
-    }
-    if (updates.length === 0 && faces.length === 0) {
-      if (customResult.moved > 0) {
-        setNotice(label);
-        
-      }
-      return;
-    }
-    if (commit) {
-      const anchors = topologyReselectAnchors(topology, selection, delta);
-      topologyReselectRef.current = anchors.length > 0 ? anchors : null;
-    }
-    if (updates.length > 0) {
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer, commit, label, customResult.shape);
-    }
-    if (faces.length > 0) {
-      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces }, transfer, commit, label, customResult.shape);
-    }
-  }, [sendTopologyEdit, shapeTopology, topologyEditPartsForShape, updateShape]);
-
-  const applyTopologyInspectorTransform = useCallback((
-    transform: (point: { x: number; y: number; z: number }, center: { x: number; y: number; z: number }) => { x: number; y: number; z: number },
-    label: string,
-    commit = true,
-  ) => {
-    const shape = selectedShapes[0];
-    const topology = shapeTopology;
-    const selection = topologySelectionRef.current;
-    if (!shape || !topology || topology.shapeId !== shape.id || selection.length === 0) return;
-    const effectiveTopology = topologyWithConstructionVertices(shape, topology);
-    const points = topologySelectionControlPoints(effectiveTopology, selection);
-    if (points.length === 0) return;
-    const center = topologyPointsCenter(points);
-    const constructionIds = new Set((shape.constructionVertices ?? []).map((vertex) => vertex.topologyId));
-    const constructionEdgeIds = new Set((shape.constructionEdges ?? []).map(constructionEdgeTopologyId));
-    const nativeSelection = selection.filter((pick) =>
-      (pick.kind !== "vertex" || !constructionIds.has(pick.id))
-      && (pick.kind !== "edge" || !constructionEdgeIds.has(pick.id)));
-    const nativePoints = topologySelectionControlPoints(topology, nativeSelection);
-    const updates = nativePoints.map((from) => ({ from, to: transform(from, center) }));
-    const customResult = commit
-      ? transformSelectedConstructionVertices(shape, selection, (point) => transform(point, center))
-      : { shape, moved: 0 };
-    if (customResult.moved > 0) updateShape(shape.id, {
-      constructionVertices: customResult.shape.constructionVertices,
-      constructionEdges: customResult.shape.constructionEdges,
-    });
-    if (updates.length === 0) {
-      if (customResult.moved > 0) {
-        setNotice(label);
-        
-      }
-      return;
-    }
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
-    if (commit) {
-      const reps = topologySelectionReps(topology, nativeSelection);
-      topologyReselectRef.current = reps?.map((point, index) => ({ kind: nativeSelection[index].kind, anchor: transform(point, center) })) ?? null;
-    }
-    
-    sendTopologyEdit(
-      { type: "moveTopologyVertices", parts, updates },
-      parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []),
-      commit,
-      label,
-      customResult.shape,
-    );
-  }, [selectedShapes, sendTopologyEdit, shapeTopology, topologyEditPartsForShape, topologyMode, updateShape]);
-
-  const moveTopologyFromInspector = useCallback((delta: { x: number; y: number; z: number }) => {
-    const shape = selectedShapes[0];
-    if (!shape || Math.hypot(delta.x, delta.y, delta.z) < 1e-9) return;
-    
-    topologyDeltaRequest(shape, delta, true, `${topologyMode === "vertex" ? "Vértices" : topologyMode === "edge" ? "Líneas" : "Caras"} desplazados`);
-  }, [selectedShapes, topologyDeltaRequest, topologyMode]);
-
-  const alignTopologyFromInspector = useCallback((axis: AlignAxis) => {
-    applyTopologyInspectorTransform((point, center) => ({ ...point, [axis]: center[axis] }), `Selección alineada en ${axis.toUpperCase()}`);
-  }, [applyTopologyInspectorTransform]);
-
-  const scaleTopologyFromInspector = useCallback((factor: number, commit = true) => {
-    applyTopologyInspectorTransform((point, center) => ({
-      x: center.x + (point.x - center.x) * factor,
-      y: center.y + (point.y - center.y) * factor,
-      z: center.z + (point.z - center.z) * factor,
-    }), `Selección escalada ${factor.toFixed(2)}×`, commit);
-  }, [applyTopologyInspectorTransform]);
-
-  const collapseTopologyVertices = useCallback(() => {
-    applyTopologyInspectorTransform((_point, center) => ({ ...center }), "Vértices movidos al centro");
-  }, [applyTopologyInspectorTransform]);
-
-  const createTopologyApex = useCallback((height: number, commit = true) => {
-    applyTopologyInspectorTransform((_point, center) => ({ x: center.x, y: center.y + height, z: center.z }), `Punta creada (${height.toFixed(1)} mm)`, commit);
-  }, [applyTopologyInspectorTransform]);
-
-  const moveFacesAlongNormal = useCallback((distance: number, commit = true) => {
-    const selection = topologySelectionRef.current.filter((pick) => pick.kind === "face");
-    const shape = selectedShapes[0];
-    const topology = shapeTopology;
-    if (!shape || !topology || selection.length === 0) return;
-    const parts = topologyEditPartsForShape(shape);
-    if (!parts.length) return;
-    const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-    if (selection.length === 1) {
-      const face = topology.faces.find((entry) => entry.id === selection[0].id);
-      if (!face) return;
-      if (commit) {
-        topologyReselectRef.current = [{ kind: "face", anchor: {
-          x: face.center.x + face.normal.x * distance,
-          y: face.center.y + face.normal.y * distance,
-          z: face.center.z + face.normal.z * distance,
-        } }];
-      }
-      
-      sendTopologyEdit(
-        { type: "extrudeFace", parts, faceCenter: { ...face.center }, distance },
-        transfer,
-        commit,
-        `Cara extruida ${distance.toFixed(1)} mm`,
-        shape,
-      );
-      return;
-    }
-    const faces = selection.flatMap((pick) => {
-      const face = topology.faces.find((entry) => entry.id === pick.id);
-      return face ? [{ center: { ...face.center }, offset: { x: face.normal.x * distance, y: face.normal.y * distance, z: face.normal.z * distance } }] : [];
-    });
-    if (!faces.length) return;
-    if (commit) {
-      topologyReselectRef.current = selection.map((pick) => {
-        const face = topology.faces.find((entry) => entry.id === pick.id)!;
-        return { kind: "face" as const, anchor: { x: face.center.x + face.normal.x * distance, y: face.center.y + face.normal.y * distance, z: face.center.z + face.normal.z * distance } };
-      });
-    }
-    
-    sendTopologyEdit(
-      { type: "moveTopologyFaces", parts, faces },
-      transfer,
-      commit,
-      `Caras desplazadas ${distance.toFixed(1)} mm por normal`,
-      shape,
-    );
-  }, [selectedShapes, sendTopologyEdit, shapeTopology, topologyEditPartsForShape]);
-
-  const cancelTopologyInspectorPreview = useCallback(() => {
-    topologyEditSessionRef.current += 1;
-    topologyEditPendingRef.current = null;
-    setTopologyEditPreview(null);
-    setTopologyInspectorPreviewActive(false);
-    
-  }, []);
-
-  const previewTopologyScale = useCallback((factor: number) => {
-    setTopologyInspectorPreviewActive(true);
-    scaleTopologyFromInspector(factor, false);
-  }, [scaleTopologyFromInspector]);
-
-  const commitTopologyScale = useCallback((factor: number) => {
-    scaleTopologyFromInspector(factor, true);
-    setTopologyInspectorPreviewActive(false);
-  }, [scaleTopologyFromInspector]);
-
-  const rotateTopologyFromInspector = useCallback((axis: AlignAxis, degrees: number, commit: boolean) => {
-    const radians = degrees * Math.PI / 180;
-    const cosine = Math.cos(radians);
-    const sine = Math.sin(radians);
-    applyTopologyInspectorTransform((point, center) => {
-      const dx = point.x - center.x;
-      const dy = point.y - center.y;
-      const dz = point.z - center.z;
-      if (axis === "x") return { x: point.x, y: center.y + dy * cosine - dz * sine, z: center.z + dy * sine + dz * cosine };
-      if (axis === "y") return { x: center.x + dx * cosine + dz * sine, y: point.y, z: center.z - dx * sine + dz * cosine };
-      return { x: center.x + dx * cosine - dy * sine, y: center.y + dx * sine + dy * cosine, z: point.z };
-    }, `Selección rotada ${degrees.toFixed(1)}° en ${axis.toUpperCase()}`, commit);
-  }, [applyTopologyInspectorTransform]);
-
-  const previewTopologyRotation = useCallback((axis: AlignAxis, degrees: number) => {
-    setTopologyInspectorPreviewActive(true);
-    rotateTopologyFromInspector(axis, degrees, false);
-  }, [rotateTopologyFromInspector]);
-
-  const commitTopologyRotation = useCallback((axis: AlignAxis, degrees: number) => {
-    rotateTopologyFromInspector(axis, degrees, true);
-    setTopologyInspectorPreviewActive(false);
-  }, [rotateTopologyFromInspector]);
-
-  const previewTopologyApex = useCallback((height: number) => {
-    setTopologyInspectorPreviewActive(true);
-    createTopologyApex(height, false);
-  }, [createTopologyApex]);
-
-  const commitTopologyApex = useCallback((height: number) => {
-    createTopologyApex(height, true);
-    setTopologyInspectorPreviewActive(false);
-  }, [createTopologyApex]);
-
-  const previewFaceNormal = useCallback((distance: number) => {
-    setTopologyInspectorPreviewActive(true);
-    moveFacesAlongNormal(distance, false);
-  }, [moveFacesAlongNormal]);
-
-  const commitFaceNormal = useCallback((distance: number) => {
-    moveFacesAlongNormal(distance, true);
-    setTopologyInspectorPreviewActive(false);
-  }, [moveFacesAlongNormal]);
-
-  const handleTopologyVertexMoveLive = useCallback((from: { x: number; y: number; z: number }, position: { x: number; y: number; z: number }) => {
-    const shape = selectedShapes[0];
-    if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
-    const constructionVertex = (constructionVertexDragIdRef.current
-      ? shape.constructionVertices?.find((vertex) => vertex.id === constructionVertexDragIdRef.current)
-      : null) ?? constructionVertexNearWorld(shape, from);
-    if (constructionVertex) {
-      constructionVertexDragIdRef.current = constructionVertex.id;
-      const selectedCustomCount = topologySelectionRef.current.filter((pick) => pick.kind === "vertex" && shape.constructionVertices?.some((vertex) => vertex.topologyId === pick.id)).length;
-      if (selectedCustomCount > 1) return;
-      const local = topologyWorldPointToShapeLocal(shape, position);
-      updateShape(shape.id, {
-        constructionVertices: (shape.constructionVertices ?? []).map((vertex) => vertex.id === constructionVertex.id ? { ...vertex, position: local } : vertex),
-        constructionEdges: shape.constructionEdges?.map((edge) => ({
-          ...edge,
-          start: edge.startVertexId === constructionVertex.id ? local : edge.start,
-          end: edge.endVertexId === constructionVertex.id ? local : edge.end,
-        })),
-      });
-      return;
-    }
-    const topology = shapeTopology;
-    if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
-    const selection = topologySelectionRef.current;
-    const draggedInSelection = selection.some((pick) => {
-      if (pick.kind !== "vertex") return false;
-      const vertex = topology.vertices.find((entry) => entry.id === pick.id);
-      return vertex ? Math.hypot(vertex.x - from.x, vertex.y - from.y, vertex.z - from.z) < 0.1 : false;
-    });
-    if (draggedInSelection && selection.length > 1) {
-      topologyDeltaRequest(shape, { x: position.x - from.x, y: position.y - from.y, z: position.z - from.z }, false, "");
-    } else {
-      const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates: [{ from, to: position }] }, transfer);
-    }
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology, updateShape]);
-
-  const handleTopologyVertexMoveApply = useCallback((from: { x: number; y: number; z: number }, position: { x: number; y: number; z: number }) => {
-    const shape = selectedShapes[0];
-    if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
-    const constructionVertex = (constructionVertexDragIdRef.current
-      ? shape.constructionVertices?.find((vertex) => vertex.id === constructionVertexDragIdRef.current)
-      : null) ?? constructionVertexNearWorld(shape, from);
-    if (constructionVertex) {
-      constructionVertexDragIdRef.current = null;
-      const selectedCustomCount = topologySelectionRef.current.filter((pick) => pick.kind === "vertex" && shape.constructionVertices?.some((vertex) => vertex.topologyId === pick.id)).length;
-      if (selectedCustomCount > 1) {
-        const delta = { x: position.x - from.x, y: position.y - from.y, z: position.z - from.z };
-        const result = transformSelectedConstructionVertices(shape, topologySelectionRef.current, (point) => ({ x: point.x + delta.x, y: point.y + delta.y, z: point.z + delta.z }));
-        updateShape(shape.id, { constructionVertices: result.shape.constructionVertices, constructionEdges: result.shape.constructionEdges });
-        
-        setNotice(`${result.moved} vértices personalizados movidos`);
-        return;
-      }
-      const local = topologyWorldPointToShapeLocal(shape, position);
-      updateShape(shape.id, {
-        constructionVertices: (shape.constructionVertices ?? []).map((vertex) => vertex.id === constructionVertex.id ? { ...vertex, position: local } : vertex),
-        constructionEdges: shape.constructionEdges?.map((edge) => ({
-          ...edge,
-          start: edge.startVertexId === constructionVertex.id ? local : edge.start,
-          end: edge.endVertexId === constructionVertex.id ? local : edge.end,
-        })),
-      });
-      setTopologySelection([{ kind: "vertex", id: constructionVertex.topologyId }]);
-      
-      setNotice("Vértice personalizado movido");
-      return;
-    }
-    const topology = shapeTopology;
-    if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
-    const selection = topologySelectionRef.current;
-    const draggedInSelection = selection.some((pick) => {
-      if (pick.kind !== "vertex") return false;
-      const vertex = topology.vertices.find((entry) => entry.id === pick.id);
-      return vertex ? Math.hypot(vertex.x - from.x, vertex.y - from.y, vertex.z - from.z) < 0.1 : false;
-    });
-    if (draggedInSelection && selection.length > 1) {
-      topologyDeltaRequest(shape, { x: position.x - from.x, y: position.y - from.y, z: position.z - from.z }, true, "Vértices movidos");
-    } else {
-      const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-      topologyReselectRef.current = [{ kind: "vertex", anchor: position }];
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates: [{ from, to: position }] }, transfer, true, "Vértice movido", shape);
-    }
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology, updateShape]);
-
-  const handleTopologyFaceMoveLive = useCallback((faceCenter: { x: number; y: number; z: number }, offset: { x: number; y: number; z: number }) => {
-    const shape = selectedShapes[0];
-    if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
-    const topology = shapeTopology;
-    if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
-    const selection = topologySelectionRef.current;
-    const draggedInSelection = selection.some((pick) => {
-      if (pick.kind !== "face") return false;
-      const face = topology.faces.find((entry) => entry.id === pick.id);
-      return face ? Math.hypot(face.center.x - faceCenter.x, face.center.y - faceCenter.y, face.center.z - faceCenter.z) < 0.1 : false;
-    });
-    if (draggedInSelection && selection.length > 1) {
-      topologyDeltaRequest(shape, offset, false, "");
-    } else {
-      const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces: [{ center: faceCenter, offset }] }, transfer);
-    }
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology]);
-
-  const handleTopologyFaceMoveApply = useCallback((faceCenter: { x: number; y: number; z: number }, offset: { x: number; y: number; z: number }) => {
-    const shape = selectedShapes[0];
-    if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
-    const topology = shapeTopology;
-    if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
-    const selection = topologySelectionRef.current;
-    const draggedInSelection = selection.some((pick) => {
-      if (pick.kind !== "face") return false;
-      const face = topology.faces.find((entry) => entry.id === pick.id);
-      return face ? Math.hypot(face.center.x - faceCenter.x, face.center.y - faceCenter.y, face.center.z - faceCenter.z) < 0.1 : false;
-    });
-    if (draggedInSelection && selection.length > 1) {
-      topologyDeltaRequest(shape, offset, true, "Caras deslizadas");
-    } else {
-      const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-      topologyReselectRef.current = [{ kind: "face", anchor: { x: faceCenter.x + offset.x, y: faceCenter.y + offset.y, z: faceCenter.z + offset.z } }];
-      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces: [{ center: faceCenter, offset }] }, transfer, true, "Cara deslizada", shape);
-    }
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology]);
-
-  const handleTopologyAddVertex = useCallback((position: { x: number; y: number; z: number }) => {
-    const shape = selectedShapes[0];
-    if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
-    const usedIds = new Set([
-      ...(shapeTopology?.vertices.map((vertex) => vertex.id) ?? []),
-      ...(shape.constructionVertices?.map((vertex) => vertex.topologyId) ?? []),
-    ]);
-    let topologyId = -1;
-    while (usedIds.has(topologyId)) topologyId -= 1;
-    const vertex = {
-      id: createLocalId("construction-vertex"),
-      topologyId,
-      position: topologyWorldPointToShapeLocal(shape, position),
-    };
-    updateShape(shape.id, { constructionVertices: [...(shape.constructionVertices ?? []), vertex] });
-    setTopologySelection([{ kind: "vertex", id: topologyId }]);
-    
-    setNotice("Vértice creado; arrástralo con el mouse o continúa insertando");
-  }, [selectedShapes, selectedTopologyShape, shapeTopology?.vertices, updateShape]);
-
-  const insertSelectedEdgeAtRatio = useCallback((ratio: number) => {
-    const selection = topologySelectionRef.current;
-    if (selection.length !== 1 || selection[0].kind !== "edge") return;
-    const shape = selectedShapes[0];
-    const edge = [
-      ...(shapeTopology?.edges ?? []),
-      ...(shape ? constructionTopologyEdges(shape) : []),
-    ].find((entry) => entry.id === selection[0].id);
-    if (!edge) return;
-    const amount = Math.min(0.95, Math.max(0.05, ratio));
-    const polyline = edge.points.length >= 6
-      ? Array.from({ length: edge.points.length / 3 }, (_, index) => ({ x: edge.points[index * 3], y: edge.points[index * 3 + 1], z: edge.points[index * 3 + 2] }))
-      : edge.endpoints;
-    const lengths = polyline.slice(1).map((point, index) => Math.hypot(point.x - polyline[index].x, point.y - polyline[index].y, point.z - polyline[index].z));
-    const total = lengths.reduce((sum, length) => sum + length, 0);
-    if (total < 1e-6) return;
-    let remaining = total * amount;
-    let position = { ...polyline[0] };
-    for (let index = 0; index < lengths.length; index += 1) {
-      const segmentLength = lengths[index];
-      if (remaining > segmentLength && index < lengths.length - 1) {
-        remaining -= segmentLength;
-        continue;
-      }
-      const segmentAmount = Math.min(1, remaining / Math.max(1e-9, segmentLength));
-      const start = polyline[index];
-      const end = polyline[index + 1];
-      position = {
-        x: start.x + (end.x - start.x) * segmentAmount,
-        y: start.y + (end.y - start.y) * segmentAmount,
-        z: start.z + (end.z - start.z) * segmentAmount,
-      };
-      break;
-    }
-    
-    handleTopologyAddVertex(position);
-  }, [handleTopologyAddVertex, selectedShapes, shapeTopology?.edges]);
-
-  const insertSelectedEdgeCenter = useCallback(() => {
-    insertSelectedEdgeAtRatio(0.5);
-  }, [insertSelectedEdgeAtRatio]);
-
-  const connectSelectedTopologyVertices = useCallback(() => {
-    const shape = selectedShapes[0];
-    const topology = shapeTopology;
-    const selection = topologySelectionRef.current.filter((pick) => pick.kind === "vertex");
-    if (!shape || !topology || topology.shapeId !== shape.id || selection.length !== 2) {
-      setNotice("Selecciona exactamente dos vértices de la misma pieza");
-      return;
-    }
-    const availableVertices = [...topology.vertices, ...constructionTopologyVertices(shape)];
-    const vertices = selection.map((pick) => availableVertices.find((vertex) => vertex.id === pick.id)).filter((vertex): vertex is CadTopologyVertex => Boolean(vertex));
-    if (vertices.length !== 2) {
-      setNotice("Los vértices seleccionados ya no existen; vuelve a seleccionarlos");
-      return;
-    }
-    const distance = Math.hypot(vertices[1].x - vertices[0].x, vertices[1].y - vertices[0].y, vertices[1].z - vertices[0].z);
-    if (distance < 1e-4) {
-      setNotice("Los dos vértices ocupan la misma posición");
-      return;
-    }
-    const partitionId = createLocalId("partition-edge");
-    const selectedConstructionIds = new Set(selection.map((pick) => pick.id));
-    const sourceForCommit: WorkplaneShape = {
-      ...shape,
-      cadPartitioned: true,
-      constructionVertices: (shape.constructionVertices ?? []).filter((vertex) => !selectedConstructionIds.has(vertex.topologyId)),
-    };
-    const parts = topologyEditPartsForShape(shape);
-    topologyReselectRef.current = [{ kind: "edge", anchor: {
-      x: (vertices[0].x + vertices[1].x) / 2,
-      y: (vertices[0].y + vertices[1].y) / 2,
-      z: (vertices[0].z + vertices[1].z) / 2,
-    } }];
-    setTopologyVertexPlacementActive(false);
-    setTopologyMode("edge");
-    setTopologySelection([]);
-    
-    setNotice(`Dividiendo físicamente la cara con una línea de ${distance.toFixed(2)} mm…`);
-    sendTopologyEdit(
-      { type: "splitFaceBySegment", parts, partitionId, start: vertices[0], end: vertices[1] },
-      parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []),
-      true,
-      "Cara dividida por nueva arista",
-      sourceForCommit,
-    );
-  }, [selectedShapes, sendTopologyEdit, shapeTopology, topologyEditPartsForShape]);
-
-  const removeLastConstructionEdge = useCallback(() => {
-    const shape = selectedShapes[0];
-    const guideEdges = shape?.constructionEdges?.filter((edge) => !edge.partition) ?? [];
-    if (!shape || guideEdges.length === 0) return;
-    const removed = guideEdges.at(-1);
-    updateShape(shape.id, { constructionEdges: shape.constructionEdges?.filter((edge) => edge.partition || edge.id !== removed?.id) });
-    
-    setNotice("Última línea guía eliminada");
-  }, [selectedShapes, updateShape]);
-
-  const handleTopologyEdgeMoveLive = useCallback((edgeId: number, endpoints: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }>) => {
-    const shape = selectedShapes[0];
-    if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
-    const constructionMove = moveConstructionEdgeToWorldEndpoints(shape, edgeId, endpoints);
-    if (constructionMove) {
-      updateShape(shape.id, {
-        constructionEdges: constructionMove.constructionEdges,
-        constructionVertices: constructionMove.constructionVertices,
-      });
-      return;
-    }
-    const topology = shapeTopology;
-    if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
-    const selection = topologySelectionRef.current;
-    const firstFrom = endpoints[0]?.from;
-    const draggedInSelection = Boolean(firstFrom) && selection.some((pick) => {
-      if (pick.kind !== "edge") return false;
-      const edge = topology.edges.find((entry) => entry.id === pick.id);
-      return edge
-        ? Math.hypot(edge.center.x - firstFrom.x, edge.center.y - firstFrom.y, edge.center.z - firstFrom.z) < 0.1
-          || edge.endpoints.some((ep) => Math.hypot(ep.x - firstFrom.x, ep.y - firstFrom.y, ep.z - firstFrom.z) < 0.1)
-        : false;
-    });
-    if (draggedInSelection && selection.length > 1) {
-      const delta = {
-        x: endpoints[0].to.x - endpoints[0].from.x,
-        y: endpoints[0].to.y - endpoints[0].from.y,
-        z: endpoints[0].to.z - endpoints[0].from.z,
-      };
-      topologyDeltaRequest(shape, delta, false, "");
-    } else {
-      const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates: endpoints }, transfer);
-    }
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology, updateShape]);
-
-  const handleTopologyEdgeMoveApply = useCallback((edgeId: number, endpoints: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }>) => {
-    const shape = selectedShapes[0];
-    if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id) return;
-    const constructionMove = moveConstructionEdgeToWorldEndpoints(shape, edgeId, endpoints);
-    if (constructionMove) {
-      updateShape(shape.id, {
-        constructionEdges: constructionMove.constructionEdges,
-        constructionVertices: constructionMove.constructionVertices,
-      });
-      setTopologySelection([{ kind: "edge", id: edgeId }]);
-      
-      setNotice("Línea personalizada movida");
-      return;
-    }
-    const topology = shapeTopology;
-    if (!topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) return;
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
-    const selection = topologySelectionRef.current;
-    const firstFrom = endpoints[0]?.from;
-    const draggedInSelection = Boolean(firstFrom) && selection.some((pick) => {
-      if (pick.kind !== "edge") return false;
-      const edge = topology.edges.find((entry) => entry.id === pick.id);
-      return edge
-        ? Math.hypot(edge.center.x - firstFrom.x, edge.center.y - firstFrom.y, edge.center.z - firstFrom.z) < 0.1
-          || edge.endpoints.some((ep) => Math.hypot(ep.x - firstFrom.x, ep.y - firstFrom.y, ep.z - firstFrom.z) < 0.1)
-        : false;
-    });
-    if (draggedInSelection && selection.length > 1) {
-      const delta = {
-        x: endpoints[0].to.x - endpoints[0].from.x,
-        y: endpoints[0].to.y - endpoints[0].from.y,
-        z: endpoints[0].to.z - endpoints[0].from.z,
-      };
-      topologyDeltaRequest(shape, delta, true, "Líneas movidas");
-    } else {
-      const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-      const center = { x: (endpoints[0].from.x + endpoints[1].from.x) / 2, y: (endpoints[0].from.y + endpoints[1].from.y) / 2, z: (endpoints[0].from.z + endpoints[1].from.z) / 2 };
-      const delta = {
-        x: endpoints[0].to.x - endpoints[0].from.x,
-        y: endpoints[0].to.y - endpoints[0].from.y,
-        z: endpoints[0].to.z - endpoints[0].from.z,
-      };
-      topologyReselectRef.current = [{ kind: "edge", anchor: { x: center.x + delta.x, y: center.y + delta.y, z: center.z + delta.z } }];
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates: endpoints }, transfer, true, "Línea movida", shape);
-    }
-  }, [selectedShapes, selectedTopologyShape, sendTopologyEdit, topologyDeltaRequest, topologyEditPartsForShape, shapeTopology, updateShape]);
-
-  const sendNudgeLive = useCallback((session: NonNullable<typeof topologyNudgeRef.current>, shape: WorkplaneShape) => {
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
-    const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-    if (session.kind === "vertex" && session.vertices.length > 0) {
-      const updates = session.vertices.map((vertex) => {
-        const from = { x: vertex.x, y: vertex.y, z: vertex.z };
-        return { from, to: { x: from.x + session.deltaX, y: from.y, z: from.z + session.deltaZ } };
-      });
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer);
-    } else if (session.kind === "edge" && session.edges.length > 0) {
-      const updates = session.edges.flatMap((edge) => edge.endpoints.map((ep) => ({
-        from: { x: ep.x, y: ep.y, z: ep.z },
-        to: { x: ep.x + session.deltaX, y: ep.y, z: ep.z + session.deltaZ },
-      })));
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer);
-    } else if (session.kind === "face" && session.faces.length > 0) {
-      const faces = session.faces.map((face) => {
-        const normal = face.normal;
-        const dot = normal.x * session.deltaX + normal.z * session.deltaZ;
-        const offset = { x: session.deltaX - normal.x * dot, y: -normal.y * dot, z: session.deltaZ - normal.z * dot };
-        return { center: { x: face.center.x, y: face.center.y, z: face.center.z }, offset };
-      });
-      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces }, transfer);
-    }
-  }, [sendTopologyEdit, topologyEditPartsForShape]);
-
-  const commitNudge = useCallback((session: NonNullable<typeof topologyNudgeRef.current>, shape: WorkplaneShape) => {
-    if (topologyNudgeRef.current !== session) return;
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return;
-    const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-    if (session.kind === "vertex" && session.vertices.length > 0) {
-      const updates = session.vertices.map((vertex) => {
-        const from = { x: vertex.x, y: vertex.y, z: vertex.z };
-        return { from, to: { x: from.x + session.deltaX, y: from.y, z: from.z + session.deltaZ } };
-      });
-      topologyReselectRef.current = session.vertices.map((vertex) => ({
-        kind: "vertex" as const,
-        anchor: { x: vertex.x + session.deltaX, y: vertex.y, z: vertex.z + session.deltaZ },
-      }));
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer, true, session.vertices.length > 1 ? "Vértices movidos" : "Vértice movido", shape);
-    } else if (session.kind === "edge" && session.edges.length > 0) {
-      const updates = session.edges.flatMap((edge) => edge.endpoints.map((ep) => ({
-        from: { x: ep.x, y: ep.y, z: ep.z },
-        to: { x: ep.x + session.deltaX, y: ep.y, z: ep.z + session.deltaZ },
-      })));
-      topologyReselectRef.current = session.edges.map((edge) => ({
-        kind: "edge" as const,
-        anchor: { x: edge.center.x + session.deltaX, y: edge.center.y, z: edge.center.z + session.deltaZ },
-      }));
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer, true, session.edges.length > 1 ? "Líneas movidas" : "Línea movida", shape);
-    } else if (session.kind === "face" && session.faces.length > 0) {
-      const faces = session.faces.map((face) => {
-        const normal = face.normal;
-        const dot = normal.x * session.deltaX + normal.z * session.deltaZ;
-        const offset = { x: session.deltaX - normal.x * dot, y: -normal.y * dot, z: session.deltaZ - normal.z * dot };
-        return { center: { x: face.center.x, y: face.center.y, z: face.center.z }, offset };
-      });
-      topologyReselectRef.current = session.faces.map((face) => {
-        const normal = face.normal;
-        const dot = normal.x * session.deltaX + normal.z * session.deltaZ;
-        const offset = { x: session.deltaX - normal.x * dot, y: -normal.y * dot, z: session.deltaZ - normal.z * dot };
-        return { kind: "face" as const, anchor: { x: face.center.x + offset.x, y: face.center.y + offset.y, z: face.center.z + offset.z } };
-      });
-      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces }, transfer, true, session.faces.length > 1 ? "Caras deslizadas" : "Cara deslizada", shape);
-    }
-    topologyNudgeRef.current = null;
-  }, [sendTopologyEdit, topologyEditPartsForShape]);
-
-  const handleTopologyNudge = useCallback((deltaX: number, deltaZ: number) => {
-    const shape = selectedShapes[0];
-    if (!shape || !selectedTopologyShape || shape.id !== selectedTopologyShape.id || !shapeTopology || shapeTopology.shapeId !== shape.id) return;
-    if (shapeTopology.signature !== shapeTopologySignature(shape)) return;
-    const selection = topologySelectionRef.current;
-    if (selection.length === 0) return;
-    const kind = selection[0].kind;
-    let session = topologyNudgeRef.current;
-    if (!session || session.kind !== kind) {
-      if (kind === "vertex") {
-        const vertices = shapeTopology.vertices.filter((v) => selection.some((pick) => pick.kind === "vertex" && pick.id === v.id));
-        if (vertices.length === 0) return;
-        session = { kind: "vertex", vertices, edges: [], faces: [], deltaX: 0, deltaZ: 0, timer: 0 };
-      } else if (kind === "edge") {
-        const edges = shapeTopology.edges.filter((e) => selection.some((pick) => pick.kind === "edge" && pick.id === e.id));
-        if (edges.length === 0) return;
-        session = { kind: "edge", vertices: [], edges, faces: [], deltaX: 0, deltaZ: 0, timer: 0 };
-      } else {
-        const faces = shapeTopology.faces.filter((f) => selection.some((pick) => pick.kind === "face" && pick.id === f.id));
-        if (faces.length === 0) return;
-        session = { kind: "face", vertices: [], edges: [], faces, deltaX: 0, deltaZ: 0, timer: 0 };
-      }
-      topologyNudgeRef.current = session;
-    }
-    session.deltaX += deltaX;
-    session.deltaZ += deltaZ;
-    window.clearTimeout(session.timer);
-    session.timer = window.setTimeout(() => commitNudge(session, shape), 220);
-    sendNudgeLive(session, shape);
-  }, [commitNudge, selectedShapes, selectedTopologyShape, sendNudgeLive, shapeTopology]);
-
-  // After a nudge/transform commit the shape is re-solidified and its topology
-  // is re-collected with fresh (unstable) hash ids, so re-select every moved
-  // entity by matching its new position against the anchors stored at commit.
-  useEffect(() => {
-    const reselect = topologyReselectRef.current;
-    if (!reselect || reselect.length === 0 || !shapeTopology) return;
-    const shape = selectedShapes[0];
-    if (!shape || shapeTopology.shapeId !== shape.id) return;
-    if (shapeTopology.signature !== shapeTopologySignature(shape)) return;
-    const tolerance = 0.1;
-    const picks: CadTopologyPick[] = [];
-    for (const item of reselect) {
-      if (item.kind === "vertex") {
-        const vertex = shapeTopology.vertices.find((v) => Math.hypot(v.x - item.anchor.x, v.y - item.anchor.y, v.z - item.anchor.z) < tolerance);
-        if (vertex) picks.push({ kind: "vertex", id: vertex.id });
-      } else if (item.kind === "edge") {
-        const edge = shapeTopology.edges.find((e) => Math.hypot(e.center.x - item.anchor.x, e.center.y - item.anchor.y, e.center.z - item.anchor.z) < tolerance);
-        if (edge) picks.push({ kind: "edge", id: edge.id });
-      } else {
-        const face = shapeTopology.faces.find((f) => Math.hypot(f.center.x - item.anchor.x, f.center.y - item.anchor.y, f.center.z - item.anchor.z) < tolerance);
-        if (face) picks.push({ kind: "face", id: face.id });
-      }
-    }
-    topologyReselectRef.current = null;
-    setTopologySelection(picks);
-    
-  }, [selectedShapes, shapeTopology]);
-
-  // Keep the ref mirror of the selection so the drag/nudge handlers always read
-  // the latest selection even if their closures were created earlier.
-  useEffect(() => {
-    topologySelectionRef.current = topologySelection;
-  }, [topologySelection]);
-
-  /**
-   * Applies a coordinate transform to every entity of the topology selection.
-   * `moveRep` maps an entity's representative point to its target position;
-   * vertex/edge endpoints become `moveTopologyVertices` updates and faces become
-   * `moveTopologyFaces` offsets. On success it commits and stores reselect
-   * anchors; returns `false` when nothing would actually move.
-   */
-  const applyTopologyTransform = useCallback((
-    shape: WorkplaneShape,
-    topology: TopologyShapeLike,
-    selection: CadTopologyPick[],
-    moveRep: (point: { x: number; y: number; z: number }) => { x: number; y: number; z: number },
-    label: string,
-  ) => {
-    const constructionIds = new Set((shape.constructionVertices ?? []).map((vertex) => vertex.topologyId));
-    const constructionEdgeIds = new Set((shape.constructionEdges ?? []).map(constructionEdgeTopologyId));
-    const customResult = transformSelectedConstructionVertices(shape, selection, moveRep);
-    const updates: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }> = [];
-    const faces: Array<{ center: { x: number; y: number; z: number }; offset: { x: number; y: number; z: number } }> = [];
-    const anchors: Array<{ kind: CadTopologyPickKind; anchor: { x: number; y: number; z: number } }> = [];
-    for (const pick of selection) {
-      if (pick.kind === "vertex") {
-        const vertex = topology.vertices.find((entry) => entry.id === pick.id);
-        if (!vertex) continue;
-        const from = { x: vertex.x, y: vertex.y, z: vertex.z };
-        const to = moveRep({ ...from });
-        if (constructionIds.has(pick.id)) continue;
-        updates.push({ from, to });
-        anchors.push({ kind: "vertex", anchor: to });
-      } else if (pick.kind === "edge") {
-        const edge = topology.edges.find((entry) => entry.id === pick.id);
-        if (!edge) continue;
-        if (constructionEdgeIds.has(pick.id)) continue;
-        const center = { x: edge.center.x, y: edge.center.y, z: edge.center.z };
-        anchors.push({ kind: "edge", anchor: moveRep({ ...center }) });
-        for (const endpoint of edge.endpoints) {
-          const from = { x: endpoint.x, y: endpoint.y, z: endpoint.z };
-          updates.push({ from, to: moveRep({ ...from }) });
-        }
-      } else {
-        const face = topology.faces.find((entry) => entry.id === pick.id);
-        if (!face) continue;
-        const center = { x: face.center.x, y: face.center.y, z: face.center.z };
-        const to = moveRep({ ...center });
-        faces.push({ center, offset: { x: to.x - center.x, y: to.y - center.y, z: to.z - center.z } });
-        anchors.push({ kind: "face", anchor: to });
-      }
-    }
-    if (customResult.moved > 0) updateShape(shape.id, {
-      constructionVertices: customResult.shape.constructionVertices,
-      constructionEdges: customResult.shape.constructionEdges,
-    });
-    if (updates.length === 0 && faces.length === 0) {
-      if (customResult.moved > 0) {
-        setNotice(label);
-        
-        return true;
-      }
-      return false;
-    }
-    const totalMove = [...updates, ...faces.map((f) => ({
-      from: f.center,
-      to: { x: f.center.x + f.offset.x, y: f.center.y + f.offset.y, z: f.center.z + f.offset.z },
-    }))].reduce((sum, u) => sum + Math.hypot(u.to.x - u.from.x, u.to.y - u.from.y, u.to.z - u.from.z), 0);
-    if (totalMove <= ALIGN_EPSILON && customResult.moved === 0) return false;
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) return false;
-    const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-    topologyReselectRef.current = anchors.length > 0 ? anchors : null;
-    if (updates.length > 0) {
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer, true, label, customResult.shape);
-    }
-    if (faces.length > 0) {
-      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces }, transfer, true, label, customResult.shape);
-    }
-    return true;
-  }, [sendTopologyEdit, topologyEditPartsForShape, updateShape]);
-
-  const alignTopologySelection = useCallback((axis: AlignAxis, target: AlignTarget) => {
-    const shape = selectedTopologyShape;
-    const topology = shapeTopology;
-    if (!shape || !topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) {
-      setNotice("La topología está desactualizada; vuelve a seleccionar la pieza");
-      return;
-    }
-    const selection = topologySelectionRef.current;
-    if (selection.length === 0) return;
-    const effectiveTopology = topologyWithConstructionVertices(shape, topology);
-    const reps = topologySelectionReps(effectiveTopology, selection);
-    if (!reps || reps.length < 2) {
-      setNotice("Selecciona al menos dos entes de topología para alinear");
-      return;
-    }
-    const targetValue = alignTargetValue(reps.map((point) => coordinateForAxis(point, axis)), target);
-    const moved = applyTopologyTransform(
-      shape,
-      effectiveTopology,
-      selection,
-      (point) => {
-        const next = { ...point };
-        next[axis] = targetValue;
-        return next;
-      },
-      `Se alinearon ${selection.length} ente${selection.length === 1 ? "" : "s"} ${alignmentLabel(axis, target)}`,
-    );
-    if (!moved) {
-      setNotice("Ya está alineado");
-    }
-    setTopologyAlignPreview(null);
-  }, [applyTopologyTransform, selectedTopologyShape, shapeTopology]);
-
-  const mirrorTopologySelection = useCallback((axis: AlignAxis) => {
-    const shape = selectedTopologyShape;
-    const topology = shapeTopology;
-    if (!shape || !topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) {
-      setNotice("La topología está desactualizada; vuelve a seleccionar la pieza");
-      return;
-    }
-    const selection = topologySelectionRef.current;
-    if (selection.length === 0) return;
-    const effectiveTopology = topologyWithConstructionVertices(shape, topology);
-    const reps = topologySelectionReps(effectiveTopology, selection);
-    if (!reps || reps.length === 0) return;
-    const pivot = reps.reduce((sum, point) => sum + coordinateForAxis(point, axis), 0) / reps.length;
-    const moved = applyTopologyTransform(
-      shape,
-      effectiveTopology,
-      selection,
-      (point) => {
-        const next = { ...point };
-        next[axis] = 2 * pivot - point[axis];
-        return next;
-      },
-      `Se reflejaron ${selection.length} ente${selection.length === 1 ? "" : "s"} ${mirrorAxisLabel(axis)}`,
-    );
-    if (!moved) {
-      setNotice("No hay nada que reflejar");
-    }
-    setTopologyMirrorPreviewAxis(null);
-  }, [applyTopologyTransform, selectedTopologyShape, shapeTopology]);
-
-  const snapTopologySelection = useCallback(() => {
-    const shape = selectedTopologyShape;
-    const topology = shapeTopology;
-    if (!shape || !topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) {
-      setNotice("La topología está desactualizada; vuelve a seleccionar la pieza");
-      return;
-    }
-    const selection = topologySelectionRef.current;
-    if (selection.length === 0) return;
-    const step = visibleGridStep(workspaceSettings);
-    const originX = -workspaceSettings.width / 2;
-    const originZ = -workspaceSettings.depth / 2;
-    const moved = applyTopologyTransform(
-      shape,
-      topology,
-      selection,
-      (point) => ({
-        ...point,
-        x: snapToGridValue(point.x, originX, step),
-        z: snapToGridValue(point.z, originZ, step),
-      }),
-      `Se ajustaron ${selection.length} ente${selection.length === 1 ? "" : "s"} a la rejilla visible de ${step} mm`,
-    );
-    if (!moved) {
-      setNotice("Los entes ya están en la rejilla");
-    }
-  }, [applyTopologyTransform, selectedTopologyShape, shapeTopology, workspaceSettings]);
-
-  const dropTopologySelection = useCallback(() => {
-    const shape = selectedTopologyShape;
-    const topology = shapeTopology;
-    if (!shape || !topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) {
-      setNotice("La topología está desactualizada; vuelve a seleccionar la pieza");
-      return;
-    }
-    const selection = topologySelectionRef.current;
-    if (selection.length === 0) return;
-    const effectiveTopology = topologyWithConstructionVertices(shape, topology);
-    const extremes = topologyExtremePoints(effectiveTopology, selection);
-    if (!extremes) return;
-    const minY = Math.min(...extremes.map((point) => point.y));
-    const deltaY = placementElevation - minY;
-    if (Math.abs(deltaY) <= ALIGN_EPSILON) {
-      setNotice("Los entes ya están en el plano de trabajo");
-      return;
-    }
-    applyTopologyTransform(
-      shape,
-      effectiveTopology,
-      selection,
-      (point) => ({ ...point, y: point.y + deltaY }),
-      placementElevation === 0 ? "Entes bajados al plano de trabajo" : `Entes bajados al plano de trabajo de ${placementElevation.toFixed(2)} mm`,
-    );
-  }, [applyTopologyTransform, placementElevation, selectedTopologyShape, shapeTopology]);
-
-  const raiseTopologySelection = useCallback(() => {
-    const shape = selectedTopologyShape;
-    const topology = shapeTopology;
-    if (!shape || !topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) {
-      setNotice("La topología está desactualizada; vuelve a seleccionar la pieza");
-      return;
-    }
-    const selection = topologySelectionRef.current;
-    if (selection.length === 0) return;
-    const effectiveTopology = topologyWithConstructionVertices(shape, topology);
-    const extremes = topologyExtremePoints(effectiveTopology, selection);
-    if (!extremes) return;
-    const maxY = Math.max(...extremes.map((point) => point.y));
-    const deltaY = placementElevation - maxY;
-    if (Math.abs(deltaY) <= ALIGN_EPSILON) {
-      setNotice("Los entes ya están en el plano de trabajo");
-      return;
-    }
-    applyTopologyTransform(
-      shape,
-      effectiveTopology,
-      selection,
-      (point) => ({ ...point, y: point.y + deltaY }),
-      placementElevation === 0 ? "Entes subidos al plano de trabajo" : `Entes subidos al plano de trabajo de ${placementElevation.toFixed(2)} mm`,
-    );
-  }, [applyTopologyTransform, placementElevation, selectedTopologyShape, shapeTopology]);
-
-  // Live preview for the topology align/mirror overlays: while a handle is
-  // hovered, send the transform with commit=false so the orange wireframe
-  // previews it; clearing the preview also clears the wireframe.
-  useEffect(() => {
-    if (topologyMode === "shape" || topologySelection.length === 0) {
-      setTopologyEditPreview(null);
-      return;
-    }
-    const shape = selectedTopologyShape;
-    const topology = shapeTopology;
-    if (!shape || !topology || topology.shapeId !== shape.id || topology.signature !== shapeTopologySignature(shape)) {
-      setTopologyEditPreview(null);
-      return;
-    }
-    if (!topologyAlignPreview && !topologyMirrorPreviewAxis) {
-      if (!topologyInspectorPreviewActive) setTopologyEditPreview(null);
-      return;
-    }
-    const selection = topologySelectionRef.current;
-    if (selection.length === 0) {
-      setTopologyEditPreview(null);
-      return;
-    }
-    const parts = topologyEditPartsForShape(shape);
-    if (parts.length === 0) {
-      setTopologyEditPreview(null);
-      return;
-    }
-    const transfer = parts.flatMap((part) => part.positions && part.indices ? [part.positions.buffer, part.indices.buffer] : []);
-    const updates: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }> = [];
-    const faces: Array<{ center: { x: number; y: number; z: number }; offset: { x: number; y: number; z: number } }> = [];
-    if (topologyAlignPreview) {
-      const { axis, target } = topologyAlignPreview;
-      const reps = topologySelectionReps(topology, selection);
-      if (!reps) {
-        setTopologyEditPreview(null);
-        return;
-      }
-      const targetValue = alignTargetValue(reps.map((point) => coordinateForAxis(point, axis)), target);
-      for (const pick of selection) {
-        if (pick.kind === "vertex") {
-          const vertex = topology.vertices.find((entry) => entry.id === pick.id);
-          if (!vertex) continue;
-          const from = { x: vertex.x, y: vertex.y, z: vertex.z };
-          const to = { ...from };
-          to[axis] = targetValue;
-          updates.push({ from, to });
-        } else if (pick.kind === "edge") {
-          const edge = topology.edges.find((entry) => entry.id === pick.id);
-          if (!edge) continue;
-          for (const endpoint of edge.endpoints) {
-            const from = { x: endpoint.x, y: endpoint.y, z: endpoint.z };
-            const to = { ...from };
-            to[axis] = targetValue;
-            updates.push({ from, to });
-          }
-        } else {
-          const face = topology.faces.find((entry) => entry.id === pick.id);
-          if (!face) continue;
-          const center = { x: face.center.x, y: face.center.y, z: face.center.z };
-          const offset = { x: 0, y: 0, z: 0 };
-          offset[axis] = targetValue - coordinateForAxis(center, axis);
-          faces.push({ center, offset });
-        }
-      }
-    } else if (topologyMirrorPreviewAxis) {
-      const axis = topologyMirrorPreviewAxis;
-      const reps = topologySelectionReps(topology, selection);
-      if (!reps) {
-        setTopologyEditPreview(null);
-        return;
-      }
-      const pivot = reps.reduce((sum, point) => sum + coordinateForAxis(point, axis), 0) / reps.length;
-      for (const pick of selection) {
-        if (pick.kind === "vertex") {
-          const vertex = topology.vertices.find((entry) => entry.id === pick.id);
-          if (!vertex) continue;
-          const from = { x: vertex.x, y: vertex.y, z: vertex.z };
-          const to = { ...from };
-          to[axis] = 2 * pivot - coordinateForAxis(from, axis);
-          updates.push({ from, to });
-        } else if (pick.kind === "edge") {
-          const edge = topology.edges.find((entry) => entry.id === pick.id);
-          if (!edge) continue;
-          for (const endpoint of edge.endpoints) {
-            const from = { x: endpoint.x, y: endpoint.y, z: endpoint.z };
-            const to = { ...from };
-            to[axis] = 2 * pivot - coordinateForAxis(from, axis);
-            updates.push({ from, to });
-          }
-        } else {
-          const face = topology.faces.find((entry) => entry.id === pick.id);
-          if (!face) continue;
-          const center = { x: face.center.x, y: face.center.y, z: face.center.z };
-          const offset = { x: 0, y: 0, z: 0 };
-          offset[axis] = 2 * (pivot - coordinateForAxis(center, axis));
-          faces.push({ center, offset });
-        }
-      }
-    }
-    if (updates.length > 0) {
-      sendTopologyEdit({ type: "moveTopologyVertices", parts, updates }, transfer);
-    }
-    if (faces.length > 0) {
-      sendTopologyEdit({ type: "moveTopologyFaces", parts, faces }, transfer);
-    }
-  }, [selectedTopologyShape, sendTopologyEdit, shapeTopology, topologyAlignPreview, topologyEditPartsForShape, topologyInspectorPreviewActive, topologyMirrorPreviewAxis, topologyMode, topologySelection.length]);
-
-  const topologySelectionActive = topologyMode !== "shape" && topologySelection.length > 0;
-
-  // Context-aware wrappers bound to the viewport overlays and toolbar: when a
-  // topology selection is active the align/mirror/snap/drop actions operate on
-  // the topology entities instead of the body shapes.
-  const handleAlignSelection = useCallback((axis: AlignAxis, target: AlignTarget) => {
-    if (topologySelectionActive) {
-      alignTopologySelection(axis, target);
-    } else {
-      alignSelectionTo(axis, target);
-    }
-  }, [alignSelectionTo, alignTopologySelection, topologySelectionActive]);
-
-  const handleAlignPreview = useCallback((axis: AlignAxis, target: AlignTarget) => {
-    if (topologySelectionActive) {
-      setAlignPreview(null);
-      setTopologyAlignPreview({ axis, target });
-    } else {
-      setTopologyAlignPreview(null);
-      setAlignPreview({ axis, target });
-    }
-  }, [topologySelectionActive]);
-
-  const handleAlignPreviewClear = useCallback(() => {
-    setAlignPreview(null);
-    setTopologyAlignPreview(null);
-  }, []);
-
-  const handleMirrorSelection = useCallback((axis: AlignAxis) => {
-    if (topologySelectionActive) {
-      mirrorTopologySelection(axis);
-    } else {
-      mirrorSelectionAcross(axis);
-    }
-  }, [mirrorSelectionAcross, mirrorTopologySelection, topologySelectionActive]);
-
-  const handleMirrorPreview = useCallback((axis: AlignAxis) => {
-    if (topologySelectionActive) {
-      setMirrorPreviewAxis(null);
-      setTopologyMirrorPreviewAxis(axis);
-    } else {
-      setTopologyMirrorPreviewAxis(null);
-      setMirrorPreviewAxis(axis);
-    }
-  }, [topologySelectionActive]);
-
-  const handleMirrorPreviewClear = useCallback(() => {
-    setMirrorPreviewAxis(null);
-    setTopologyMirrorPreviewAxis(null);
-  }, []);
+      invalidateCadModifierSession(); setTopPanel(null); setMenuOpen(false); setGeometryDrawTool(null);
+      setMeshEditSession({ id: selectedShape.id, name: selectedShape.name, color: selectedShape.color, mode, mesh, context });
+      setNotice("Editar malla: la superficie sigue tus movimientos. Tab vuelve a Piezas");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo preparar la malla"); }
+  }, [selectedShape, selectedShapes.length, shapes, invalidateCadModifierSession]);
+  const commitMeshEdit = useCallback((mesh: EditableMesh, label: string, historyAction?: "undo" | "redo") => {
+    if (historyAction === "undo") { undo(); return; }
+    if (historyAction === "redo") { redo(); return; }
+    const source = shapesRef.current.find(shape => shape.id === meshEditSession?.id);
+    if (!source) return;
+    const edited = editableMeshToShape(source, mesh);
+    commitShapes(shapesRef.current.map(shape => shape.id === source.id ? edited : shape), edited.id, label);
+  }, [commitShapes, meshEditSession?.id, redo, undo]);
+  const canTopologyPick = Boolean(selectedShapes.length === 1 && selectedShape && !selectedShape.locked && !selectedShape.hole);
+  const facePlaneDraft: WorkplanePlane | null = null;
+  const handleAlignSelection = alignSelectionTo;
+  const handleAlignPreview = previewAlignSelection;
+  const handleAlignPreviewClear = clearAlignPreview;
+  const handleMirrorSelection = mirrorSelectionAcross;
+  const handleMirrorPreview = previewMirrorSelection;
+  const handleMirrorPreviewClear = clearMirrorPreview;
 
   const cancelEdgeModifier = useCallback(() => {
     invalidateCadModifierSession();
@@ -9741,10 +7977,6 @@ export function SketchForgeEditor({
   }, [armCadModifierWatchdog, edgeModifier?.amount, edgeModifier?.chamferAngle, edgeModifier?.kind, edgeModifier?.prepared, edgeModifier?.quality, edgeModifier?.selectedEdgeIds, postCadModifierRequest]);
 
   const snapSelected = useCallback(() => {
-    if (topologyMode !== "shape" && topologySelection.length > 0) {
-      snapTopologySelection();
-      return;
-    }
     if (!hasSelection) {
       setNotice("Selecciona una forma primero");
       return;
@@ -9760,7 +7992,7 @@ export function SketchForgeEditor({
       selectedIds,
       `Se ajustó ${selectedShapes.length} forma${selectedShapes.length === 1 ? "" : "s"} a la rejilla visible de ${grid} mm`,
     );
-  }, [commitShapes, hasSelection, selectedIds, selectedShapes.length, shapes, snapTopologySelection, topologyMode, topologySelection.length, workspaceSettings]);
+  }, [commitShapes, hasSelection, selectedIds, selectedShapes.length, shapes, workspaceSettings]);
 
   const toggleHidden = useCallback(() => {
     if (!hasSelection) {
@@ -9861,10 +8093,6 @@ export function SketchForgeEditor({
   );
 
   const dropSelectedToWorkplane = useCallback(() => {
-    if (topologyMode !== "shape" && topologySelection.length > 0) {
-      dropTopologySelection();
-      return;
-    }
     if (!hasSelection) {
       setNotice("Selecciona una forma primero");
       return;
@@ -9875,7 +8103,7 @@ export function SketchForgeEditor({
       selectedIds,
       placementElevation === 0 ? "Se bajó la selección al plano de trabajo" : `Se bajó la selección al plano de trabajo de ${placementElevation.toFixed(2)} mm`,
     );
-  }, [commitShapes, dropTopologySelection, hasSelection, placementElevation, selectedIds, shapes, topologyMode, topologySelection.length]);
+  }, [commitShapes, hasSelection, placementElevation, selectedIds, shapes]);
 
   const activateWorkplaneTool = useCallback(() => {
     setWorkplaneMode((active) => {
@@ -10740,7 +8968,7 @@ export function SketchForgeEditor({
       void (async () => {
         try {
           if (skfExportingRef.current) throw new Error("SketchForge ya está empaquetando un proyecto");
-          if (projectInteractionActiveRef.current) throw new Error("Termina el arrastre o la transformación actual antes de guardar");
+          if (projectInteractionActiveRef.current || pendingPlacementRef.current || placementLoadingRef.current) throw new Error("Confirma o cancela la colocación o transformación antes de guardar");
           const bytes = await buildSkfBytes(projectName, workspaceSettingsRef.current.historyLimit);
           const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
           source?.postMessage({ type: "SKETCHFORGE_EXPORT_SKF_RESULT", requestId, bytes: Array.from(new Uint8Array(buffer)) }, "*");
@@ -11194,7 +9422,7 @@ export function SketchForgeEditor({
     );
     commitCap(nextCap, "Perfil creado en el viewport 3D; usa Extruir o Cortar");
     setGeometryProfileSectionId(nextSection.id);
-    
+
   }, [commitCap, geometryProfileSectionId, pushPullDistance]);
 
   const applyGeometryProfile = useCallback(async (mode: "add" | "cut" | "floating") => {
@@ -11212,10 +9440,10 @@ export function SketchForgeEditor({
       extrusionDepth: Math.max(0.1, Math.abs(Number.parseFloat(pushPullDistance) || section.extrusionDepth || 10)),
       unionMode,
     };
-    
+
     commitCap({ ...current, sections: current.sections.map((candidate) => candidate.id === updated.id ? updated : candidate) }, unionMode === "cut" ? "Preparando corte" : "Preparando extrusión");
     await generateCapPiece(updated.id);
-    
+
     setGeometryDrawTool(null);
     setGeometryProfileSectionId(null);
   }, [commitCap, generateCapPiece, geometryProfileSectionId, pushPullDistance]);
@@ -11328,12 +9556,16 @@ export function SketchForgeEditor({
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) {
+      if (pendingPlacementRef.current || placementLoadingRef.current) { if (event.key === "Escape") { event.preventDefault(); cancelPlacement(); setNotice("Colocación cancelada"); } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); setNotice("Confirma o cancela la colocación antes de guardar"); } return; }
+      if (meshEditSession || isTypingTarget(event.target)) {
         return;
       }
 
       const key = event.key.toLowerCase();
       const shortcut = event.ctrlKey || event.metaKey;
+      if (event.key === "Tab" && toolbarMode === "geometry" && !shortcut) {
+        event.preventDefault(); handleTopologyModeChange("vertex"); return;
+      }
 
       if (sketchActive && toolbarMode === "sketch") {
         if (event.key === "Escape") {
@@ -11358,11 +9590,6 @@ export function SketchForgeEditor({
       }
 
       if (event.key === "Escape") {
-        if (topologyMode !== "shape" && topologySelection.length > 0) {
-          setTopologySelection([]);
-          setNotice("Selección de topología borrada");
-          return;
-        }
         setSelectedIds([]);
         setNotice("Selección borrada");
         return;
@@ -11457,29 +9684,6 @@ export function SketchForgeEditor({
         }
       };
 
-      if (!shortcut && topologyMode !== "shape" && topologySelection.length > 0) {
-        const f = getCameraForwardSnapped();
-        if (event.key === "ArrowLeft") {
-          event.preventDefault();
-          handleTopologyNudge(f.z * step, -f.x * step);
-          return;
-        }
-        if (event.key === "ArrowRight") {
-          event.preventDefault();
-          handleTopologyNudge(-f.z * step, f.x * step);
-          return;
-        }
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          handleTopologyNudge(f.x * step, f.z * step);
-          return;
-        }
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          handleTopologyNudge(-f.x * step, -f.z * step);
-          return;
-        }
-      }
       if (shortcut && event.key === "ArrowUp") {
         event.preventDefault();
         raiseSelected(step);
@@ -11502,7 +9706,7 @@ export function SketchForgeEditor({
         event.preventDefault();
         const f = getCameraForwardSnapped();
         nudgeSelected(-f.x * step, -f.z * step);
-      } else if (key === "d" && (hasSelection || topologySelection.length > 0)) {
+      } else if (key === "d" && hasSelection) {
         event.preventDefault();
         dropSelectedToWorkplane();
       } else if (key === "h") {
@@ -11543,7 +9747,7 @@ export function SketchForgeEditor({
     dropSelectedToWorkplane,
     groupSelected,
     handleTopologyModeChange,
-    handleTopologyNudge,
+    meshEditSession,
     hasSelection,
     nudgeSelected,
     pasteShape,
@@ -11560,19 +9764,18 @@ export function SketchForgeEditor({
     toggleMirrorMode,
     toggleLocked,
     toolbarMode,
-    topologyMode,
-    topologySelection.length,
     undo,
     ungroupSelected,
   ]);
 
+  const sketchReferenceShapes = useMemo(() => shapes.filter((shape) => shape.id !== editingSketchShapeId), [shapes, editingSketchShapeId]);
   const sketchWorkspaceElement = (
     <SketchWorkspace
       profile={sketchProfile}
       operation={sketchOperation}
       revolvePreviewPositions={sketchRevolvePreview?.positions ?? null}
       sweepPreviewPositions={sketchSweepPreview?.positions ?? null}
-      referenceShapes={shapes.filter((shape) => shape.id !== editingSketchShapeId)}
+      referenceShapes={sketchReferenceShapes}
       tool={sketchTool}
       activePointId={sketchActivePointId}
       selected={sketchSelection}
@@ -11631,19 +9834,6 @@ export function SketchForgeEditor({
       : geometryPlaneMode === "base"
         ? { kind: "base" }
         : facePlaneDraft ?? { kind: "base" });
-  const viewportTopologyVertices = selectedShapes[0]
-    ? [
-        ...(shapeTopology && shapeTopology.shapeId === selectedShapes[0].id ? shapeTopology.vertices : []),
-        ...constructionTopologyVertices(selectedShapes[0]),
-      ]
-    : [];
-  const viewportTopologyEdges = selectedShapes[0]
-    ? [
-        ...(shapeTopology && shapeTopology.shapeId === selectedShapes[0].id ? shapeTopology.edges : []),
-        ...constructionTopologyEdges(selectedShapes[0]),
-      ]
-    : [];
-
   const viewportElement = (
     <WorkplaneViewport
       shapes={viewportShapes}
@@ -11660,6 +9850,9 @@ export function SketchForgeEditor({
       initialWorkspace={workspaceSettings}
       workspaceSettingsKey={projectId ?? "local-workplane"}
       onAddShape={addLibraryAsset}
+      placementPreview={pendingPlacement}
+      onPlacementConfirm={confirmPlacement}
+      onPlacementCancel={cancelPlacement}
       onAlignAnchorChange={chooseAlignAnchor}
       onAlignPreview={handleAlignPreview}
       onAlignPreviewClear={handleAlignPreviewClear}
@@ -11681,24 +9874,6 @@ export function SketchForgeEditor({
       modifierEdges={edgeModifier?.edges.filter((edge) => modifierAvailableEdgeIds.includes(edge.id)) ?? []}
       selectedModifierEdgeIds={edgeModifier?.selectedEdgeIds ?? []}
       onModifierEdgeToggle={toggleModifierEdge}
-      selectionMode={topologyMode}
-      topologyFaces={shapeTopology && shapeTopology.shapeId === selectedShapes[0]?.id ? shapeTopology.faces : []}
-      topologyVertices={viewportTopologyVertices}
-      topologyEdges={viewportTopologyEdges}
-      topologySelection={topologySelection}
-      onTopologyPick={handleTopologyPick}
-      onTopologyPickMany={handleTopologyPickMany}
-      onTopologyVertexMoveLive={handleTopologyVertexMoveLive}
-      onTopologyVertexMoveApply={handleTopologyVertexMoveApply}
-      onTopologyFaceMoveLive={handleTopologyFaceMoveLive}
-      onTopologyFaceMoveApply={handleTopologyFaceMoveApply}
-      topologyVertexPlacementActive={topologyVertexPlacementActive}
-      onTopologyAddVertex={handleTopologyAddVertex}
-      onTopologyEdgeMoveLive={handleTopologyEdgeMoveLive}
-      onTopologyEdgeMoveApply={handleTopologyEdgeMoveApply}
-      topologyEditPreviewMesh={topologyEditPreview}
-      pushPullFace={pushPullTarget}
-      onPushPullApply={applyPushPullFace}
       geometryDrawTool={geometryDrawTool}
       geometryDrawPlane={geometryDrawPlane}
       geometryDrawAutoSurface={geometryPlaneMode === "auto"}
@@ -11711,8 +9886,8 @@ export function SketchForgeEditor({
   );
 
   return (
-    <div className="sketchforge-editor">
-      <SecondaryToolbar
+    <div data-placement-active={!!pendingPlacement} className={`sketchforge-editor${meshEditSession ? " mesh-edit-active" : ""}`}>
+      {!meshEditSession ? <SecondaryToolbar
         toolbarMode={toolbarMode}
         onToolbarModeChange={(mode) => {
           setToolbarMode(mode);
@@ -11803,23 +9978,24 @@ export function SketchForgeEditor({
         onUndo={undo}
         onWorkplaneTool={activateWorkplaneTool}
         workplaneMode={workplaneMode}
-        topologyMode={topologyMode}
         canTopologyPick={canTopologyPick}
-        canTopologyAlign={canTopologyAlign}
-        hasTopologySelection={hasTopologySelection}
-        onTopologyModeChange={handleTopologyModeChange}
-        onRaiseToWorkplane={raiseTopologySelection}
-        canPushPull={canPushPull}
         pushPullDistance={pushPullDistance}
         onPushPullDistanceChange={setPushPullDistance}
-        onPushPullApply={handlePushPullApply}
+        onTopologyModeChange={handleTopologyModeChange}
         onTopPanel={(panel) => {
           setTopPanel((current) => (current === panel ? null : panel));
           setMenuOpen(false);
         }}
-      />
+      /> : null}
       <div className="editor-body">
-        {toolbarMode === "geometry" ? (
+        {meshEditSession ? <MeshEditWorkspace
+          key={meshEditSession.id}
+          mesh={meshEditSession.mesh} context={meshEditSession.context}
+          name={meshEditSession.name} color={meshEditSession.color} initialMode={meshEditSession.mode}
+          onCommit={commitMeshEdit}
+          onActivity={updateProjectInteractionActive}
+          onExit={() => setMeshEditSession(null)} onNotice={setNotice}
+        /> : toolbarMode === "geometry" ? (
           <>
             {viewportElement}
             <ShapeLibrary
@@ -11832,40 +10008,6 @@ export function SketchForgeEditor({
           </>
         ) : sketchActive || capSketchActive ? sketchWorkspaceElement : viewportElement}
       </div>
-      {toolbarMode === "geometry" && topologyMode !== "shape" && selectedShapes.length === 1 && (topologyMode === "vertex" || topologySelection.length > 0) ? (
-        <TopologyInspector
-          mode={topologyMode}
-          count={topologySelection.length}
-          onClose={() => {
-            setTopologyVertexPlacementActive(false);
-            setTopologySelection([]);
-            setTopologyMode("shape");
-          }}
-          onMove={moveTopologyFromInspector}
-          onAlign={alignTopologyFromInspector}
-          onScalePreview={previewTopologyScale}
-          onScaleCommit={commitTopologyScale}
-          onRotatePreview={previewTopologyRotation}
-          onRotateCommit={commitTopologyRotation}
-          onCollapse={collapseTopologyVertices}
-          vertexPlacementActive={topologyVertexPlacementActive}
-          onVertexPlacementChange={(active) => {
-            setTopologyVertexPlacementActive(active);
-            setNotice(active ? "Insertar vértices: haz clic sobre cualquier punto de una arista; pulsa Escape para terminar" : "Inserción de vértices finalizada");
-            
-          }}
-          constructionEdgeCount={selectedShapes[0]?.constructionEdges?.filter((edge) => !edge.partition).length ?? 0}
-          onConnectVertices={connectSelectedTopologyVertices}
-          onRemoveLastConstructionEdge={removeLastConstructionEdge}
-          onApexPreview={previewTopologyApex}
-          onApexCommit={commitTopologyApex}
-          onFaceNormalPreview={previewFaceNormal}
-          onFaceNormalCommit={commitFaceNormal}
-          onCancelPreview={cancelTopologyInspectorPreview}
-          onInsertEdgeCenter={insertSelectedEdgeCenter}
-          onInsertEdgeAtRatio={insertSelectedEdgeAtRatio}
-        />
-      ) : null}
       {edgeModifier ? (
         <EdgeModifierPanel
           kind={edgeModifier.kind}
@@ -11980,6 +10122,7 @@ export function SketchForgeEditor({
           event.currentTarget.value = "";
         }}
       />
+      {pendingPlacement ? <div className="placement-instructions" role="status">Colocar {pendingPlacement.name} · Clic sobre el plano para confirmar <button type="button" onClick={cancelPlacement}>Cancelar · Esc</button></div> : null}
       <div className="editor-toast" role="status">
         {notice}
       </div>
@@ -12017,7 +10160,7 @@ function SketchReferenceIcon({ name }: { name: SketchReferenceIconName }) {
       className="sketch-reference-icon"
       data-sketch-icon={name}
       draggable={false}
-      src={`/assets/sketchforge/${sketchReferenceIcons[name]}`}
+      src={`assets/sketchforge/${sketchReferenceIcons[name]}`}
       alt=""
     />
   );
@@ -12091,16 +10234,10 @@ function SecondaryToolbar({
   onUndo,
   onWorkplaneTool,
   workplaneMode,
-  topologyMode,
-  canTopologyPick,
-  canTopologyAlign,
-  hasTopologySelection,
-  onTopologyModeChange,
-  onRaiseToWorkplane,
-  canPushPull,
   pushPullDistance,
   onPushPullDistanceChange,
-  onPushPullApply,
+  canTopologyPick,
+  onTopologyModeChange,
   onTopPanel,
 }: {
   toolbarMode: ToolbarMode;
@@ -12170,19 +10307,14 @@ function SecondaryToolbar({
   onUndo: () => void;
   onWorkplaneTool: () => void;
   workplaneMode: boolean;
-  topologyMode: "shape" | "face" | "vertex" | "edge";
-  canTopologyPick: boolean;
-  canTopologyAlign: boolean;
-  hasTopologySelection: boolean;
-  onTopologyModeChange: (mode: "shape" | "face" | "vertex" | "edge") => void;
-  onRaiseToWorkplane: () => void;
-  canPushPull: boolean;
   pushPullDistance: string;
   onPushPullDistanceChange: (value: string) => void;
-  onPushPullApply: () => void;
+  canTopologyPick: boolean;
+  onTopologyModeChange: (mode: "shape" | "face" | "vertex" | "edge") => void;
   onTopPanel: (panel: TopPanel) => void;
 }) {
   const [geometry2dOpen, setGeometry2dOpen] = useState(false);
+  useEffect(() => { if (hasGeometryProfile) setGeometry2dOpen(true); }, [hasGeometryProfile]);
 
   useEffect(() => {
     if (!geometry2dOpen) return;
@@ -12215,7 +10347,6 @@ function SecondaryToolbar({
   ];
   const visibilityTools = [
     { label: "Ocultar selección", icon: ToolbarHideSelectedIcon, action: onToggleHidden, enabled: hasSelection },
-    { label: "Opciones de visibilidad", icon: ToolbarCaretDownIcon, action: onTips, enabled: hasSelection },
   ];
   const combineTools = [
     { label: "Agrupar", icon: ToolbarGroupIcon, action: onGroup, enabled: canGroup },
@@ -12223,16 +10354,15 @@ function SecondaryToolbar({
     { label: "Intersección booleana", icon: ToolbarIntersectionIcon, action: onIntersect, enabled: canIntersect },
   ];
   const modifyTools = [
-    { label: "Alinear", icon: ToolbarAlignIcon, action: onAlign, enabled: canAlign || canTopologyAlign, active: alignMode },
-    { label: "Reflejar", icon: ToolbarMirrorIcon, action: onMirror, enabled: hasSelection || hasTopologySelection, active: mirrorMode },
-    { label: "Ajustar a la rejilla", icon: ToolbarSnapGridIcon, action: onSnap, enabled: hasSelection || hasTopologySelection },
+    { label: "Alinear", icon: ToolbarAlignIcon, action: onAlign, enabled: canAlign, active: alignMode },
+    { label: "Reflejar", icon: ToolbarMirrorIcon, action: onMirror, enabled: hasSelection, active: mirrorMode },
+    { label: "Ajustar a la rejilla", icon: ToolbarSnapGridIcon, action: onSnap, enabled: hasSelection },
     { label: "Chaflán", icon: ToolbarChamferIcon, action: onChamfer, enabled: canEdgeModify, active: edgeModifierKind === "chamfer" },
     { label: "Redondeo", icon: ToolbarFilletIcon, action: onFillet, enabled: canEdgeModify, active: edgeModifierKind === "fillet" },
   ];
   const arrangeTools = [
     { label: "Plano de trabajo", icon: ToolbarWorkplaneIcon, action: onWorkplaneTool, enabled: true, active: workplaneMode },
-    { label: "Bajar al plano de trabajo", icon: ToolbarDropToWorkplaneIcon, action: onDropToWorkplane, enabled: hasSelection || hasTopologySelection },
-    { label: "Subir al plano de trabajo", icon: ToolbarRaiseToWorkplaneIcon, action: onRaiseToWorkplane, enabled: hasTopologySelection },
+    { label: "Bajar al plano de trabajo", icon: ToolbarDropToWorkplaneIcon, action: onDropToWorkplane, enabled: hasSelection },
   ];
   const renderToolButton = (tool: (typeof leftTools)[number] | (typeof visibilityTools)[number] | (typeof combineTools)[number] | (typeof modifyTools)[number] | (typeof arrangeTools)[number]) => {
     const { icon: Icon, action, enabled, label } = tool;
@@ -12244,126 +10374,49 @@ function SecondaryToolbar({
     );
   };
 
-  const renderSketchDrawingTools = (onFinish: () => void, finishLabel: string, onCancel: () => void) => (
-    <>
-      <div className="toolbar-section sketch-create-section">
-        <div className="toolbar-section-label">Dibujar</div>
+  const renderSketchDrawingTools = (onFinish: () => void, finishLabel: string, onCancel: () => void) => {
+    const draw = (tool: SketchTool, label: string, icon: ReactNode) => <button key={tool} className={`toolbar-icon sketch-tool-icon ${sketchTool === tool ? 'active' : ''}`} type="button" aria-label={label} title={label} onClick={() => onSketchTool(tool)}>{icon}<span>{label}</span></button>;
+    return <>
+      <div className="toolbar-section sketch-create-section"><div className="toolbar-section-label">Dibujar y editar</div><div className="toolbar-section-tools sketch-essential-tools">
+        {draw('select','Seleccionar',<SketchReferenceIcon name="select" />)}
+        {draw('line','Línea',<SketchReferenceIcon name="line" />)}
+        {draw('rectangle','Rectángulo',<SketchEntityRectangleIcon />)}
+        {draw('circle','Círculo',<SketchEntityCircleIcon />)}
+        {draw('erase','Borrar',<SketchReferenceIcon name="erase" />)}
+      </div></div>
+      <details className="sketch-more-tools" onClick={(event) => { if ((event.target as HTMLElement).closest("button")) event.currentTarget.open = false; }}><summary>Más herramientas</summary><div className="sketch-more-tools-content">
+        <strong>Curvas y otras formas</strong>
         <div className="toolbar-section-tools">
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "line" ? "active" : ""}`} type="button" aria-label="Línea" title="Línea" onClick={() => onSketchTool("line")}>
-            <SketchReferenceIcon name="line" />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "bezier" ? "active" : ""}`} type="button" aria-label="Curva Bézier" title="Curva Bézier" onClick={() => onSketchTool("bezier")}>
-            <SketchReferenceIcon name="bezier" />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "smooth" ? "active" : ""}`} type="button" aria-label="Curva suave" title="Curva suave" onClick={() => onSketchTool("smooth")}>
-            <SketchReferenceIcon name="smooth" />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "circle" ? "active" : ""}`} type="button" aria-label="Círculo" title="Círculo paramétrico" onClick={() => onSketchTool("circle")}>
-            <SketchEntityCircleIcon />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "semicircle" ? "active" : ""}`} type="button" aria-label="Semicírculo" title="Semicírculo cerrado" onClick={() => onSketchTool("semicircle")}>
-            <SketchEntitySemicircleIcon />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "arc" ? "active" : ""}`} type="button" aria-label="Arco" title="Arco de 90°" onClick={() => onSketchTool("arc")}>
-            <SketchEntityArcIcon />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "rectangle" ? "active" : ""}`} type="button" aria-label="Rectángulo" title="Rectángulo centrado" onClick={() => onSketchTool("rectangle")}>
-            <SketchEntityRectangleIcon />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "ellipse" ? "active" : ""}`} type="button" aria-label="Elipse" title="Elipse paramétrica" onClick={() => onSketchTool("ellipse")}>
-            <SketchEntityCircleIcon />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "polygon" ? "active" : ""}`} type="button" aria-label="Polígono regular" title="Polígono regular paramétrico" onClick={() => onSketchTool("polygon")}>
-            <Hexagon />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "slot" ? "active" : ""}`} type="button" aria-label="Ranura" title="Ranura mecánica paramétrica" onClick={() => onSketchTool("slot")}>
-            <Minus />
-          </button>
-          <button
-            className="toolbar-icon sketch-tool-icon"
-            type="button"
-            aria-label="Agregar texto 3D"
-            title="Escribir texto y convertirlo en contornos 3D extruibles"
-            onClick={onSketchText}
-          >
-            <Type />
-          </button>
-          <button
-            className="toolbar-icon sketch-tool-icon"
-            type="button"
-            aria-label="Importar imagen o SVG 3D"
-            title="Importar SVG o vectorizar una imagen como contornos 3D extruibles"
-            onClick={onSketchVector}
-          >
-            <FileImage />
-          </button>
-          <button className="toolbar-icon sketch-tool-icon" type="button" aria-label="Proyectar silueta" title="Proyectar la silueta de las piezas seleccionadas" onClick={onSketchProject}>
-            <Pencil />
-          </button>
+          {draw('bezier','Curva Bézier',<SketchReferenceIcon name="bezier" />)}
+          {draw('smooth','Curva suave',<SketchReferenceIcon name="smooth" />)}
+          {draw('semicircle','Semicírculo',<SketchEntitySemicircleIcon />)}
+          {draw('arc','Arco',<SketchEntityArcIcon />)}
+          {draw('ellipse','Elipse',<SketchEntityCircleIcon />)}
+          {draw('polygon','Polígono regular',<Hexagon />)}
+          {draw('slot','Ranura',<Minus />)}
         </div>
-      </div>
-      <div className="toolbar-section sketch-edit-section">
-        <div className="toolbar-section-label">Seleccionar</div>
+        <strong>Referencia y edición precisa</strong>
         <div className="toolbar-section-tools">
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "select" ? "active" : ""}`} type="button" aria-label="Seleccionar" title="Seleccionar" onClick={() => onSketchTool("select")}>
-            <SketchReferenceIcon name="select" />
-          </button>
-          <button
-            className={`toolbar-icon sketch-tool-icon ${sketchTool === "select" ? "" : "disabled"}`}
-            type="button"
-            aria-label="Agregar imagen"
-            title={sketchTool === "select" ? "Agregar imagen" : "Elige Seleccionar para agregar una imagen"}
-            onClick={onSketchImage}
-            disabled={sketchTool !== "select"}
-          >
-            <SketchReferenceIcon name="image" />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "refine" ? "active" : ""}`} type="button" aria-label="Agregar o quitar puntos" title="Agregar o quitar puntos" onClick={() => onSketchTool("refine")}>
-            <SketchReferenceIcon name="refine" />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "erase" ? "active" : ""}`} type="button" aria-label="Borrar" title="Borrar" onClick={() => onSketchTool("erase")}>
-            <SketchReferenceIcon name="erase" />
-          </button>
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "trim" ? "active" : ""}`} type="button" aria-label="Recortar" title="Recortar croquis (al cruce más cercano)" onClick={() => onSketchTool("trim")}>
-            <Scissors size={20} />
-          </button>
+          <button type="button" onClick={onSketchText} aria-label="Agregar texto 3D"><Type />Texto</button>
+          <button type="button" onClick={onSketchVector} aria-label="Importar imagen o SVG 3D"><FileImage />Importar contorno</button>
+          <button type="button" onClick={() => { onSketchTool('select'); onSketchImage(); }} aria-label="Agregar imagen"><SketchReferenceIcon name="image" />Imagen de referencia</button>
+          <button type="button" onClick={onSketchProject} aria-label="Proyectar silueta" title="Proyectar contorno aproximado de las piezas seleccionadas"><Pencil />Proyectar contorno</button>
+          {draw('refine','Agregar o quitar puntos',<SketchReferenceIcon name="refine" />)}
+          {draw('trim','Recortar',<Scissors />)}
+          {draw('measure','Medir',<SketchReferenceIcon name="measure" />)}
         </div>
-      </div>
-      <div className="toolbar-section sketch-history-section">
-        <div className="toolbar-section-label">Historial</div>
-        <div className="toolbar-section-tools">
-          <button className={`toolbar-icon ${sketchCanUndo ? "" : "disabled"}`} type="button" aria-label="Deshacer boceto" title="Deshacer" onClick={onSketchUndo} disabled={!sketchCanUndo}>
-            <ToolbarUndoIcon />
-          </button>
-          <button className={`toolbar-icon ${sketchCanRedo ? "" : "disabled"}`} type="button" aria-label="Rehacer boceto" title="Rehacer" onClick={onSketchRedo} disabled={!sketchCanRedo}>
-            <ToolbarRedoIcon />
-          </button>
-        </div>
-      </div>
-      <div className="toolbar-section sketch-measure-section">
-        <div className="toolbar-section-label">Inspeccionar</div>
-        <div className="toolbar-section-tools">
-          <button className={`toolbar-icon sketch-tool-icon ${sketchTool === "measure" ? "active" : ""}`} type="button" aria-label="Medir" title="Medir" onClick={() => onSketchTool("measure")}>
-            <SketchReferenceIcon name="measure" />
-          </button>
-        </div>
-      </div>
+      </div></details>
+      <div className="toolbar-section sketch-history-section"><div className="toolbar-section-label">Historial</div><div className="toolbar-section-tools">
+        <button className="toolbar-icon" type="button" aria-label="Deshacer boceto" title="Deshacer" onClick={onSketchUndo} disabled={!sketchCanUndo}><ToolbarUndoIcon /></button>
+        <button className="toolbar-icon" type="button" aria-label="Rehacer boceto" title="Rehacer" onClick={onSketchRedo} disabled={!sketchCanRedo}><ToolbarRedoIcon /></button>
+      </div></div>
       <div className="toolbar-spacer" />
-      <div className="toolbar-section sketch-finish-section">
-        <div className="toolbar-section-label">Finalizar</div>
-        <div className="toolbar-section-tools">
-          <button className="sketch-command-button primary" type="button" onClick={onFinish}>
-            <Check />
-            <span>{finishLabel}</span>
-          </button>
-          <button className="sketch-command-button cancel" type="button" onClick={onCancel}>
-            <X />
-            <span>Cancelar</span>
-          </button>
-        </div>
-      </div>
-    </>
-  );
+      <div className="toolbar-section sketch-finish-section"><div className="toolbar-section-label">Finalizar</div><div className="toolbar-section-tools">
+        <button className="sketch-command-button primary" type="button" onClick={onFinish}><Check /><span>{finishLabel}</span></button>
+        <button className="sketch-command-button cancel" type="button" onClick={onCancel}><X /><span>Cancelar</span></button>
+      </div></div>
+    </>;
+  };
 
   return (
     <div className="secondary-toolbar">
@@ -12401,64 +10454,10 @@ function SecondaryToolbar({
       <div className="toolbar-section toolbar-selection-mode-section">
         <div className="toolbar-section-label">Seleccionar</div>
         <div className="toolbar-section-tools">
-          <button
-            className={`toolbar-icon selection-mode-chip ${topologyMode === "shape" ? "active" : ""}`}
-            type="button"
-            aria-label="Seleccionar cuerpo"
-            title="Seleccionar cuerpo completo (K)"
-            onClick={() => onTopologyModeChange("shape")}
-          >
-            <span>Cuerpo (K)</span>
-          </button>
-          <button
-            className={`toolbar-icon selection-mode-chip ${topologyMode === "face" ? "active" : ""} ${canTopologyPick ? "" : "disabled"}`}
-            type="button"
-            aria-label="Seleccionar cara"
-            title={canTopologyPick ? "Cara (C) — arrastra para empujar/estirar; Alt+arrastra para deslizar la cara en su plano" : "Selecciona una sola pieza desbloqueada"}
-            onClick={() => onTopologyModeChange("face")}
-          >
-            <span>Cara (C)</span>
-          </button>
-          <button
-            className={`toolbar-icon selection-mode-chip ${topologyMode === "vertex" ? "active" : ""} ${canTopologyPick ? "" : "disabled"}`}
-            type="button"
-            aria-label="Seleccionar vértice"
-            title={canTopologyPick ? "Vértice (V) — arrastra un vértice para moverlo; clic en una arista inserta un vértice" : "Selecciona una sola pieza desbloqueada"}
-            onClick={() => onTopologyModeChange("vertex")}
-          >
-            <span>Vértice (V)</span>
-          </button>
-          <button
-            className={`toolbar-icon selection-mode-chip ${topologyMode === "edge" ? "active" : ""} ${canTopologyPick ? "" : "disabled"}`}
-            type="button"
-            aria-label="Seleccionar línea"
-            title={canTopologyPick ? "Líneas (L) — arrastra una arista para moverla y estirar las caras adyacentes" : "Selecciona una sola pieza desbloqueada"}
-            onClick={() => onTopologyModeChange("edge")}
-          >
-            <span>Líneas (L)</span>
-          </button>
-          {canPushPull ? (
-            <form
-              className="push-pull-control"
-              onSubmit={(event) => {
-                event.preventDefault();
-                onPushPullApply();
-              }}
-            >
-              <input
-                className="push-pull-input"
-                type="number"
-                step="0.1"
-                aria-label="Distancia de empujar/estirar"
-                title="Distancia en mm (positiva estira hacia afuera, negativa empuja hacia adentro)"
-                value={pushPullDistance}
-                onChange={(event) => onPushPullDistanceChange(event.currentTarget.value)}
-              />
-              <button className="action-icon-button" type="submit" aria-label="Aplicar empujar/estirar" title="Aplicar empujar/estirar">
-                <ToolbarPushPullIcon />
-              </button>
-            </form>
-          ) : null}
+          <button type="button" className="toolbar-icon selection-mode-chip" disabled={!canTopologyPick}
+            title="Editar malla: vértices, aristas y caras (Tab)" aria-label="Editar malla"
+            onClick={() => onTopologyModeChange("vertex")}>Editar malla <kbd>Tab</kbd></button>
+
         </div>
       </div>
       <div className="toolbar-section geometry-create-section">
@@ -12478,30 +10477,33 @@ function SecondaryToolbar({
           {geometry2dOpen ? (
             <div className="geometry-2d-popover" role="dialog" aria-label="Dibujo 2D en geometría" onPointerDown={(event) => event.stopPropagation()}>
               <div className="geometry-2d-popover-header">
-                <div><strong>Dibujo 2D</strong><span>Directo sobre el viewport 3D</span></div>
+                <div><strong>Dibujo 2D</strong><span>Dibuja un contorno y después extruye o corta</span></div>
                 <button type="button" onClick={() => setGeometry2dOpen(false)} aria-label="Cerrar herramientas 2D"><X size={16} /></button>
               </div>
-              <div className="geometry-2d-popover-group">
-                <span className="geometry-2d-popover-label">Plano</span>
+              <details className="geometry-2d-popover-group"><summary>Plano de dibujo</summary>
+
                 <div className="geometry-2d-popover-row">
                   <button className={geometryPlaneMode === "auto" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("auto")} title="Detectar automáticamente la superficie bajo el cursor"><span>Superficie</span></button>
                   <button className={geometryPlaneMode === "base" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("base")}><span>Base</span></button>
-                  <button className={geometryPlaneMode === "offset" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("offset")}><span>Offset</span></button>
+                  <button className={geometryPlaneMode === "offset" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("offset")}><span>Altura</span></button>
                   {geometryPlaneMode === "offset" ? <input type="number" step="0.1" aria-label="Elevación del plano" value={geometryPlaneOffset} onChange={(event) => onGeometryPlaneOffset(event.currentTarget.value)} /> : null}
                 </div>
-              </div>
+              </details>
               <div className="geometry-2d-popover-group">
                 <span className="geometry-2d-popover-label">Dibujar</span>
                 <div className="geometry-2d-popover-row geometry-2d-tool-row">
                   <button className={geometryDrawTool === "pencil" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("pencil"); setGeometry2dOpen(false); }}><Pencil /><span>Lápiz</span></button>
                   <button className={geometryDrawTool === "circle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("circle"); setGeometry2dOpen(false); }}><SketchEntityCircleIcon /><span>Círculo</span></button>
-                  <button className={geometryDrawTool === "semicircle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("semicircle"); setGeometry2dOpen(false); }}><SketchEntitySemicircleIcon /><span>Semicírculo</span></button>
-                  <button className={geometryDrawTool === "arc" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("arc"); setGeometry2dOpen(false); }}><SketchEntityArcIcon /><span>Arco</span></button>
                   <button className={geometryDrawTool === "rectangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("rectangle"); setGeometry2dOpen(false); }}><SketchEntityRectangleIcon /><span>Rectángulo</span></button>
-                  <button className={geometryDrawTool === "triangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("triangle"); setGeometry2dOpen(false); }}><Triangle /><span>Triángulo</span></button>
-                  <button className={geometryDrawTool === "hexagon" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("hexagon"); setGeometry2dOpen(false); }}><Hexagon /><span>Hexágono</span></button>
                 </div>
               </div>
+              <details className="geometry-2d-popover-group"><summary>Más formas</summary><div className="geometry-2d-popover-row geometry-2d-tool-row">
+                  <button className={geometryDrawTool === "semicircle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("semicircle"); setGeometry2dOpen(false); }}><SketchEntitySemicircleIcon /><span>Semicírculo</span></button>
+                  <button className={geometryDrawTool === "arc" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("arc"); setGeometry2dOpen(false); }}><SketchEntityArcIcon /><span>Arco</span></button>
+                  <button className={geometryDrawTool === "triangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("triangle"); setGeometry2dOpen(false); }}><Triangle /><span>Triángulo</span></button>
+                  <button className={geometryDrawTool === "hexagon" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("hexagon"); setGeometry2dOpen(false); }}><Hexagon /><span>Hexágono</span></button>
+              </div></details>
+              {hasGeometryProfile ? (
               <div className="geometry-2d-popover-group">
                 <span className="geometry-2d-popover-label">Operación</span>
                 <div className="geometry-2d-popover-row geometry-2d-operation-row">
@@ -12511,6 +10513,7 @@ function SecondaryToolbar({
                   <button type="button" onClick={() => { onGeometryProfileCancel(); setGeometry2dOpen(false); }} disabled={!geometryDrawTool && !hasGeometryProfile}><X /><span>Cancelar</span></button>
                 </div>
               </div>
+              ) : <p className="geometry-2d-hint">Elige una forma y arrastra sobre el plano. Las operaciones aparecen al terminar el contorno.</p>}
             </div>
           ) : null}
         </div>

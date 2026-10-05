@@ -4,7 +4,6 @@
 .DESCRIPTION
     Uses esbuild to bundle dependencies, then Node.js SEA to compile into EXEs:
     - backend/server.js  → src-tauri/backends/stblock-backend-server.exe (port 3001)
-    - compile-proxy.mjs  → src-tauri/backends/compile-proxy.exe (port 8000)
 
     Also copies backend runtime data (lib/, node_modules/) alongside the server EXE.
 .NOTES
@@ -190,36 +189,6 @@ Invoke-SEACompile `
     -OutputExe (Join-Path $OutDir "stblock-backend-server.exe")
 
 # ═══════════════════════════════════════════════════════════════
-# Build 2: compile-proxy.mjs — compile-proxy.exe
-#
-# compile-proxy uses only Node.js built-in modules. Just compile
-# the single file with SEA.
-# ═══════════════════════════════════════════════════════════════
-
-Write-Host "`n[build-backends] ==== Compile Proxy (compile-proxy.mjs) ===="
-
-# compile-proxy uses ESM (import). We need to bundle it first.
-$ProxyBundle = Join-Path $TempDir "proxy-bundle.cjs"
-Write-Host "[build-backends] Bundling compile-proxy.mjs con esbuild..."
-& npx --yes esbuild (Join-Path $ProxyDir "compile-proxy.mjs") `
-    --bundle `
-    --platform=node `
-    --target=node20 `
-    --outfile=$ProxyBundle `
-    --minify `
-    --sourcemap=inline `
-    --external:none
-if ($LASTEXITCODE -ne 0) { throw "Error en esbuild bundle de compile-proxy.mjs" }
-
-if (-not (Test-Path $ProxyBundle)) { throw "No se generó el bundle: $ProxyBundle" }
-Write-Host "[build-backends] Bundle: $ProxyBundle ($((Get-Item $ProxyBundle).Length / 1KB) KB)"
-
-Invoke-SEACompile `
-    -Name "compile-proxy" `
-    -BundleJs $ProxyBundle `
-    -OutputExe (Join-Path $OutDir "compile-proxy.exe")
-
-# ═══════════════════════════════════════════════════════════════
 # Copy Gearbot data directory (maps, robots, assets) for bundling
 # ═══════════════════════════════════════════════════════════════
 $GearsDataDir = Join-Path $OutDir "backend\data\gears"
@@ -247,6 +216,5 @@ if (Test-Path $TempDir) {
 
 Write-Host "`n[build-backends] ✔ Compilación completada."
 Write-Host "  $(Join-Path $OutDir 'stblock-backend-server.exe')"
-Write-Host "  $(Join-Path $OutDir 'compile-proxy.exe')"
 $finalGearsPath = Join-Path $OutDir "backend\data\gears"
 Write-Host "  $finalGearsPath"

@@ -2938,6 +2938,21 @@ function initBlocklyProxy(generator, block, blocks) {
 }
 
 module.exports = {
+    arduino_stbv2motores_desactivarRetrasoArranque (block, blocks) {
+        initBlocklyProxy(this, block, blocks);
+        ensureStbV2MegaMoveHelpers();
+        return 'stbV2DisableStartDelay();\n';
+    },
+    arduino_stbv2motores_motoresConfigurados (block, blocks) {
+        initBlocklyProxy(this, block, blocks);
+        ensureStbV2MegaMoveHelpers();
+        return 'stbV2MotorsConfigured()';
+    },
+    arduino_stbv2precision_detenerPrecision (block, blocks) {
+        initBlocklyProxy(this, block, blocks);
+        ensureStbV2PrecisionRuntime();
+        return 'stbV2PrecisionStop();\n';
+    },
     stbv2puertos_moverServoPuerto (block, blocks) {
         block.getFieldValue = (name) => this.getFieldValue(block, name);
         block.getInputTargetBlock = (name) => {
@@ -6302,14 +6317,30 @@ module.exports = {
     // ============================================================
 
     'stbV2Serial_serialPrint' (block, blocks) {
-        Blockly.Arduino.setups_['setup_serial'] = 'Serial.begin(9600);';
-        var texto = this.generateValue(block, 'TEXTO', blocks) || '""';
+        if (typeof Blockly !== 'undefined' && Blockly && Blockly.Arduino && Blockly.Arduino.setups_) {
+            Blockly.Arduino.setups_['setup_serial'] = 'Serial.begin(9600);';
+        }
+        if (typeof this.addSetupCode === 'function') {
+            this.addSetupCode('Serial.begin(9600);');
+        }
+        var rawText = this.generateValue(block, 'TEXTO', blocks) ||
+            this.generateValue(block, 'VALUE', blocks) ||
+            this.generateValue(block, 'TEXT', blocks) || '""';
+        var texto = typeof this.normalizeArduinoPrintValue === 'function' ? this.normalizeArduinoPrintValue(rawText) : rawText;
         return 'Serial.print(' + texto + ');\n';
     },
 
     'stbV2Serial_serialPrintln' (block, blocks) {
-        Blockly.Arduino.setups_['setup_serial'] = 'Serial.begin(9600);';
-        var texto = this.generateValue(block, 'TEXTO', blocks) || '""';
+        if (typeof Blockly !== 'undefined' && Blockly && Blockly.Arduino && Blockly.Arduino.setups_) {
+            Blockly.Arduino.setups_['setup_serial'] = 'Serial.begin(9600);';
+        }
+        if (typeof this.addSetupCode === 'function') {
+            this.addSetupCode('Serial.begin(9600);');
+        }
+        var rawText = this.generateValue(block, 'TEXTO', blocks) ||
+            this.generateValue(block, 'VALUE', blocks) ||
+            this.generateValue(block, 'TEXT', blocks) || '""';
+        var texto = typeof this.normalizeArduinoPrintValue === 'function' ? this.normalizeArduinoPrintValue(rawText) : rawText;
         return 'Serial.println(' + texto + ');\n';
     },
 

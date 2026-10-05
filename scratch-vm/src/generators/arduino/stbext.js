@@ -2860,6 +2860,36 @@ function initBlocklyProxy(generator, block, blocks) {
 }
 
 module.exports = {
+    arduino_motores_desactivarTodosLosTriggers (block, blocks) {
+        initBlocklyProxy(this, block, blocks);
+        ensureSTBExtensionTriggerHelpers();
+        return 'stbExtDisableAllTriggers();\n';
+    },
+    arduino_motores_tipoMotoresSeleccionado (block, blocks) {
+        initBlocklyProxy(this, block, blocks);
+        ensureSTBExtensionBase();
+        return 'stbExtMotorType';
+    },
+    arduino_motores_motoresConfigurados (block, blocks) {
+        initBlocklyProxy(this, block, blocks);
+        ensureSTBExtensionBase();
+        return 'stbExtMotorConfig.configured';
+    },
+    arduino_motores_diametroRuedaConfigurado (block, blocks) {
+        initBlocklyProxy(this, block, blocks);
+        ensureSTBExtensionBase();
+        return 'stbExtMotorConfig.wheelDiameterCm';
+    },
+    arduino_motores_rpmMaxConfigurado (block, blocks) {
+        initBlocklyProxy(this, block, blocks);
+        ensureSTBExtensionBase();
+        return 'stbExtMotorConfig.maxRpm';
+    },
+    arduino_motores_anchoEntreRuedasConfigurado (block, blocks) {
+        initBlocklyProxy(this, block, blocks);
+        ensureSTBExtensionBase();
+        return 'stbExtMotorConfig.trackWidthCm';
+    },
     stbext_seleccionarTipoMotores (block, blocks) {
         block.getFieldValue = (name) => this.getFieldValue(block, name);
         block.getInputTargetBlock = (name) => {

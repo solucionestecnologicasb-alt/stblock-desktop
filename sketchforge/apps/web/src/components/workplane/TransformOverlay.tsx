@@ -237,7 +237,9 @@ export function TransformOverlay({
           key={handle.key}
           className={`rotate-handle ${handle.className}`}
           style={{ "--overlay-x": `${handle.x}px`, "--overlay-y": `${handle.y}px`, "--rotate-handle-angle": `${handle.angle}deg` } as CSSProperties}
-          title="Rotar"
+          title={'Rotar eje ' + (handle.key === 'rotate-left' ? 'X' : handle.key === 'rotate-right' ? 'Z' : 'Y')}
+          aria-label={'Rotar eje ' + (handle.key === 'rotate-left' ? 'X' : handle.key === 'rotate-right' ? 'Z' : 'Y')}
+          data-axis={handle.key === 'rotate-left' ? 'x' : handle.key === 'rotate-right' ? 'z' : 'y'}
           onPointerDown={(event) => {
             if (event.button === 0) {
               onBeginTransform("rotate", handle.key, event);
@@ -251,11 +253,7 @@ export function TransformOverlay({
             onBeginRotationEdit(handle.key, handle.x + 34, handle.y - 28);
           }}
         >
-          <span className="rotate-handle-icon" aria-hidden="true">
-            <svg viewBox="0 0 150 150" focusable="false">
-              <path d="m145.4 67.6-12.1 7.7c-6.6-10.8-22.1-27.4-43.6-31.5-3.7-0.7-8-1.3-14.1-1.3-21.5 0-41.5 9.8-55.1 28.9l-3.3 4.1-12.4-7.9c-1.3-0.7-3 0.1-2.9 1.8l1.1 36.1c0.3 1.7 2 2.5 3.1 1.7l30.2-17.6c1.4-0.6 1.4-2.9 0-3.5l-12.1-6.7c9.7-14.8 26.4-28.5 51.2-28.6 20.5-0.1 37.4 9.8 50.7 28.6l-12 6.5c-1.6 0.6-1.5 3.3 0 3.8l30.2 17.4c1.4 0.7 3 0 3-1.7l0.8-36c0-1.5-1.5-2.6-2.7-1.8z" />
-            </svg>
-          </span>
+          <span aria-hidden="true">↻ {handle.key === 'rotate-left' ? 'X' : handle.key === 'rotate-right' ? 'Z' : 'Y'}</span>
         </button>
       ))}
       {!hideDimensionMarks && rotationReadout ? (

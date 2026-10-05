@@ -563,7 +563,7 @@ class VirtualMachine extends EventEmitter {
      * @return {!Promise} Promise that resolves with a Blob of the .flynt zip.
      */
     async saveProjectFlynt (aiData, deviceData, circuitData, sketchforgeData,
-        programmingProjectData, programmingProjectArchive, pythonData) {
+        programmingProjectData, programmingProjectArchive, pythonData, circuit3dData) {
         const zip = new JSZip();
         let importedProgrammingArchive = false;
 
@@ -648,9 +648,16 @@ class VirtualMachine extends EventEmitter {
             }
         }
 
-        // Circuit data (Velxio state)
+        // Circuit data (legacy state)
         if (circuitData) {
             zip.file('devices/circuit-data.json', JSON.stringify(circuitData, null, 2));
+        }
+
+        // Circuit 3D data (Electronics Lab state)
+        if (circuit3dData) {
+            zip.file('devices/circuit3d-data.json', JSON.stringify(circuit3dData, null, 2));
+        } else if (deviceData && deviceData.circuit3dData) {
+            zip.file('devices/circuit3d-data.json', JSON.stringify(deviceData.circuit3dData, null, 2));
         }
 
         // SketchForge 3D project (.skf) - binary zip payload so the design travels
@@ -760,6 +767,12 @@ class VirtualMachine extends EventEmitter {
         // Clear the current runtime
         this.clear();
         this.runtime.setDeviceProfile(projectJSON.device || null, projectJSON.programMode || null, false);
+        const usedOpcodes = new Set((projectJSON.targets || []).flatMap(target =>
+            Object.values(target.blocks || {}).map(block => block.opcode)));
+        const inferredExtensions = require('./devices/extension-catalog.json')
+            .filter(extension => extension.blocks.some(block => usedOpcodes.has(`${extension.extensionId}_${block.opcode}`)))
+            .map(extension => extension.extensionId);
+        this.runtime.setDeviceExtensionIds(projectJSON.deviceExtensions || inferredExtensions, false);
 
         if (typeof performance !== 'undefined') {
             performance.mark('scratch-vm-deserialize-start');
@@ -1987,6 +2000,7 @@ class VirtualMachine extends EventEmitter {
             readFile('devices/terminal.json', 'terminalHistory');
             readFile('devices/connection-state.json', 'connectionState');
             readFile('devices/circuit-data.json', 'circuitData');
+            readFile('devices/circuit3d-data.json', 'circuit3dData');
             // Also read AI conversation for completeness
             readFile('ai/conversation.json', 'conversation');
 

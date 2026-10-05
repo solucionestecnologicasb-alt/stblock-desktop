@@ -11,8 +11,7 @@ import DeviceExtensionLibrary from '../device-extension-library/device-extension
 // Icons for tabs
 import codeIcon from '../gui/icon--code.svg';
 
-// Velxio Circuit Simulator
-import VelxioCircuit from '../velxio-circuit/velxio-circuit.jsx';
+import ElectronicsLabPanel from '../electronics-lab/electronics-lab-panel.jsx';
 
 // Lock icons for code editor
 import lockIcon from './icon--lock.svg';
@@ -21,7 +20,8 @@ import unlockIcon from './icon--unlock.svg';
 // Custom icons for device mode tabs (base64 encoded SVGs)
 const simulatorIcon = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIyIiB5PSIzIiB3aWR0aD0iMTYiIGhlaWdodD0iMTIiIHJ4PSIyIiBmaWxsPSIjODU1Q0Q2Ii8+PHJlY3QgeD0iNCIgeT0iNSIgd2lkdGg9IjEyIiBoZWlnaHQ9IjgiIHJ4PSIxIiBmaWxsPSIjRTlFMEZGIi8+PHJlY3QgeD0iNiIgeT0iMTYiIHdpZHRoPSI4IiBoZWlnaHQ9IjIiIHJ4PSIxIiBmaWxsPSIjODU1Q0Q2Ii8+PC9zdmc+';
 
-const circuitIcon = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI1IiBjeT0iNSIgcj0iMiIgZmlsbD0iIzg1NUNENiIvPjxjaXJjbGUgY3g9IjE1IiBjeT0iNSIgcj0iMiIgZmlsbD0iIzg1NUNENiIvPjxjaXJjbGUgY3g9IjUiIGN5PSIxNSIgcj0iMiIgZmlsbD0iIzg1NUNENiIvPjxjaXJjbGUgY3g9IjE1IiBjeT0iMTUiIHI9IjIiIGZpbGw9IiM4NTVDRDYiLz48cGF0aCBkPSJNNSA3VjEzTTE1IDdWMTNNNyA1SDEzTTcgMTVIMTMiIHN0cm9rZT0iIzg1NUNENiIgc3Ryb2tlLXdpZHRoPSIyIi8+PHJlY3QgeD0iOCIgeT0iOCIgd2lkdGg9IjQiIGhlaWdodD0iNCIgcng9IjEiIGZpbGw9IiM4NTVDRDYiLz48L3N2Zz4=';
+
+const circuit3dIcon = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkwzIDdMMTIgMTJMMjEgN0wxMiAyWiIgc3Ryb2tlPSIjODU1Q0Q2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0zIDdWMTdMMTIgMjJWMTIiIHN0cm9rZT0iIzg1NUNENiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNMjEgN1YxN0wxMiAyMiIgc3Ryb2tlPSIjODU1Q0Q2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iNyIgcj0iMS41IiBmaWxsPSIjODU1Q0Q2Ii8+PGNpcmNsZSBjeD0iNy41IiBjeT0iMTQuNSIgcj0iMS41IiBmaWxsPSIjODU1Q0Q2Ii8+PGNpcmNsZSBjeD0iMTYuNSIgY3k9IjE0LjUiIHI9IjEuNSIgZmlsbD0iIzg1NUNENiIvPjwvc3ZnPg==';
 
 // Size toggle icons
 const largeSizeIcon = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIyIiB5PSIyIiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHJ4PSIyIiBzdHJva2U9IiM1NzVFNzUiIHN0cm9rZS13aWR0aD0iMS41IiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTYgNkwxNCAxNE0xNCA2TDYgMTQiIHN0cm9rZT0iIzU3NUU3NSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz48L3N2Zz4=';
@@ -566,7 +566,7 @@ const SimulatorPanel = ({code, deviceId, active, onSerialOutput, onStatusChange}
     const [isRunning, setIsRunning] = useState(false);
     const [gearbotReady, setGearbotReady] = useState(false);
     const [currentRobot, setCurrentRobot] = useState(null);
-    const iframeUrl = 'static/velxio/gears/index.html?stblockWebGL=1-v11&embedded=1';
+    const iframeUrl = 'static/gears/index.html?stblockWebGL=1-v11&embedded=1';
 
     // Listen for messages from the iframe (Gearbot)
     useEffect(() => {
@@ -776,36 +776,7 @@ SimulatorPanel.propTypes = {
     onStatusChange: PropTypes.func
 };
 
-// Circuits Panel (Velxio simulator)
-// Usamos un wrapper que siempre mantiene VelxioCircuit montado
-// pero lo oculta visualmente cuando no está activo
-const CircuitsPanel = ({code, deviceId, active, componentRef, onSerialOutput, onStateChange}) => (
-    <div style={{
-        width: '100%',
-        height: '100%',
-        display: active ? 'flex' : 'none',
-        minWidth: 0,
-        minHeight: 0
-    }}>
-        <VelxioCircuit
-            ref={componentRef}
-            code={code}
-            deviceId={deviceId}
-            active={active}
-            onSerialOutput={onSerialOutput}
-            onStateChange={onStateChange}
-        />
-    </div>
-);
 
-CircuitsPanel.propTypes = {
-    code: PropTypes.string,
-    deviceId: PropTypes.string,
-    active: PropTypes.bool,
-    componentRef: PropTypes.object,
-    onSerialOutput: PropTypes.func,
-    onStateChange: PropTypes.func
-};
 
 // Vertical Resizer Component for Code/Terminal split
 const VerticalResizer = ({onResize}) => {
@@ -864,6 +835,7 @@ VerticalResizer.propTypes = {
 
 // Main Device Mode GUI Component
 const DeviceModeGUI = ({
+    vm,
     code,
     terminalOutput,
     terminalSettings,
@@ -887,9 +859,8 @@ const DeviceModeGUI = ({
     onCodeLockChange,
     onManualCodeChange,
     onUploadFirmware,
-    velxioRef,
-    onVelxioSerialOutput,
-    onVelxioStateChange
+    electronicsLabRef,
+    onSimulatorSerialOutput
 }) => {
     // Size mode state - default to small view
     const [isLarge, setIsLarge] = useState(false);
@@ -970,7 +941,14 @@ const DeviceModeGUI = ({
 
     // Device extension library state
     const [extensionLibraryVisible, setExtensionLibraryVisible] = useState(false);
-    const [loadedExtensions, setLoadedExtensions] = useState([]);
+    const [loadedExtensions, setLoadedExtensions] = useState(() => vm ? vm.runtime.getDeviceExtensionIds() : []);
+    useEffect(() => {
+        if (!vm) return undefined;
+        const sync = () => setLoadedExtensions(vm.runtime.getDeviceExtensionIds());
+        sync();
+        vm.runtime.on('DEVICE_EXTENSIONS_CHANGED', sync);
+        return () => vm.runtime.removeListener('DEVICE_EXTENSIONS_CHANGED', sync);
+    }, [vm]);
 
     // Handle open extension library
     const handleOpenExtensionLibrary = useCallback(() => {
@@ -988,13 +966,11 @@ const DeviceModeGUI = ({
 
         if (isAlreadyLoaded) {
             // Deselect: remove from loaded list and deactivate blocks
-            setLoadedExtensions(prev => prev.filter(id => id !== extension.extensionId));
             if (onDeactivateExtension) {
                 onDeactivateExtension(extension);
             }
         } else {
             // Select: add to loaded list and activate blocks
-            setLoadedExtensions(prev => [...prev, extension.extensionId]);
             if (onActivateExtension) {
                 onActivateExtension(extension);
             }
@@ -1002,19 +978,25 @@ const DeviceModeGUI = ({
         setExtensionLibraryVisible(false);
     }, [loadedExtensions, onActivateExtension, onDeactivateExtension]);
 
-
-
     // Tab configuration
     const tabsConfig = useMemo(() => [
         {id: 'code', label: <span>Código</span>, icon: codeIcon},
         {id: 'simulator', label: <span>Simulador</span>, icon: simulatorIcon},
-        {id: 'circuits', label: <span>Circuitos</span>, icon: circuitIcon}
+        {id: 'circuits3d', label: <span>Circuito 3D</span>, icon: circuit3dIcon}
     ], []);
+
+    // Split mode computation
+    const isInSplit = splitMode && splitPrimaryIndex != null &&
+        (activeTabIndex === splitPrimaryIndex || activeTabIndex === secondaryTabIndex);
+    const partnerIndex = isInSplit ?
+        (activeTabIndex === splitPrimaryIndex ? secondaryTabIndex : splitPrimaryIndex) :
+        null;
+    const showSplit = partnerIndex != null;
 
     // Panels for tabs
     const effectiveCode = isCodeLocked ? code : manualCode;
-    const isCircuitsVisible = activeTabIndex === 2 || secondaryTabIndex === 2;
-    const velxioDeviceId = device?.deviceId || device?.id || null;
+    const isCircuits3DVisible = activeTabIndex === 2 || secondaryTabIndex === 2 || (showSplit && partnerIndex === 2);
+    const currentDeviceId = device?.deviceId || device?.id || null;
 
     const blocksPanel = useMemo(() => (
         <BlocksPanel
@@ -1025,26 +1007,24 @@ const DeviceModeGUI = ({
     const simulatorPanel = useMemo(() => (
         <SimulatorPanel
             code={effectiveCode}
-            deviceId={velxioDeviceId}
-            active={activeTabIndex === 1 || secondaryTabIndex === 1}
-            onSerialOutput={onVelxioSerialOutput}
+            deviceId={currentDeviceId}
+            active={activeTabIndex === 1 || secondaryTabIndex === 1 || (showSplit && partnerIndex === 1)}
+            onSerialOutput={onSimulatorSerialOutput}
         />
-    ), [effectiveCode, velxioDeviceId, activeTabIndex, secondaryTabIndex, onVelxioSerialOutput]);
+    ), [effectiveCode, currentDeviceId, activeTabIndex, secondaryTabIndex, showSplit, partnerIndex, onSimulatorSerialOutput]);
 
-    const circuitsPanel = useMemo(() => (
-        <CircuitsPanel
+    const circuits3DPanel = useMemo(() => (
+        <ElectronicsLabPanel
+            ref={electronicsLabRef}
             code={effectiveCode}
-            deviceId={velxioDeviceId}
-            active={isCircuitsVisible}
-            componentRef={velxioRef}
-            onSerialOutput={onVelxioSerialOutput}
-            onStateChange={onVelxioStateChange}
+            deviceId={currentDeviceId}
+            active={isCircuits3DVisible}
+            pointerEvents={isDragToSplit ? 'none' : 'auto'}
         />
-    ), [effectiveCode, velxioDeviceId, isCircuitsVisible, velxioRef,
-        onVelxioSerialOutput, onVelxioStateChange]);
+    ), [isCircuits3DVisible, electronicsLabRef, effectiveCode, currentDeviceId, isDragToSplit]);
 
-    const panels = useMemo(() => [blocksPanel, simulatorPanel, circuitsPanel],
-        [blocksPanel, simulatorPanel, circuitsPanel]);
+    const panels = useMemo(() => [blocksPanel, simulatorPanel, circuits3DPanel],
+        [blocksPanel, simulatorPanel, circuits3DPanel]);
 
     const handleTabClick = useCallback(index => {
         if (index === -1) {
@@ -1054,15 +1034,19 @@ const DeviceModeGUI = ({
         setActiveTabIndex(index);
     }, [splitMode, splitPrimaryIndex]);
 
-    const handleSetSecondaryTab = useCallback((index) => {
-        if (index === null) {
+    const handleSetSecondaryTab = useCallback((secIndex, primIndex) => {
+        if (secIndex === null) {
             setSecondaryTabIndex(null);
             setSplitMode(false);
             setSplitPrimaryIndex(null);
         } else {
-            setSecondaryTabIndex(index);
+            const effectivePrimary = primIndex !== undefined ? primIndex : activeTabIndex;
+            setSecondaryTabIndex(secIndex);
             setSplitMode(true);
-            setSplitPrimaryIndex(activeTabIndex);
+            setSplitPrimaryIndex(effectivePrimary);
+            if (primIndex !== undefined && primIndex !== activeTabIndex) {
+                setActiveTabIndex(primIndex);
+            }
         }
     }, [activeTabIndex]);
 
@@ -1070,6 +1054,7 @@ const DeviceModeGUI = ({
         const temp = activeTabIndex;
         setActiveTabIndex(secondaryTabIndex);
         setSecondaryTabIndex(temp);
+        setSplitPrimaryIndex(secondaryTabIndex);
     }, [activeTabIndex, secondaryTabIndex]);
 
     const handleTabReorder = useCallback(newOrder => {
@@ -1090,13 +1075,6 @@ const DeviceModeGUI = ({
         setSplitMode(false);
         setSplitPrimaryIndex(null);
     }, []);
-
-    const isInSplit = splitMode && splitPrimaryIndex != null &&
-        (activeTabIndex === splitPrimaryIndex || activeTabIndex === secondaryTabIndex);
-    const partnerIndex = isInSplit ?
-        (activeTabIndex === splitPrimaryIndex ? secondaryTabIndex : splitPrimaryIndex) :
-        null;
-    const showSplit = partnerIndex != null;
 
     return (
     <>
@@ -1184,7 +1162,10 @@ const DeviceModeGUI = ({
                             onSwap={handleSwapTabs}
                         />
                         {isDragToSplit && !showSplit && dragZone && (
-                            <div className={classNames(styles.dropIndicator, dragZone === 'left' ? styles.dropLeft : styles.dropRight)}>
+                            <div className={classNames(
+                                styles['drop-indicator'] || styles.dropIndicator,
+                                dragZone === 'left' ? (styles['drop-left'] || styles.dropLeft) : (styles['drop-right'] || styles.dropRight)
+                            )}>
                                 <span>Soltar aquí para pantalla dividida</span>
                             </div>
                         )}
@@ -1196,6 +1177,7 @@ const DeviceModeGUI = ({
         <DeviceExtensionLibrary
             visible={extensionLibraryVisible}
             loadedExtensions={loadedExtensions}
+            device={device}
             onSelectExtension={handleSelectExtension}
             onClose={handleCloseExtensionLibrary}
         />
@@ -1204,6 +1186,7 @@ const DeviceModeGUI = ({
 };
 
 DeviceModeGUI.propTypes = {
+    vm: PropTypes.object,
     code: PropTypes.string,
     terminalOutput: PropTypes.array,
     terminalSettings: PropTypes.shape({
@@ -1234,9 +1217,8 @@ DeviceModeGUI.propTypes = {
     onCodeLockChange: PropTypes.func,
     onManualCodeChange: PropTypes.func,
     onUploadFirmware: PropTypes.func,
-    velxioRef: PropTypes.object,
-    onVelxioSerialOutput: PropTypes.func,
-    onVelxioStateChange: PropTypes.func
+    electronicsLabRef: PropTypes.object,
+    onSimulatorSerialOutput: PropTypes.func
 };
 
 DeviceModeGUI.defaultProps = {

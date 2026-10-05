@@ -169,14 +169,6 @@ const buildConfig = baseConfig.clone()
                 to: 'static'
             },
             {
-                from: 'static/velxio/boards/**',
-                to: 'boards'
-            },
-            {
-                from: 'static/velxio/component-svgs/**',
-                to: 'component-svgs'
-            },
-            {
                 from: 'extensions/**',
                 to: 'static',
                 context: 'src/examples'
@@ -269,16 +261,12 @@ function forwardPollinationsPost(req, res) {
 }
 
 // ── Dev server: servir archivos estaticos desde static/ ──
-// Necesario para el iframe del simulador Gearbot (static/velxio/gears/index.html)
+// Necesario para el iframe del simulador Gearbot (static/gears/index.html)
 if (!buildDist && !Array.isArray(finalConfig)) {
     finalConfig.devServer = finalConfig.devServer || {};
     finalConfig.devServer.static = [
         {
             directory: path.resolve(__dirname, 'public'),
-            publicPath: '/'
-        },
-        {
-            directory: path.resolve(__dirname, 'static/velxio'),
             publicPath: '/'
         },
         {

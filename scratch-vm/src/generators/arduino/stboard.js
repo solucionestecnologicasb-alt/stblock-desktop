@@ -188,18 +188,27 @@ analogWrite(${pinB}, ${b});\n`;
 
     // Read ultrasonic sensor
     leerUltrasonico (block, blocks) {
-        const trigPin = this.getFieldValue(block, 'TRIG') || this.generateValue(block, 'TRIG', blocks) || '9';
-        const echoPin = this.getFieldValue(block, 'ECHO') || this.generateValue(block, 'ECHO', blocks) || '10';
-        this.addSetupCode(`pinMode(${trigPin}, OUTPUT);`);
-        this.addSetupCode(`pinMode(${echoPin}, INPUT);`);
-        return `([]() {
-    digitalWrite(${trigPin}, LOW);
-    delayMicroseconds(2);
-    digitalWrite(${trigPin}, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(${trigPin}, LOW);
-    return pulseIn(${echoPin}, HIGH) * 0.034 / 2;
-})()`;
+        const trigPin = this.generateValue(block, 'TRIG', blocks) || this.getFieldValue(block, 'TRIG') || '9';
+        const echoPin = this.generateValue(block, 'ECHO', blocks) || this.getFieldValue(block, 'ECHO') || '10';
+        this.addFunction('readUltrasonicDistance', `float readUltrasonicDistance(int triggerPin, int echoPin) {
+  pinMode(triggerPin, OUTPUT);
+  digitalWrite(triggerPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(triggerPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(triggerPin, LOW);
+  pinMode(echoPin, INPUT);
+  return pulseIn(echoPin, HIGH) * 0.01723;
+}`);
+        return `readUltrasonicDistance(${trigPin}, ${echoPin})`;
+    },
+
+    ultrasonic_readDistance (block, blocks) {
+        return (this.generators?.leerUltrasonico || this.leerUltrasonico).call(this, block, blocks);
+    },
+
+    ultrasonic_ultrasonic_readDistance (block, blocks) {
+        return (this.generators?.leerUltrasonico || this.leerUltrasonico).call(this, block, blocks);
     },
 
     // ============================================

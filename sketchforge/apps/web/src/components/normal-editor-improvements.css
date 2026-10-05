@@ -1,0 +1,27 @@
+.placement-instructions { position:absolute;bottom:54px;left:50%;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:12px;max-width:90%;padding:10px 14px;border:1px solid #009cde;border-radius:9px;background:#f6fcff;color:#214e66;box-shadow:0 4px 18px #23394d20;font-size:13px; }
+.placement-instructions button { white-space:nowrap;border:1px solid #b4d0df;border-radius:5px;background:white;padding:6px 10px;cursor:pointer; }
+.sketchforge-editor[data-placement-active="true"] .secondary-toolbar,
+.sketchforge-editor[data-placement-active="true"] .shape-inspector,
+.sketchforge-editor[data-placement-active="true"] .transform-overlay { pointer-events:none;opacity:.35; }
+.sketchforge-editor[data-placement-active="true"] .transform-overlay { visibility:hidden; }
+.sketchforge-editor[data-placement-active="true"] .three-workplane-host { cursor:crosshair; }
+.transform-overlay .rotate-handle { width:44px;height:30px;border:1px solid currentColor;border-radius:15px;background:#fff;box-shadow:0 2px 6px #18334422;font-size:12px;font-weight:700;transform:translate3d(var(--overlay-x,0),var(--overlay-y,0),0) translate(-50%,-50%); }
+.transform-overlay .rotate-handle[data-axis="x"] { color:#bb3343; }
+.transform-overlay .rotate-handle[data-axis="y"] { color:#238747; }
+.transform-overlay .rotate-handle[data-axis="z"] { color:#2873c7; }
+.sketch-more-tools { position:relative;align-self:center;margin:0 8px;font-size:12px; }
+.sketch-more-tools summary { cursor:pointer;padding:9px 12px;border:1px solid #ccdce6;border-radius:6px;background:white; }
+.sketch-more-tools-content { position:absolute;left:0;top:100%;z-index:110;display:grid;gap:10px;width:340px;max-width:80vw;max-height:65vh;overflow:auto;padding:14px;background:white;border:1px solid #ccdce6;border-radius:8px;box-shadow:0 5px 18px #23394d22; }
+.sketch-more-tools-content .toolbar-section-tools { display:flex;flex-wrap:wrap;gap:6px; }
+.sketch-more-tools-content button { display:flex;align-items:center;gap:5px;width:auto!important;min-height:34px;padding:5px 8px!important;border:1px solid #d9e4ec;border-radius:5px;background:#fff;font-size:12px; }
+.sketch-more-tools-content button svg,.sketch-more-tools-content button img { width:22px;height:22px; }
+.sketch-essential-tools .toolbar-icon { width:auto;min-width:50px;display:flex;flex-direction:column;height:auto;gap:2px;padding:3px 6px; }
+.sketch-essential-tools .toolbar-icon span { font-size:10px; }
+.geometry-2d-popover details summary { cursor:pointer;padding:5px 0;font-size:12px;font-weight:600;color:#426075; }
+.geometry-2d-hint { padding:8px 12px;color:#617788;font-size:12px; }
+@media(max-width:800px) { .placement-instructions {font-size:11px;bottom:45px;} .sketch-more-tools-content {left:auto;right:0;} }
+
+.sketch-more-tools summary,.sketch-more-tools-content,.sketch-more-tools-content button { color:#31465d; }
+
+.sketch-workspace-stage .sketch-plate-wrap { display:block; }
+.sketch-workspace-stage .sketch-plate { position:absolute;inset:0;min-width:0;min-height:0;width:100%;height:100%; }

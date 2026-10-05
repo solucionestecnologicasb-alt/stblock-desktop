@@ -107,8 +107,10 @@ class LibraryItem extends React.PureComponent {
     }
     render () {
         const iconMd5 = this.curIconMd5();
+        // Miniatura local: el espejo de la biblioteca se genera con
+        // `node scripts/sync-scratch-assets.mjs`. Así la biblioteca se ve sin internet.
         const iconURL = iconMd5 ?
-            `https://cdn.assets.scratch.mit.edu/internalapi/asset/${iconMd5}/get/` :
+            `static/scratch-assets/${iconMd5}` :
             this.props.iconRawURL;
         return (
             <LibraryItemComponent

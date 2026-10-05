@@ -114,9 +114,12 @@ import {
     getProgramMode,
     ConnectionState,
     getCircuitData,
+    getCircuit3dData,
     restoreDeviceState,
     setCircuitData,
     clearCircuitData,
+    setCircuit3dData,
+    clearCircuit3dData,
     getSketchforgeData,
     clearSketchforgeData
 } from '../../reducers/device-mode';
@@ -136,7 +139,6 @@ import {
 import {ArduinoUploader, STBLOCK_LINK_DOWNLOAD_URL} from '../../lib/arduino-uploader';
 import {openConnectionModal} from '../../reducers/modals';
 import {setConnectionModalExtensionId} from '../../reducers/connection-modal';
-import {getVelxioStateKey} from '../velxio-circuit/velxio-circuit.jsx';
 
 const messages = defineMessages({
     addExtension: {
@@ -367,11 +369,14 @@ const GUIComponent = props => {
         onSetCodeLocked,
         onSetManualCode,
         circuitData,
+        circuit3dData,
         sketchforgeSkf,
         deviceModeProgramMode,
         onRestoreDeviceState,
         onSetCircuitData,
         onClearCircuitData,
+        onSetCircuit3dData,
+        onClearCircuit3dData,
         onClearSketchforgeData,
         onSetSketchforgeData, // Evita propagar al DOM Box
         enableCommunity,
@@ -431,7 +436,7 @@ const GUIComponent = props => {
     }
 
     const selectedDevice = deviceModeDevice;
-    const velxioRef = useRef(null);
+    const electronicsLabRef = useRef(null);
     // Executor de Python (se crea una sola vez). Se usa para ejecutar el código
     // del panel Python cuando la bandera verde se pulsa en modo edición Python.
     const pythonExecutorRef = useRef(null);
@@ -470,9 +475,10 @@ const GUIComponent = props => {
     const [showSTBlockLinkPrompt, setShowSTBlockLinkPrompt] = useState(false);
     const [stbBoardPinoutVisible, setStbBoardPinoutVisible] = useState(false);
     const [adminEditorModalOpen, setAdminEditorModalOpen] = useState(false);
-    const [adminEditorUrl, setAdminEditorUrl] = useState('static/velxio/gears/editor/index.html');
+    const [adminEditorUrl, setAdminEditorUrl] = useState('static/gears/editor/index.html');
     const [updateInfo, setUpdateInfo] = useState(null);
     const [updateInstalling, setUpdateInstalling] = useState(false);
+    const [updateProgress, setUpdateProgress] = useState(null);
 
     const [classroomSetupOpen, setClassroomSetupOpen] = useState(false);
     const [classroomConsoleOpen, setClassroomConsoleOpen] = useState(false);
@@ -1196,9 +1202,9 @@ const GUIComponent = props => {
             const now = Date.now();
             if (now - lastPythonFloodLogRef.current > 3000) {
                 lastPythonFloodLogRef.current = now;
-                
             }
             queueClassroomSnapshot();
+            window.dispatchEvent(new CustomEvent('stblock-project-changed'));
         }
     }, [pythonCodePerTarget, queueClassroomSnapshot]);
 
@@ -1636,6 +1642,8 @@ const GUIComponent = props => {
     }, [deviceMode, workspaceHandle, currentTargetId]);
 
     const runUpdateCheck = useCallback(async ({manual = false} = {}) => {
+        setUpdateProgress(null);
+        setUpdateInstalling(false);
         try {
             const result = await checkForSTBlockUpdates({manual});
             if (result.status === 'available') {
@@ -1667,18 +1675,36 @@ const GUIComponent = props => {
             dismissRecommendedUpdate(updateInfo.latestVersion);
         }
         setUpdateInfo(null);
+        setUpdateInstalling(false);
+        setUpdateProgress(null);
     }, [updateInfo]);
 
     const handleInstallUpdate = useCallback(async () => {
         setUpdateInstalling(true);
+        setUpdateProgress({
+            stage: 'connecting',
+            percent: 0,
+            downloadedBytes: 0,
+            totalBytes: 0,
+            downloadedFormatted: '0 MB',
+            totalFormatted: 'Calculando...',
+            speedFormatted: 'Iniciando...',
+            etaFormatted: null,
+            statusText: 'Conectando con el servidor de descargas...'
+        });
+
         try {
-            await installPendingSTBlockUpdate();
+            await installPendingSTBlockUpdate(progressData => {
+                setUpdateProgress(progressData);
+            });
         } catch (e) {
             setUpdateInstalling(false);
+            setUpdateProgress(null);
             setUpdateInfo({
                 status: 'error',
                 mandatory: Boolean(updateInfo && updateInfo.mandatory),
-                title: 'No se pudo instalar la actualización',
+                canInstall: true,
+                title: 'No se pudo completar la actualización',
                 message: e.message || String(e),
                 currentVersion: updateInfo && updateInfo.currentVersion ? updateInfo.currentVersion : 'Actual',
                 latestVersion: updateInfo && updateInfo.latestVersion ? updateInfo.latestVersion : 'No disponible'
@@ -1718,7 +1744,7 @@ const GUIComponent = props => {
     useEffect(() => {
         var openEditor = function (source, customUrl) {
             console.log('[DEBUG-STB] 🚀 openEditor invocado desde:', source || 'desconocido');
-            const targetUrl = customUrl || 'static/velxio/gears/editor/index.html';
+            const targetUrl = customUrl || 'static/gears/editor/index.html';
             setAdminEditorUrl(targetUrl);
             setAdminEditorModalOpen(true);
             console.log('[DEBUG-STB] ✅ Modal de Administración abierto con URL:', targetUrl);
@@ -1741,11 +1767,11 @@ const GUIComponent = props => {
         var handleMessage = async function (event) {
             if (event.data && event.data.type === 'stblock-open-world-editor') {
                 console.log('[DEBUG-STB] Mensaje postMessage stblock-open-world-editor recibido');
-                openEditor('postMessage-world-editor', 'static/velxio/gears/editor/index.html');
+                openEditor('postMessage-world-editor', 'static/gears/editor/index.html');
             }
             if (event.data && event.data.type === 'stblock-open-robot-editor') {
                 console.log('[DEBUG-STB] Mensaje postMessage stblock-open-robot-editor recibido');
-                var robotEditorUrl = event.data.editorPath || 'static/velxio/gears/editor/index.html?mode=robots';
+                var robotEditorUrl = event.data.editorPath || 'static/gears/editor/index.html?mode=robots';
                 openEditor('postMessage-robot-editor', robotEditorUrl);
             }
             if (event.data && event.data.type === 'stblock-save-json') {
@@ -1901,6 +1927,7 @@ const GUIComponent = props => {
                 const hasBlocks = hasBlocksInWorkspace();
 
                 onSaveDeviceProject(deviceModeDevice.deviceId, projectData, hasBlocks);
+                window.dispatchEvent(new CustomEvent('stblock-project-changed'));
             } catch (e) {
                 console.warn('[GUI] Error saving device project:', e);
             }
@@ -1911,6 +1938,7 @@ const GUIComponent = props => {
         try {
             programmingProjectRef.current = vm.toJSON();
             programmingProjectArchiveRef.current = vm.saveProjectSb3();
+            window.dispatchEvent(new CustomEvent('stblock-project-changed'));
             console.info('[WorkspaceMode] Programación guardada'); // eslint-disable-line no-console
         } catch (e) {
             console.warn('[WorkspaceMode] No se pudo guardar Programación:', e);
@@ -2219,24 +2247,9 @@ const GUIComponent = props => {
     // Trigger code generation when entering device mode or when workspace is ready
     useEffect(() => {
         if (deviceMode === 'device' && workspaceHandle && workspaceHandle.workspace && workspaceHandle.ScratchBlocks) {
-            // Import and initialize Arduino generator for immediate code generation
-            import('../../lib/arduino-generator').then(async module => {
-                const initArduinoGenerator = module.default;
-                try {
-                    // initArduinoGenerator is now async
-                    const generator = await initArduinoGenerator(workspaceHandle.ScratchBlocks);
-                    const code = generator.workspaceToCode(workspaceHandle.workspace);
-                    if (onSetCodeViewContent) {
-                        onSetCodeViewContent(code);
-                    }
-                } catch (e) {
-                    console.warn('[GUI] Error generating initial Arduino code:', e);
-                }
-            }).catch(e => {
-                console.warn('[GUI] Failed to load Arduino generator:', e);
-            });
+            vm.requestCodeUpdate();
         }
-    }, [deviceMode, workspaceHandle, onSetCodeViewContent]);
+    }, [deviceMode, workspaceHandle, vm]);
 
     // Listen for peripheral connection events
     useEffect(() => {
@@ -2463,20 +2476,15 @@ const GUIComponent = props => {
     }, [vm, onAppendDeviceTerminal]);
 
 
-    const handleVelxioSerialOutput = useCallback(text => {
-        const value = typeof text === 'string' ? text : String(text || '');
-        if (!value) return;
-        onAppendDeviceTerminal({
-            text: value,
+    const handleSimulatorSerialOutput = useCallback(output => {
+        if (!output) return;
+        const item = typeof output === 'string' ? {
+            text: output,
             type: 'info',
-            timestamp: new Date().toLocaleTimeString(),
-            source: 'velxio'
-        });
+            timestamp: new Date().toLocaleTimeString()
+        } : output;
+        onAppendDeviceTerminal(item);
     }, [onAppendDeviceTerminal]);
-
-    const handleVelxioStateChange = useCallback(state => {
-        if (state) onSetCircuitData(state);
-    }, [onSetCircuitData]);
 
     const handleOpenClassroom = useCallback(() => {
         const s = classroomStateRef.current;
@@ -2504,27 +2512,41 @@ const GUIComponent = props => {
         }
     }, []);
 
-    // Restaurar circuito cuando circuitData cambia (despues de cargar .flynt)
-    useEffect(() => {
-        if (!circuitData || !velxioRef.current) return;
 
-        const restore = async () => {
+    // Restaurar Circuito 3D cuando circuit3dData cambia (despues de cargar .flynt)
+    useEffect(() => {
+        if (!circuit3dData) return;
+
+        const restore3D = async () => {
             try {
-                if (velxioRef.current && velxioRef.current.loadCircuitState) {
-                    const result = await velxioRef.current.loadCircuitState(circuitData);
-                    if (result) {
-                        
-                    }
+                if (electronicsLabRef.current && electronicsLabRef.current.loadCircuitState) {
+                    electronicsLabRef.current.loadCircuitState(circuit3dData);
                 }
             } catch (e) {
-                console.warn('[GUI] Error restoring circuit state:', e);
+                console.warn('[GUI] Error restoring Circuito 3D state:', e);
             }
         };
 
-        // Small delay to let the iframe initialize
-        const timer = setTimeout(restore, 1000);
+        const timer = setTimeout(restore3D, 1200);
         return () => clearTimeout(timer);
-    }, [circuitData]);
+    }, [circuit3dData]);
+
+    // Captura el estado de Circuito 3D (Electronics Lab) para incluirlo en el .flynt.
+    const requestCircuit3DState = useCallback(async () => {
+        try {
+            if (electronicsLabRef.current && electronicsLabRef.current.saveCircuitState) {
+                const state = await electronicsLabRef.current.saveCircuitState();
+                if (state) {
+                    onSetCircuit3dData(state);
+                    return state;
+                }
+            }
+        } catch (e) {
+            console.warn('[GUI] Error capturing Circuito 3D state:', e);
+        }
+        if (circuit3dData) return circuit3dData;
+        return null;
+    }, [circuit3dData, onSetCircuit3dData]);
 
     // --- Puente SketchForge 3D -----------------------------------------------
     // Pide al iframe el proyecto editable .skf actual. Si el editor de SketchForge
@@ -2632,30 +2654,10 @@ const GUIComponent = props => {
         }, 1500);
     }, [requestSketchforgeSkf]);
 
-    // Captura el estado del circuito de Velxio para incluirlo en el .flynt.
     const requestCircuitState = useCallback(async () => {
-        try {
-            if (velxioRef.current && velxioRef.current.saveCircuitState) {
-                const state = await velxioRef.current.saveCircuitState();
-                if (state) {
-                    onSetCircuitData(state);
-                    return state;
-                }
-            }
-        } catch (e) {
-            console.warn('[GUI] Error capturing circuit state:', e);
-        }
-        // Fallback: estado sincronizado al ocultar Circuitos o persistido al desmontar.
         if (circuitData) return circuitData;
-        try {
-            if (deviceModeDevice && deviceModeDevice.deviceId) {
-                const key = getVelxioStateKey(deviceModeDevice.deviceId);
-                const raw = window.localStorage.getItem(key);
-                if (raw) return JSON.parse(raw);
-            }
-        } catch (e) { /* ignore */ }
         return null;
-    }, [circuitData, deviceModeDevice, onSetCircuitData]);
+    }, [circuitData]);
 
     // Listener de mensajes del iframe de SketchForge (shell + editor).
     useEffect(() => {
@@ -2833,6 +2835,12 @@ const GUIComponent = props => {
 
     // Handler for uploading code to device
     const handleDeviceUpload = useCallback(async code => {
+        const errors = String(code || '').split('\n').filter(line => /^\s*#error\b/.test(line));
+        if (errors.length) {
+            onSetUploadState({isVisible: true, state: 'error', progress: 0,
+                message: 'Corrige los bloques indicados antes de subir el programa.', logs: errors});
+            return;
+        }
         if (!deviceModeDevice) {
             console.warn('Cannot upload: no device selected');
             return;
@@ -3116,6 +3124,18 @@ const GUIComponent = props => {
     // Handler for sending data to terminal/serial
     const handleSendToTerminal = useCallback(text => {
         if (!deviceModeDevice || !deviceModeConnected) {
+            // Si el simulador Circuito 3D está abierto, enviar directamente al Arduino virtual
+            if (electronicsLabRef.current && typeof electronicsLabRef.current.sendSerialInput === 'function') {
+                electronicsLabRef.current.sendSerialInput(text);
+                const displayText = text.replace(/[\r\n]+$/, '');
+                const timestamp = new Date().toLocaleTimeString();
+                onAppendDeviceTerminal({
+                    text: `> ${displayText}`,
+                    type: 'success',
+                    timestamp
+                });
+                return;
+            }
             console.warn('Cannot send to terminal: device not connected');
             return;
         }
@@ -3465,6 +3485,7 @@ const GUIComponent = props => {
 
     const renderDeviceMode = () => (
         <DeviceModeGUI
+            vm={vm}
             code={deviceModeCode}
             terminalOutput={deviceModeTerminal}
             terminalSettings={deviceModeTerminalSettings}
@@ -3497,9 +3518,8 @@ const GUIComponent = props => {
             onCodeLockChange={onSetCodeLocked}
             onManualCodeChange={onSetManualCode}
             onUploadFirmware={handleDeviceUploadFirmware}
-            velxioRef={velxioRef}
-            onVelxioSerialOutput={handleVelxioSerialOutput}
-            onVelxioStateChange={handleVelxioStateChange}
+            electronicsLabRef={electronicsLabRef}
+            onSimulatorSerialOutput={handleSimulatorSerialOutput}
         />
     );
 
@@ -3684,6 +3704,7 @@ const GUIComponent = props => {
             <UpdateModal
                 info={updateInfo}
                 installing={updateInstalling}
+                progress={updateProgress}
                 onDismiss={handleDismissUpdate}
                 onExit={handleExitApp}
                 onInstall={handleInstallUpdate}
@@ -3727,6 +3748,7 @@ const GUIComponent = props => {
                 onUploadFirmware={handleDeviceUploadFirmware}
                 deviceModeConnected={deviceModeConnected}
                 onRequestCircuitState={requestCircuitState}
+                onRequestCircuit3DState={requestCircuit3DState}
                 onRequestSketchforgeSkf={requestSketchforgeSkf}
                 onRequestWorkspaceState={requestWorkspaceState}
             />
@@ -3823,7 +3845,7 @@ const GUIComponent = props => {
                                     onClick={() => {
                                         const iframe = document.getElementById('stblockAdminIframe');
                                         if (iframe) {
-                                            iframe.src = 'static/velxio/gears/editor/index.html?v=' + Date.now();
+                                            iframe.src = 'static/gears/editor/index.html?v=' + Date.now();
                                         }
                                     }}
                                     style={{
@@ -4058,6 +4080,7 @@ const mapStateToProps = state => ({
     deviceModeCodeLocked: isCodeLocked(state),
     deviceModeManualCode: getManualCode(state),
     circuitData: getCircuitData(state),
+    circuit3dData: getCircuit3dData(state),
     sketchforgeSkf: getSketchforgeData(state),
     deviceModeProgramMode: getProgramMode(state)
 });
@@ -4085,6 +4108,8 @@ const mapDispatchToProps = dispatch => ({
     onRestoreDeviceState: deviceState => dispatch(restoreDeviceState(deviceState)),
     onSetCircuitData: data => dispatch(setCircuitData(data)),
     onClearCircuitData: () => dispatch(clearCircuitData()),
+    onSetCircuit3dData: data => dispatch(setCircuit3dData(data)),
+    onClearCircuit3dData: () => dispatch(clearCircuit3dData()),
     onClearSketchforgeData: () => dispatch(clearSketchforgeData())
 });
 

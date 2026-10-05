@@ -3,6 +3,7 @@ const log = require('../util/log');
 const maybeFormatMessage = require('../util/maybe-format-message');
 
 const BlockType = require('./block-type');
+const deviceExtensionIds = new Set(require('../devices/extension-catalog.json').map(extension => extension.extensionId));
 
 // These extensions are currently built into the VM repository but should not be loaded at startup.
 // TODO: move these out into a separate repository?
@@ -108,6 +109,7 @@ class ExtensionManager {
      * @returns {boolean} - true if loaded, false otherwise.
      */
     isExtensionLoaded (extensionID) {
+        if (deviceExtensionIds.has(extensionID)) return this.runtime.getDeviceExtensionIds().includes(extensionID);
         return this._loadedExtensions.has(extensionID);
     }
 
@@ -117,6 +119,10 @@ class ExtensionManager {
      * @param {string} extensionId - the ID of an internal extension
      */
     loadExtensionIdSync (extensionId) {
+        if (deviceExtensionIds.has(extensionId)) {
+            this.runtime.setDeviceExtensionIds(this.runtime.getDeviceExtensionIds().concat(extensionId));
+            return;
+        }
         if (!Object.prototype.hasOwnProperty.call(builtinExtensions, extensionId)) {
             log.warn(`Could not find extension ${extensionId} in the built in extensions.`);
             return;
@@ -141,6 +147,10 @@ class ExtensionManager {
      * @returns {Promise} resolved once the extension is loaded and initialized or rejected on failure
      */
     loadExtensionURL (extensionURL) {
+        if (deviceExtensionIds.has(extensionURL)) {
+            this.runtime.setDeviceExtensionIds(this.runtime.getDeviceExtensionIds().concat(extensionURL));
+            return Promise.resolve();
+        }
         if (Object.prototype.hasOwnProperty.call(builtinExtensions, extensionURL)) {
             /** @TODO dupe handling for non-builtin extensions. See commit 670e51d33580e8a2e852b3b038bb3afc282f81b9 */
             if (this.isExtensionLoaded(extensionURL)) {

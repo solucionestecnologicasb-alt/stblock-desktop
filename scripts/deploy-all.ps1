@@ -222,6 +222,8 @@ $env:TAURI_SIGNING_PRIVATE_KEY = $null
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $null
 $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $null
 
+$CargoTomlPath = Join-Path $RootDir 'src-tauri\Cargo.toml'
+
 if (-not (Test-Path -LiteralPath $PackagePath)) { Fail "No existe package.json en $RootDir" }
 if (-not (Test-Path -LiteralPath $TauriConfigPath)) { Fail "No existe src-tauri\tauri.conf.json" }
 
@@ -238,8 +240,21 @@ if ($version -ne $currentVersion) {
     $tauriConfig.version = $version
     Write-JsonFile -Path $PackagePath -Value $package
     Write-JsonFile -Path $TauriConfigPath -Value $tauriConfig
+    if (Test-Path -LiteralPath $CargoTomlPath) {
+        $cargoContent = Get-Content -LiteralPath $CargoTomlPath -Raw
+        $cargoContent = $cargoContent -replace '(?m)^version\s*=\s*"[^"]+"', "version = `"$version`""
+        [System.IO.File]::WriteAllText($CargoTomlPath, $cargoContent, [System.Text.UTF8Encoding]::new($false))
+    }
     Write-OK "Version actualizada: $currentVersion -> $version"
 } else {
+    if (Test-Path -LiteralPath $CargoTomlPath) {
+        $cargoContent = Get-Content -LiteralPath $CargoTomlPath -Raw
+        if ($cargoContent -match '(?m)^version\s*=\s*"([^"]+)"' -and $matches[1] -ne $version) {
+            $cargoContent = $cargoContent -replace '(?m)^version\s*=\s*"[^"]+"', "version = `"$version`""
+            [System.IO.File]::WriteAllText($CargoTomlPath, $cargoContent, [System.Text.UTF8Encoding]::new($false))
+            Write-OK "Cargo.toml sincronizado con version $version"
+        }
+    }
     Write-OK "Version sin cambios: $version"
 }
 

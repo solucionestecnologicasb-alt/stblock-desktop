@@ -7,7 +7,8 @@ import {
     deviceExtensions,
     EXTENSION_CATEGORIES,
     getExtensionsByCategory,
-    searchExtensions
+    searchExtensions,
+    isExtensionCompatible
 } from '../../lib/libraries/device-extensions';
 
 const CategoryIcons = {
@@ -73,6 +74,7 @@ const ExtensionCard = ({extension, onSelect, isLoaded}) => {
             <div className={styles.cardBody}>
                 <h3 className={styles.extensionName}>{extension.name}</h3>
                 <p className={styles.extensionDescription}>{extension.description}</p>
+                <span className={styles.libraryTag}>Se ejecuta al cargar el programa en la tarjeta</span>
                 {extension.library && (
                     <span className={styles.libraryTag}>Librería: {extension.library}</span>
                 )}
@@ -103,6 +105,7 @@ ExtensionCard.defaultProps = {
 
 const DeviceExtensionLibrary = ({
     visible,
+    device,
     loadedExtensions,
     onSelectExtension,
     onClose
@@ -121,8 +124,9 @@ const DeviceExtensionLibrary = ({
             );
         }
 
-        return extensions;
-    }, [selectedCategory, searchQuery]);
+        return extensions.filter(extension => loadedExtensions.includes(extension.extensionId) ||
+            isExtensionCompatible(extension.extensionId, device));
+    }, [selectedCategory, searchQuery, device, loadedExtensions]);
 
     const handleSearchChange = useCallback((e) => {
         setSearchQuery(e.target.value);
@@ -225,6 +229,7 @@ const DeviceExtensionLibrary = ({
 };
 
 DeviceExtensionLibrary.propTypes = {
+    device: PropTypes.object,
     visible: PropTypes.bool.isRequired,
     loadedExtensions: PropTypes.arrayOf(PropTypes.string),
     onSelectExtension: PropTypes.func.isRequired,

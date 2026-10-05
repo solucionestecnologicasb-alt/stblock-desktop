@@ -49,6 +49,7 @@ export type SkfAssetRecordV1 = {
 };
 
 export type SkfImportedMeshReferenceV1 = {
+  editFaceGroups?: number[][];
   sourceAssetId?: string;
   meshAssetId?: string;
   brepStepAssetId?: string;
@@ -440,6 +441,7 @@ async function serializeShapeNode(
       baseWidth: importedMesh.baseWidth,
       baseDepth: importedMesh.baseDepth,
       baseHeight: importedMesh.baseHeight,
+      editFaceGroups: importedMesh.editFaceGroups,
       triangleCount: importedMesh.triangleCount,
       sourceFormat: importedMesh.sourceFormat,
     };
@@ -1060,6 +1062,7 @@ async function restoreShapeFromNode(
       baseWidth: node.importedMesh.baseWidth,
       baseDepth: node.importedMesh.baseDepth,
       baseHeight: node.importedMesh.baseHeight,
+      editFaceGroups: node.importedMesh.editFaceGroups,
       triangleCount: node.importedMesh.triangleCount,
       sourceFormat: node.importedMesh.sourceFormat,
       ...(brepRecord ? { brepStep: strFromU8(files[brepRecord.path]) } : {}),

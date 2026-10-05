@@ -7,7 +7,6 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import VMScratchBlocks from '../lib/blocks';
 import VM from 'scratch-vm';
-import initArduinoGenerator from '../lib/arduino-generator';
 import registerCustomDeviceBlocks from '../lib/custom-device-blocks';
 import registerGameBlocks from '../lib/game-blocks';
 import registerProgrammingBlocks from '../lib/programming-blocks';
@@ -18,6 +17,7 @@ import Prompt from './prompt.jsx';
 import BlocksComponent from '../components/blocks/blocks.jsx';
 import BlockSearch from '../components/block-search/block-search.jsx';
 import {buildSearchToolboxXML} from '../lib/block-search-index.js';
+import installSafeFlyout from '../lib/safe-flyout';
 
 import ExtensionLibrary from './extension-library.jsx';
 import extensionData from '../lib/libraries/extensions/index.jsx';
@@ -242,6 +242,7 @@ class Blocks extends React.Component {
         // lists, and procedures from extensions.
 
         const toolboxWorkspace = this.workspace.getFlyout().getWorkspace();
+        installSafeFlyout(this.workspace.getFlyout());
 
         const varListButtonCallback = type =>
             (() => this.ScratchBlocks.Variables.createVariable(this.workspace, null, type));
@@ -259,11 +260,7 @@ class Blocks extends React.Component {
         this._renderedToolboxXML = this.props.toolboxXML;
 
         // Initialize Arduino generator for device mode code generation
-        try {
-            this.arduinoGenerator = initArduinoGenerator(this.ScratchBlocks);
-        } catch (e) {
-            console.warn('[Blocks] Failed to initialize Arduino generator:', e);
-        }
+        this.arduinoGenerator = true;
 
         // Listen for block events from the workspace
         var sblocks = this.ScratchBlocks;
@@ -463,7 +460,8 @@ class Blocks extends React.Component {
                 // _preventFlyoutShow es true y setSelectedItem(categories_[0]) debe seleccionar, no
                 // deseleccionar (dejando selectedItem_ en null y rompiendo getSelectedCategoryId).
                 const currentItem = toolbox.selectedItem_;
-                if (currentItem && item && currentItem.id_ === item.id_ && !self._preventFlyoutShow) {
+                if (currentItem && item && currentItem.id_ === item.id_ &&
+                    !self._preventFlyoutShow && !self._restoringToolboxSelection) {
                     // Same category clicked again → show all categories first, THEN clear selection
                     // (showAll_ may trigger scroll events that need the selected item to be valid)
                     const self = this;
@@ -477,7 +475,8 @@ class Blocks extends React.Component {
                     toolbox.selectedItem_ = null;
                     return;
                 }
-                origSetSelected(item, shouldScroll);
+                self.cancelFlyoutScrollAnimation();
+                origSetSelected(item, false);
                 if (item && flyout.isVisible() && !self._preventFlyoutShow) {
                     const contents = item.getContents();
                     if (!contents || (typeof contents === 'string' && contents.length === 0) ||
@@ -497,6 +496,20 @@ class Blocks extends React.Component {
                     }
 
                     this.animateFlyoutBlocks(flyout);
+                }
+            };
+
+            // Blockly's original method only highlights and scrolls the complete
+            // palette. With a single-category palette it must also render it.
+            toolbox.setSelectedCategoryById = id => {
+                const item = toolbox.categoryMenu_.categories_.find(category => category.id_ === id);
+                if (!item) return;
+                const restoring = self._restoringToolboxSelection;
+                self._restoringToolboxSelection = true;
+                try {
+                    toolbox.setSelectedItem(item, true);
+                } finally {
+                    self._restoringToolboxSelection = restoring;
                 }
             };
 
@@ -819,7 +832,12 @@ class Blocks extends React.Component {
             if (categories) {
                 for (let i = 0; i < categories.length; i++) {
                     if (categories[i].id_ === categoryId) {
-                        toolbox.setSelectedItem(categories[i], true);
+                        this._restoringToolboxSelection = true;
+                        try {
+                            toolbox.setSelectedItem(categories[i], true);
+                        } finally {
+                            this._restoringToolboxSelection = false;
+                        }
                         restoredCategory = true;
                         break;
                     }
@@ -989,7 +1007,8 @@ class Blocks extends React.Component {
                 target.blocks.toXML(),
                 this._toolboxCacheGeneration || 0,
                 this.props.theme,
-                this.props.selectedDevice ? this.props.selectedDevice.id : 'none',
+                this.props.selectedDevice ? this.props.selectedDevice.deviceId : 'none',
+                runtime.getProgramMode(),
                 runtime.isHardwareModeActive(),
                 this.state.showAdvancedBlocks,
                 this.state.showDeviceBlocks
@@ -1550,13 +1569,13 @@ class Blocks extends React.Component {
 
         try {
             // Use Blockly's workspaceToCode with our Arduino generator
-            const code = this.arduinoGenerator.workspaceToCode(this.workspace);
+            const code = this.props.vm.generateArduinoCode();
             this.props.onCodeGenerated(code);
         } catch (e) {
             console.warn('[Blocks] Error generating Arduino code:', e);
             // Return default code on error
             this.props.onCodeGenerated(
-                '// Error generando código\n\nvoid setup() {\n  // Inicialización\n}\n\nvoid loop() {\n  // Código principal\n}'
+                '#error STBlock: error generando codigo. Revisa los bloques del programa.\n'
             );
         }
     }
@@ -1611,6 +1630,7 @@ class Blocks extends React.Component {
                 />
                 {this.toolboxHeader && this.workspace && this.ScratchBlocks ? ReactDOM.createPortal(
                     <BlockSearch
+                        vm={this.props.vm}
                         workspace={this.workspace}
                         ScratchBlocks={this.ScratchBlocks}
                         toolboxXML={this.props.toolboxXML}

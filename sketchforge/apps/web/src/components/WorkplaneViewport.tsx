@@ -177,6 +177,9 @@ type WorkplaneViewportProps = {
   initialSnap?: GridSize;
   initialWorkspace?: WorkplaneWorkspaceSettings;
   workspaceSettingsKey?: string | null;
+  placementPreview?: WorkplaneShape | null;
+  onPlacementConfirm?: (point: { x: number; z: number; elevation?: number }) => void;
+  onPlacementCancel?: () => void;
   onAddShape: (shape: ShapeAsset, point?: { x: number; z: number; elevation?: number }) => void;
   onAlignAnchorChange: (id: string) => void;
   onAlignPreview: (axis: AlignAxis, target: AlignTarget) => void;
@@ -2629,6 +2632,9 @@ export function WorkplaneViewport({
   initialWorkspace,
   workspaceSettingsKey,
   onAddShape,
+  placementPreview = null,
+  onPlacementConfirm,
+  onPlacementCancel,
   onAlignAnchorChange,
   onAlignPreview,
   onAlignPreviewClear,
@@ -3256,6 +3262,8 @@ export function WorkplaneViewport({
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("resize", state.resize);
+    const hostResizeObserver = new ResizeObserver(() => state.resize());
+    hostResizeObserver.observe(host);
 
     return () => {
       if (state.animationId) window.cancelAnimationFrame(state.animationId);
@@ -3263,6 +3271,7 @@ export function WorkplaneViewport({
       state.renderFrame = null;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("resize", state.resize);
+      hostResizeObserver.disconnect();
       state.disposeInteractionListeners();
       state.controls.dispose();
       disposeChildren(state.workplaneLayer);
@@ -3369,6 +3378,51 @@ export function WorkplaneViewport({
     };
   }, [toRawPlanePoint]);
   const toPlanePoint = useCallback((clientX: number, clientY: number) => toPlanePointAtY(clientX, clientY, 0), [toPlanePointAtY]);
+
+  useEffect(() => {
+    const state = threeRef.current, host = hostRef.current;
+    if (!state || !host || !placementPreview) return;
+    const preview = createShapeObject(placementPreview, false, () => state.requestRender(), false);
+    preview.name = 'PlacementPreview'; preview.visible = false;
+    setObjectRenderLayer(preview, RENDER_LAYER_PREVIEWS);
+    state.scene.add(preview); state.controls.enabled = false;
+    const previousHelpers = state.helperLayer.visible; state.helperLayer.visible = false;
+    let point: { x: number; z: number } | null = null, frame = 0;
+    let cursor: { x: number; y: number } | null = null;
+    const elevation = placementPreview.elevation ?? placementElevationRef.current;
+    const update = () => {
+      frame = 0; if (!cursor) return;
+      point = toPlanePointAtY(cursor.x, cursor.y, elevation);
+      preview.visible = !!point;
+      if (point) { updateShapeObjectTransform(preview, { ...placementPreview, ...point, elevation }); preview.name = "PlacementPreview"; }
+      state.requestRender();
+    };
+    const move = (event: PointerEvent) => {
+      event.stopPropagation(); cursor = { x: event.clientX, y: event.clientY };
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    const down = (event: PointerEvent) => {
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (event.button === 2) { onPlacementCancel?.(); return; }
+      if (event.button !== 0) return;
+      cursor = { x: event.clientX, y: event.clientY }; if (frame) cancelAnimationFrame(frame); update();
+      if (point) onPlacementConfirm?.({ ...point, elevation });
+    };
+    const leave = () => { cursor = null; point = null; preview.visible = false; state.requestRender(); };
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select')) return;
+      if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); onPlacementCancel?.(); }
+    };
+    host.addEventListener('pointermove', move, true); host.addEventListener('pointerdown', down, true); host.addEventListener('pointerleave', leave);
+    window.addEventListener('keydown', keyboard, true);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      host.removeEventListener('pointermove', move, true); host.removeEventListener('pointerdown', down, true); host.removeEventListener('pointerleave', leave);
+      window.removeEventListener('keydown', keyboard, true);
+      state.scene.remove(preview); disposeObject(preview); state.helperLayer.visible = previousHelpers;
+      state.controls.enabled = true; state.requestRender();
+    };
+  }, [placementPreview, onPlacementCancel, onPlacementConfirm, toPlanePointAtY]);
 
   const storeRulerModel = useCallback((next: RulerModel) => {
     rulerModelRef.current = next;
@@ -5418,12 +5472,13 @@ export function WorkplaneViewport({
       if (!asset) {
         return;
       }
-      const point = toPlanePoint(event.clientX, event.clientY);
+      const point = toPlanePointAtY(event.clientX, event.clientY, placementElevationRef.current);
+      if (!point) return;
       void Promise.resolve(onAddShape(asset, point ? { ...point, elevation: placementElevationRef.current } : { x: 0, z: 0, elevation: placementElevationRef.current })).catch((error) => {
         console.error("[ShapeLibrary] No se pudo agregar el modelo arrastrado", error);
       });
     },
-    [onAddShape, toPlanePoint],
+    [onAddShape, toPlanePointAtY],
   );
 
   const resetView = useCallback(() => {
@@ -6935,25 +6990,16 @@ function syncTransformOverlay(
       y: point.y + (dy / length) * distance,
     };
   };
-  const rotationSides = rotationHandleSidesForCamera(state, worldCenter);
-  const sidePoint = (side: RotationHandleSide, y: number) => {
-    if (side === "right") {
-      return new THREE.Vector3(worldMaxX, y, worldCenterZ);
-    }
-    if (side === "left") {
-      return new THREE.Vector3(worldMinX, y, worldCenterZ);
-    }
-    if (side === "near") {
-      return new THREE.Vector3(worldCenterX, y, worldMaxZ);
-    }
-    return new THREE.Vector3(worldCenterX, y, worldMinZ);
-  };
-  const rotateLeft = screenOffsetFromCenter(project(sidePoint(rotationSides.x, worldMaxY)), 54);
-  const rotateRight = screenOffsetFromCenter(project(sidePoint(rotationSides.z, worldMaxY)), 58);
-  const rotateBottom = screenOffsetFromCenter(project(sidePoint(rotationSides.y, worldMinY)), 64);
-  const xFaceCenter = sidePoint(rotationSides.x, worldCenterY);
-  const zFaceCenter = sidePoint(rotationSides.z, worldCenterY);
-  const yFaceCenter = verticalBase;
+  // Screen grips stay outside the projected selection; every rotation uses the
+  // same world-space pivot and basis as the actual quaternion transform.
+  const projectedBounds = corners.map(project);
+  const left = Math.min(...projectedBounds.map(p=>p.x)), right = Math.max(...projectedBounds.map(p=>p.x));
+  const top = Math.min(...projectedBounds.map(p=>p.y)), bottomY = Math.max(...projectedBounds.map(p=>p.y));
+  const bounded = (x:number,y:number) => ({x:clamp(x,22,rect.width-22),y:clamp(y,22,rect.height-22)});
+  const rotateLeft = bounded(left-28,(top+bottomY)/2);
+  const rotateRight = bounded(right+28,(top+bottomY)/2);
+  const rotateBottom = bounded((left+right)/2,bottomY+28);
+  const xFaceCenter = frame.center.clone(), yFaceCenter = frame.center.clone(), zFaceCenter = frame.center.clone();
   const planeRadius = 154;
   const planeWorldStep = Math.max(12, Math.max(frame.width, frame.depth, frame.height) * 0.78);
   const makePlaneView = (centerWorld: THREE.Vector3, uAxis: THREE.Vector3, vAxis: THREE.Vector3): RotationPlaneView => {
@@ -6989,9 +7035,9 @@ function syncTransformOverlay(
     z: makeWorldPoint(zFaceCenter),
   };
   const rotationPlanes: Record<RotationAxis, RotationPlaneView> = {
-    x: makePlaneView(xFaceCenter, zFootAxis, yFootAxis),
-    y: makePlaneView(yFaceCenter, xFootAxis, zFootAxis),
-    z: makePlaneView(zFaceCenter, xFootAxis, yFootAxis),
+    x: makePlaneView(xFaceCenter, new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,1)),
+    y: makePlaneView(yFaceCenter, new THREE.Vector3(0,0,1), new THREE.Vector3(1,0,0)),
+    z: makePlaneView(zFaceCenter, new THREE.Vector3(1,0,0), new THREE.Vector3(0,1,0)),
   };
 
   const next = {
@@ -7628,25 +7674,7 @@ function createTransformHandles(box: THREE.Box3, id: string) {
     group.add(line);
   });
 
-  [
-    { key: "rotate-left", center: new THREE.Vector3(x0 - 5, topY + 5, z0 - 5), start: 0.15, end: 1.45, arrow: new THREE.Vector3(x0 - 2.8, topY + 5, z0 - 8.2), rotation: Math.PI * 0.35 },
-    { key: "rotate-right", center: new THREE.Vector3(x1 + 5, topY + 5, z0 - 5), start: 1.7, end: 2.95, arrow: new THREE.Vector3(x1 + 8.2, topY + 5, z0 - 2.8), rotation: Math.PI * 0.85 },
-    { key: "rotate-bottom", center: new THREE.Vector3(x1 + 5, topY + 5, z1 + 5), start: 3.3, end: 4.55, arrow: new THREE.Vector3(x1 + 2.8, topY + 5, z1 + 8.2), rotation: Math.PI * 1.35 },
-  ].forEach((arc) => {
-    const line = createRotateArc(arc.center, 5.5, arc.start, arc.end, rotateMaterial);
-    line.userData.shapeId = id;
-    line.userData.transformHandle = "rotate";
-    line.userData.transformHandleKey = arc.key;
-    group.add(line);
-    const arrow = new THREE.Mesh(coneGeometry, darkMaterial);
-    arrow.position.copy(arc.arrow);
-    arrow.rotation.set(Math.PI / 2, 0, arc.rotation);
-    arrow.userData.shapeId = id;
-    arrow.userData.transformHandle = "rotate";
-    arrow.userData.transformHandleKey = arc.key;
-    group.add(arrow);
-  });
-
+  // Rotation grips are projected by TransformOverlay from the real pivot.
   return group;
 }
 

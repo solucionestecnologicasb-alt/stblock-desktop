@@ -1,0 +1,12 @@
+const fs = require('fs');
+const path = require('path');
+const {spawnSync} = require('child_process');
+const root = path.resolve(__dirname, '..');
+const data = path.join(root, 'src-tauri/tools/Arduino');
+const qa = path.join(root, 'test-results/board-sdk');
+fs.mkdirSync(qa, {recursive: true});
+const config = path.join(qa, 'arduino-cli.yaml');
+fs.writeFileSync(config, `board_manager:\n  additional_urls:\n    - https://espressif.github.io/arduino-esp32/package_esp32_index.json\n    - https://arduino.esp8266.com/stable/package_esp8266com_index.json\n    - https://dl.sipeed.com/MAIX/Maixduino/package_Maixduino_k210_index.json\n    - https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json\ndirectories:\n  data: '${data}'\n  downloads: '${path.join(qa, 'downloads')}'\n  user: '${qa}'\n`);
+const args = process.argv.slice(2);
+const result = spawnSync(path.join(data, 'arduino-cli.exe'), [...args, '--config-file', config], {stdio: 'inherit', windowsHide: true});
+process.exit(result.status === null ? 1 : result.status);

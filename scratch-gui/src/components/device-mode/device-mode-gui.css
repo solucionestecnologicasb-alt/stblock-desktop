@@ -982,15 +982,6 @@
     color: #6b7280;
 }
 
-/* Velxio Circuit Panel (replaces placeholder) */
-.velxio-circuit-wrapper {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    overflow: hidden;
-}
 
 /* Drop Indicator for Split */
 .drop-indicator {

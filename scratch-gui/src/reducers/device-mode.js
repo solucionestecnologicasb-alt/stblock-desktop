@@ -29,6 +29,8 @@ const CLEAR_UPLOAD_LOGS = 'scratch-gui/device-mode/CLEAR_UPLOAD_LOGS';
 const RESTORE_DEVICE_STATE = 'scratch-gui/device-mode/RESTORE_DEVICE_STATE';
 const SET_CIRCUIT_DATA = 'scratch-gui/device-mode/SET_CIRCUIT_DATA';
 const CLEAR_CIRCUIT_DATA = 'scratch-gui/device-mode/CLEAR_CIRCUIT_DATA';
+const SET_CIRCUIT3D_DATA = 'scratch-gui/device-mode/SET_CIRCUIT3D_DATA';
+const CLEAR_CIRCUIT3D_DATA = 'scratch-gui/device-mode/CLEAR_CIRCUIT3D_DATA';
 const SET_SKETCHFORGE_DATA = 'scratch-gui/device-mode/SET_SKETCHFORGE_DATA';
 const CLEAR_SKETCHFORGE_DATA = 'scratch-gui/device-mode/CLEAR_SKETCHFORGE_DATA';
 
@@ -78,6 +80,7 @@ const initialState = {
         logs: []
     },
     circuitData: null,
+    circuit3dData: null,
     // Restored SketchForge 3D project (.skf) from a .flynt import: {bytes: ArrayBuffer} or null
     sketchforgeSkf: null
 };
@@ -279,6 +282,16 @@ const reducer = function (state = initialState, action) {
             ...state,
             circuitData: null
         };
+    case SET_CIRCUIT3D_DATA:
+        return {
+            ...state,
+            circuit3dData: action.data
+        };
+    case CLEAR_CIRCUIT3D_DATA:
+        return {
+            ...state,
+            circuit3dData: null
+        };
     case SET_SKETCHFORGE_DATA:
         return {
             ...state,
@@ -406,6 +419,15 @@ const clearCircuitData = () => ({
     type: CLEAR_CIRCUIT_DATA
 });
 
+const setCircuit3dData = data => ({
+    type: SET_CIRCUIT3D_DATA,
+    data
+});
+
+const clearCircuit3dData = () => ({
+    type: CLEAR_CIRCUIT3D_DATA
+});
+
 const setSketchforgeData = data => ({
     type: SET_SKETCHFORGE_DATA,
     data
@@ -457,6 +479,7 @@ const isDeviceChangeConfirmOpen = state => state.scratchGui.deviceMode.deviceCha
 const getPendingDevice = state => state.scratchGui.deviceMode.pendingDevice;
 const getUploadState = state => state.scratchGui.deviceMode.uploadState;
 const getCircuitData = state => state.scratchGui.deviceMode.circuitData;
+const getCircuit3dData = state => state.scratchGui.deviceMode.circuit3dData;
 const getSketchforgeData = state => state.scratchGui.deviceMode.sketchforgeSkf;
 
 // Selector for extracting serializable device state for persistence
@@ -520,11 +543,14 @@ export {
     getPendingDevice,
     getUploadState,
     getCircuitData,
+    getCircuit3dData,
     getSketchforgeData,
     getDevicePersistState,
     restoreDeviceState,
     setCircuitData,
     clearCircuitData,
+    setCircuit3dData,
+    clearCircuit3dData,
     setSketchforgeData,
     clearSketchforgeData,
     DEVICES

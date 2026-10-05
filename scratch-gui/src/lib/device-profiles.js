@@ -30,19 +30,22 @@ const getDeviceProfile = device => {
     if (!device || device.deviceId === 'null') return null;
     const build = DEVICE_PROFILES[device.deviceId];
     if (!build) return null;
+    const programMode = Array.isArray(device.programMode) && device.programMode.length ?
+        device.programMode : [device.defaultProgramMode || 'upload'];
 
     return {
         ...device,
+        programMode,
         generator: device.type === 'arduino' ? 'arduino' : 'microPython',
         platform: build.platform,
         fqbn: build.fqbn,
         baudRate: Number(device.defaultBaudRate) || 9600,
-        defaultProgramMode: device.defaultProgramMode || device.programMode[0],
+        defaultProgramMode: device.defaultProgramMode || programMode[0],
         capabilities: {
             compile: Boolean(build.fqbn),
             serial: Boolean(device.serialportRequired),
-            realtime: device.programMode.includes('realtime'),
-            upload: device.programMode.includes('upload')
+            realtime: programMode.includes('realtime'),
+            upload: programMode.includes('upload')
         }
     };
 };

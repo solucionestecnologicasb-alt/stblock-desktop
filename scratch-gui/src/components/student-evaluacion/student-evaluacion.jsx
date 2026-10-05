@@ -8,7 +8,7 @@ const StudentEvaluacionPlayer = ({onSetDeviceMode}) => {
     const iframeRef = useRef(null);
 
     // URL fija con versión para evitar bucles infinitos de renderizado
-    const iframeUrl = "static/velxio/gears/editor/index.html?mode=student&v=0.1.13";
+    const iframeUrl = "static/gears/editor/index.html?mode=student&v=0.1.13";
 
     // Cargar archivo desde el selector
     const handleFileLoad = (e) => {

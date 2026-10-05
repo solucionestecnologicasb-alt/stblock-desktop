@@ -1,0 +1,3201 @@
+{
+  "note": "Static handler coverage only: does not prove correct generated code, compilation or hardware behavior. micro:bit uses a separate generator.",
+  "activeGenerator": "scratch-vm/src/generators/arduino (shared by GUI and VM)",
+  "sharedDefinitionsPolicy": "Preserve existing definitions and workspace blocks on board changes, as requested by the user.",
+  "boards": [
+    {
+      "id": "arduinoUno",
+      "type": "arduino",
+      "blocks": 125,
+      "categories": 10,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "stBoardExtension",
+      "type": "arduino",
+      "blocks": 163,
+      "categories": 11,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoNano",
+      "type": "arduino",
+      "blocks": 125,
+      "categories": 10,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoLeonardo",
+      "type": "arduino",
+      "blocks": 81,
+      "categories": 7,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoMega2560",
+      "type": "arduino",
+      "blocks": 118,
+      "categories": 9,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "stbBoardV2",
+      "type": "arduino",
+      "blocks": 295,
+      "categories": 24,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoUnoR4Minima",
+      "type": "arduino",
+      "blocks": 81,
+      "categories": 7,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoUnoR4Wifi",
+      "type": "arduino",
+      "blocks": 86,
+      "categories": 8,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoEsp32",
+      "type": "arduino",
+      "blocks": 86,
+      "categories": 8,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoEsp32S3",
+      "type": "arduino",
+      "blocks": 72,
+      "categories": 7,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoEsp8266NodeMCU",
+      "type": "arduino",
+      "blocks": 94,
+      "categories": 8,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoK210MaixDock",
+      "type": "arduino",
+      "blocks": 80,
+      "categories": 7,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoK210Maixduino",
+      "type": "arduino",
+      "blocks": 80,
+      "categories": 7,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoRaspberryPiPico",
+      "type": "arduino",
+      "blocks": 81,
+      "categories": 7,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoRaspberryPiPicoW",
+      "type": "arduino",
+      "blocks": 81,
+      "categories": 7,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoRaspberryPiPico2",
+      "type": "arduino",
+      "blocks": 81,
+      "categories": 7,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "arduinoRaspberryPiPico2W",
+      "type": "arduino",
+      "blocks": 81,
+      "categories": 7,
+      "arduinoCoverageApplicable": true,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "microbit",
+      "type": "microbit",
+      "blocks": 28,
+      "categories": 5,
+      "arduinoCoverageApplicable": false,
+      "unsupported": [],
+      "argumentIssues": []
+    },
+    {
+      "id": "microbitV2",
+      "type": "microbit",
+      "blocks": 28,
+      "categories": 5,
+      "arduinoCoverageApplicable": false,
+      "unsupported": [],
+      "argumentIssues": []
+    }
+  ],
+  "sharedDefinitionConflicts": [
+    {
+      "type": "arduino_pin_setPinMode",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_setDigitalOutput",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_setPwmOutput",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_centerServo",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_stopContinuousServo",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_moveServoSmooth",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_isServoAttached",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_readDigitalPin",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_readAnalogPin",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_attachServo",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_setServoOutput",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_setServoPulseOutput",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_setContinuousServoSpeed",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_detachServo",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_readServoAngle",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_readServoPulse",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_attachInterrupt",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_detachInterrupt",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_menu_pins",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_menu_mode",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_menu_analogPins",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_menu_level",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_menu_pwmPins",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp8266NodeMCU"
+      ]
+    },
+    {
+      "type": "arduino_pin_menu_interruptPins",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp8266NodeMCU"
+      ]
+    },
+    {
+      "type": "arduino_pin_menu_interruptMode",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_serial_serialBegin",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU"
+      ]
+    },
+    {
+      "type": "arduino_serial_serialPrint",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU"
+      ]
+    },
+    {
+      "type": "arduino_serial_serialAvailable",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU"
+      ]
+    },
+    {
+      "type": "arduino_serial_serialReadAByte",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp8266NodeMCU"
+      ]
+    },
+    {
+      "type": "arduino_serial_menu_eol",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_data_dataMap",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_data_dataConstrain",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_data_dataConvert",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_data_dataConvertASCIICharacter",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_data_dataConvertASCIINumber",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_data_menu_dataType",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_advanced_rawCode",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_rawReporter",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_rawDefinition",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_pro_serialReadStringUntil",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_pro_serialFlush",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_pro_powerSleep",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_controlSwitch",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_controlCase",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_controlDefault",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_attachInterrupt",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_detachInterrupt",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_pulseIn",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_shiftOut",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_controlBreak",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_eepromWrite",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_eepromRead",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_watchdogEnable",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_watchdogReset",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_getMicros",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_delayMicros",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_setAnalogReference",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_softwareReset",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_menu_watchdogTime",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_menu_analogReference",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_menu_interruptMode",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_menu_shiftOrder",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_menu_pulseType",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_advanced_menu_sleepMode",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2"
+      ]
+    },
+    {
+      "type": "arduino_comm_spiBeginTransaction",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_comm_spiEndTransaction",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_comm_menu_pins",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_math_mathRandomSeedAnalog",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_math_mathArraySort",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_math_menu_analogPins",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoNano",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textLength",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textCharAt",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textSubstring",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textCase",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textTrim",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textStartsWith",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textEndsWith",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textIndexOf",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textReplace",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textRepeat",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textToAscii",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_textFromAscii",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_text_menu_textCase",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_sdcard_sdBegin",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_sdcard_menu_sdCsPins",
+      "boards": [
+        "arduinoUno",
+        "stBoardExtension",
+        "arduinoNano",
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoLeonardo",
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoUnoR4Minima",
+        "arduinoUnoR4Wifi",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoEsp8266NodeMCU",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_serial_multiSerialBegin",
+      "boards": [
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3"
+      ],
+      "differingBoards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3"
+      ]
+    },
+    {
+      "type": "arduino_serial_multiSerialPrint",
+      "boards": [
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_serial_multiSerialAvailable",
+      "boards": [
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_serial_multiSerialReadAByte",
+      "boards": [
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_serial_menu_serialNo",
+      "boards": [
+        "arduinoMega2560",
+        "stbBoardV2",
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ],
+      "differingBoards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3",
+        "arduinoRaspberryPiPico",
+        "arduinoRaspberryPiPicoW",
+        "arduinoRaspberryPiPico2",
+        "arduinoRaspberryPiPico2W"
+      ]
+    },
+    {
+      "type": "arduino_pin_esp32SetPwmOutput",
+      "boards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3"
+      ],
+      "differingBoards": [
+        "arduinoEsp32S3"
+      ]
+    },
+    {
+      "type": "arduino_pin_esp32ReadTouchPin",
+      "boards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3"
+      ],
+      "differingBoards": [
+        "arduinoEsp32S3"
+      ]
+    },
+    {
+      "type": "arduino_pin_esp32SetServoOutput",
+      "boards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3"
+      ],
+      "differingBoards": [
+        "arduinoEsp32S3"
+      ]
+    },
+    {
+      "type": "arduino_pin_esp32AttachInterrupt",
+      "boards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3"
+      ],
+      "differingBoards": [
+        "arduinoEsp32S3"
+      ]
+    },
+    {
+      "type": "arduino_pin_esp32DetachInterrupt",
+      "boards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3"
+      ],
+      "differingBoards": [
+        "arduinoEsp32S3"
+      ]
+    },
+    {
+      "type": "arduino_pin_menu_touchPins",
+      "boards": [
+        "arduinoEsp32",
+        "arduinoEsp32S3"
+      ],
+      "differingBoards": [
+        "arduinoEsp32S3"
+      ]
+    },
+    {
+      "type": "arduino_pin_k210SetPwmOutput",
+      "boards": [
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino"
+      ],
+      "differingBoards": [
+        "arduinoK210Maixduino"
+      ]
+    },
+    {
+      "type": "arduino_serial_k210MultiSerialBegin",
+      "boards": [
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino"
+      ],
+      "differingBoards": [
+        "arduinoK210Maixduino"
+      ]
+    },
+    {
+      "type": "arduino_serial_menu_pins",
+      "boards": [
+        "arduinoK210MaixDock",
+        "arduinoK210Maixduino"
+      ],
+      "differingBoards": [
+        "arduinoK210Maixduino"
+      ]
+    }
+  ],
+  "extensions": [
+    {
+      "id": "ultrasonic",
+      "name": "Sensor Ultrasónico",
+      "blocks": [
+        {
+          "opcode": "ultrasonic_ultrasonic_readDistance",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "stbV2Ultra",
+      "name": "Ultrasónico STBoard V2",
+      "blocks": [
+        {
+          "opcode": "stbV2Ultra_readDistCm",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "stbV2Ultra_readDistInch",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "stbV2Ultra_objectDetected",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "dht",
+      "name": "Sensor DHT11/DHT22",
+      "blocks": [
+        {
+          "opcode": "dht_dht_readTemperature",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "dht_dht_readHumidity",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "ds18b20",
+      "name": "Sensor DS18B20",
+      "blocks": [
+        {
+          "opcode": "ds18b20_ds18b20_readTemperature",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "apds9960",
+      "name": "Sensor APDS9960",
+      "blocks": [
+        {
+          "opcode": "apds9960_apds9960_readGesture",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "apds9960_apds9960_readProximity",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "apds9960_apds9960_readColorRed",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "apds9960_apds9960_readColorGreen",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "apds9960_apds9960_readColorBlue",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "ir_receiver",
+      "name": "Receptor Infrarrojo",
+      "blocks": [
+        {
+          "opcode": "ir_receiver_ir_readCode",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "ir_receiver_ir_available",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "pir",
+      "name": "Sensor PIR",
+      "blocks": [
+        {
+          "opcode": "pir_pir_detected",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "ldr",
+      "name": "Sensor de Luz (LDR)",
+      "blocks": [
+        {
+          "opcode": "ldr_ldr_readValue",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "joystick",
+      "name": "Joystick Analógico",
+      "blocks": [
+        {
+          "opcode": "joystick_joystick_readX",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "joystick_joystick_readY",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "joystick_joystick_button",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "rotary_encoder",
+      "name": "Encoder Rotatorio",
+      "blocks": [
+        {
+          "opcode": "rotary_encoder_encoder_readPosition",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "rotary_encoder_encoder_resetPosition",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "servo",
+      "name": "Servomotor",
+      "blocks": [
+        {
+          "opcode": "servo_servo_setAngle",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "dc_motor",
+      "name": "Motor DC (L298N)",
+      "blocks": [
+        {
+          "opcode": "dc_motor_motor_forward",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "dc_motor_motor_backward",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "dc_motor_motor_stop",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "stepper",
+      "name": "Motor a Pasos",
+      "blocks": [
+        {
+          "opcode": "stepper_stepper_init",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "stepper_stepper_move",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "buzzer",
+      "name": "Buzzer/Zumbador",
+      "blocks": [
+        {
+          "opcode": "buzzer_buzzer_tone",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "buzzer_buzzer_noTone",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "relay",
+      "name": "Módulo Relé",
+      "blocks": [
+        {
+          "opcode": "relay_relay_on",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "relay_relay_off",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "neopixel",
+      "name": "NeoPixel/WS2812",
+      "blocks": [
+        {
+          "opcode": "neopixel_neopixel_init",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "neopixel_neopixel_setColor",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "neopixel_neopixel_show",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "neopixel_neopixel_clear",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "lcd_i2c",
+      "name": "Pantalla LCD I2C",
+      "blocks": [
+        {
+          "opcode": "lcd_i2c_lcd_init",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "lcd_i2c_lcd_print",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "lcd_i2c_lcd_setCursor",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "lcd_i2c_lcd_clear",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "lcd_i2c_lcd_backlight",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "oled",
+      "name": "Pantalla OLED",
+      "blocks": [
+        {
+          "opcode": "oled_oled_init",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "oled_oled_print",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "oled_oled_drawLine",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "oled_oled_drawRect",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "oled_oled_drawCircle",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "oled_oled_clear",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "oled_oled_display",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "tm1637",
+      "name": "Display 7 Segmentos TM1637",
+      "blocks": [
+        {
+          "opcode": "tm1637_tm1637_showNumber",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "tm1637_tm1637_setBrightness",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "tm1637_tm1637_clear",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "bluetooth_hc05",
+      "name": "Bluetooth HC-05/HC-06",
+      "blocks": [
+        {
+          "opcode": "bluetooth_hc05_bt_available",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "bluetooth_hc05_bt_read",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "bluetooth_hc05_bt_send",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "rfid",
+      "name": "Lector RFID RC522",
+      "blocks": [
+        {
+          "opcode": "rfid_rfid_init",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "rfid_rfid_cardPresent",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "rfid_rfid_readUID",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "rtc_ds1307",
+      "name": "Reloj RTC DS1307",
+      "blocks": [
+        {
+          "opcode": "rtc_ds1307_rtc_getHour",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "rtc_ds1307_rtc_getMinute",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "rtc_ds1307_rtc_getSecond",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "rtc_ds1307_rtc_getDay",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "rtc_ds1307_rtc_getMonth",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "rtc_ds1307_rtc_getYear",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "sd_card",
+      "name": "Tarjeta SD",
+      "blocks": [
+        {
+          "opcode": "sd_card_sd_init",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "sd_card_sd_writeFile",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "sd_card_sd_readFile",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    },
+    {
+      "id": "keypad",
+      "name": "Teclado Matricial 4x4",
+      "blocks": [
+        {
+          "opcode": "keypad_keypad_init",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "keypad_keypad_getKey",
+          "coverage": "handler",
+          "guiHandler": true
+        },
+        {
+          "opcode": "keypad_keypad_keyPressed",
+          "coverage": "handler",
+          "guiHandler": true
+        }
+      ]
+    }
+  ]
+}

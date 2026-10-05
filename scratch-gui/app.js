@@ -1,2 +1,0 @@
-import './compile-proxy.mjs';
-
