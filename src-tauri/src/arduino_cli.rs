@@ -47,9 +47,10 @@ fn clean_path(path: PathBuf) -> PathBuf {
 
 /// Helper function to resolve the path of the bundled or system arduino-cli
 fn get_arduino_cli_path(app_handle: &tauri::AppHandle) -> String {
+    let cli_exe = if cfg!(windows) { "arduino-cli.exe" } else { "arduino-cli" };
     // 1. Try to find arduino-cli in Tauri's bundled resources folder
     if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        let bundled_path = clean_path(resource_dir.join("tools").join("Arduino").join("arduino-cli.exe"));
+        let bundled_path = clean_path(resource_dir.join("tools").join("Arduino").join(cli_exe));
         if bundled_path.exists() {
             return bundled_path.to_string_lossy().to_string();
         }

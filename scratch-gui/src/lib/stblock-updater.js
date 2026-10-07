@@ -379,6 +379,15 @@ export const installPendingSTBlockUpdate = async onProgress => {
         statusText: 'Reiniciando STBlock...'
     });
 
+    if (isDesktopApp()) {
+        try {
+            const tauri = await import('@tauri-apps/api/core');
+            await tauri.invoke('prepare_for_update');
+        } catch (_e) {
+            // Ignorar si falla, el instalador NSIS tiene su propio kill de seguridad
+        }
+    }
+
     const process = await import('@tauri-apps/plugin-process');
     await process.relaunch();
 };

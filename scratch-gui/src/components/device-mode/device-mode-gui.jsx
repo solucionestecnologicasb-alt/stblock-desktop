@@ -860,7 +860,9 @@ const DeviceModeGUI = ({
     onManualCodeChange,
     onUploadFirmware,
     electronicsLabRef,
-    onSimulatorSerialOutput
+    onSimulatorSerialOutput,
+    circuit3dData,
+    onCircuit3DStateChange
 }) => {
     // Size mode state - default to small view
     const [isLarge, setIsLarge] = useState(false);
@@ -1016,12 +1018,15 @@ const DeviceModeGUI = ({
     const circuits3DPanel = useMemo(() => (
         <ElectronicsLabPanel
             ref={electronicsLabRef}
+            vm={vm}
             code={effectiveCode}
             deviceId={currentDeviceId}
             active={isCircuits3DVisible}
             pointerEvents={isDragToSplit ? 'none' : 'auto'}
+            circuit3dData={circuit3dData}
+            onCircuitStateChange={onCircuit3DStateChange}
         />
-    ), [isCircuits3DVisible, electronicsLabRef, effectiveCode, currentDeviceId, isDragToSplit]);
+    ), [isCircuits3DVisible, electronicsLabRef, vm, effectiveCode, currentDeviceId, isDragToSplit, circuit3dData, onCircuit3DStateChange]);
 
     const panels = useMemo(() => [blocksPanel, simulatorPanel, circuits3DPanel],
         [blocksPanel, simulatorPanel, circuits3DPanel]);
@@ -1218,7 +1223,9 @@ DeviceModeGUI.propTypes = {
     onManualCodeChange: PropTypes.func,
     onUploadFirmware: PropTypes.func,
     electronicsLabRef: PropTypes.object,
-    onSimulatorSerialOutput: PropTypes.func
+    onSimulatorSerialOutput: PropTypes.func,
+    circuit3dData: PropTypes.object,
+    onCircuit3DStateChange: PropTypes.func
 };
 
 DeviceModeGUI.defaultProps = {

@@ -1,80 +1,94 @@
 {
-    "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
-    "productName":  "STBlock",
-    "version":  "0.1.38",
-    "identifier":  "com.stbacademy.stblock",
-    "build":  {
-                  "frontendDist":  "../scratch-gui/build",
-                  "devUrl":  "http://localhost:8601",
-                  "beforeDevCommand":  "pnpm run dev:servers",
-                  "beforeBuildCommand":  "pnpm run build:app"
-              },
-    "app":  {
-                "withGlobalTauri":  true,
-                "windows":  [
-                                {
-                                    "title":  "STBlock - www.stbacademy.net",
-                                    "width":  1280,
-                                    "height":  800,
-                                    "minWidth":  1024,
-                                    "minHeight":  700,
-                                    "center":  true,
-                                    "resizable":  true,
-                                    "fullscreen":  false,
-                                    "additionalBrowserArgs":  "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-renderer-backgrounding --enable-gpu-rasterization --enable-zero-copy"
-                                }
-                            ],
-                "security":  {
-                                 "csp":  null
-                             }
+    "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+    "productName": "STBlock",
+    "version": "0.1.38",
+    "identifier": "com.stbacademy.stblock",
+    "build": {
+        "frontendDist": "../scratch-gui/build",
+        "devUrl": "http://localhost:8601",
+        "beforeDevCommand": "pnpm run dev:servers",
+        "beforeBuildCommand": "pnpm run build:app"
+    },
+    "app": {
+        "withGlobalTauri": true,
+        "windows": [
+            {
+                "title": "STBlock - www.stbacademy.net",
+                "width": 1280,
+                "height": 800,
+                "minWidth": 1024,
+                "minHeight": 700,
+                "center": true,
+                "resizable": true,
+                "fullscreen": false,
+                "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-renderer-backgrounding --enable-gpu-rasterization --enable-zero-copy"
+            }
+        ],
+        "security": {
+            "csp": null
+        }
+    },
+    "bundle": {
+        "active": true,
+        "targets": "all",
+        "publisher": "STB Academy",
+        "copyright": "Copyright 2026 STB Academy",
+        "shortDescription": "Programacion visual, electronica y robotica educativa",
+        "longDescription": "STBlock es una plataforma educativa para programacion visual, electronica, robotica y creacion de juegos.",
+        "icon": [
+            "icons/32x32.png",
+            "icons/128x128.png",
+            "icons/128x128@2x.png",
+            "icons/icon.icns",
+            "icons/icon.ico"
+        ],
+        "android": {
+            "debugApplicationIdSuffix": ".debug"
+        },
+        "resources": [
+            "drivers/**/*",
+            "tools/Arduino/**/*",
+            "backends/**/*"
+        ],
+        "createUpdaterArtifacts": false,
+        "windows": {
+            "webviewInstallMode": {
+                "type": "offlineInstaller",
+                "silent": true
             },
-    "bundle":  {
-                   "active":  true,
-                   "targets":  "all",
-                   "publisher":  "STB Academy",
-                   "copyright":  "Copyright 2026 STB Academy",
-                   "shortDescription":  "Programacion visual, electronica y robotica educativa",
-                   "longDescription":  "STBlock es una plataforma educativa para programacion visual, electronica, robotica y creacion de juegos.",
-                   "icon":  [
-                                "icons/32x32.png",
-                                "icons/128x128.png",
-                                "icons/128x128@2x.png",
-                                "icons/icon.icns",
-                                "icons/icon.ico"
-                            ],
-                   "android":  {
-                                   "debugApplicationIdSuffix":  ".debug"
-                               },
-                   "resources":  [
-                                     "drivers/**/*",
-                                     "tools/Arduino/**/*",
-                                     "backends/**/*"
-                                 ],
-                   "createUpdaterArtifacts":  false,
-                   "windows":  {
-                                   "webviewInstallMode":  {
-                                                              "type":  "offlineInstaller",
-                                                              "silent":  true
-                                                          },
-                                   "nsis":  {
-                                                "template":  "nsis-template.nsi",
-                                                "headerImage":  "icons/nsis-header.bmp",
-                                                "sidebarImage":  "icons/nsis-sidebar.bmp",
-                                                "installerIcon":  "icons/icon.ico",
-                                                "displayLanguageSelector":  false,
-                                                "installMode":  "currentUser"
-                                            }
-                               }
-               },
-    "plugins":  {
-                    "updater":  {
-                                    "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI0NURERERERjdEQTE4RTcKUldUbkdOcjMzZDFkSkFCMVVPZGd6VFdGT3grZ3NKVTBmaytSYXp3bk1Lbm5mRHNGNGIwdlFGT00K",
-                                    "endpoints":  [
-                                                      "https://github.com/solucionestecnologicasb-alt/stblock-releases/releases/latest/download/latest.json"
-                                                  ],
-                                    "windows":  {
-                                                    "installMode":  "passive"
-                                                }
-                                }
-                }
+            "nsis": {
+                "template": "nsis-template.nsi",
+                "headerImage": "icons/nsis-header.bmp",
+                "sidebarImage": "icons/nsis-sidebar.bmp",
+                "installerIcon": "icons/icon.ico",
+                "displayLanguageSelector": false,
+                "installMode": "currentUser"
+            }
+        },
+        "category": "Education",
+        "linux": {
+            "deb": {
+                "depends": [
+                    "libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37",
+                    "libgtk-3-0",
+                    "libayatana-appindicator3-1 | libappindicator3-1",
+                    "librsvg2-2"
+                ],
+                "section": "education",
+                "priority": "optional",
+                "postInstallScript": "linux/postinstall.sh"
+            }
+        }
+    },
+    "plugins": {
+        "updater": {
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI0NURERERERjdEQTE4RTcKUldUbkdOcjMzZDFkSkFCMVVPZGd6VFdGT3grZ3NKVTBmaytSYXp3bk1Lbm5mRHNGNGIwdlFGT00K",
+            "endpoints": [
+                "https://github.com/solucionestecnologicasb-alt/stblock-releases/releases/latest/download/latest.json"
+            ],
+            "windows": {
+                "installMode": "passive"
+            }
+        }
+    }
 }

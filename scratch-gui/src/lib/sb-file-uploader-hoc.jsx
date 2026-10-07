@@ -28,6 +28,7 @@ import {
     restoreDeviceState,
     setCircuitData,
     setCircuit3dData,
+    clearCircuit3dData,
     setSketchforgeData
 } from '../reducers/device-mode';
 
@@ -100,7 +101,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         }
         // step 3: user has picked a file using the file chooser dialog.
         // We don't actually load the file here, we only decide whether to do so.
-        handleChange (e) {
+        async handleChange (e) {
             const {
                 intl,
                 isShowingWithoutId,
@@ -128,10 +129,26 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 // changed it, no need to confirm.)
                 let uploadAllowed = true;
                 if (userOwnsProject || (projectChanged.changed && isShowingWithoutId)) {
+                    const confirmMsg = intl.formatMessage(sharedMessages.replaceProjectWarning);
                     try {
-                        uploadAllowed = typeof window !== 'undefined' && typeof window.confirm === 'function'
-                            ? window.confirm(intl.formatMessage(sharedMessages.replaceProjectWarning))
-                            : true;
+                        if (typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__)) {
+                            try {
+                                const { confirm: tauriConfirm } = await import('@tauri-apps/plugin-dialog');
+                                uploadAllowed = await tauriConfirm(confirmMsg, {
+                                    title: 'STBlock',
+                                    kind: 'warning'
+                                });
+                            } catch (e) {
+                                uploadAllowed = true;
+                            }
+                        } else if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+                            const res = window.confirm(confirmMsg);
+                            if (res instanceof Promise) {
+                                uploadAllowed = await res.catch(() => true);
+                            } else {
+                                uploadAllowed = Boolean(res);
+                            }
+                        }
                     } catch (err) {
                         uploadAllowed = true;
                     }
@@ -327,6 +344,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                                     // Restore Circuito 3D data (Electronics Lab state)
                                     if (deviceData.circuit3dData) {
                                         self.props.onSetCircuit3dData(deviceData.circuit3dData);
+                                    } else {
+                                        self.props.onClearCircuit3dData();
                                     }
                                     // Restore AI conversation to localStorage
                                     if (deviceData.conversation) {
@@ -335,6 +354,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                                                 deviceData.conversation : JSON.stringify(deviceData.conversation));
                                     }
                                 } catch (_) {}
+                            } else {
+                                self.props.onClearCircuit3dData();
                             }
 
                             // Restore 3D SketchForge project (.skf) from .flynt to Redux store.
@@ -414,6 +435,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         onAppendTerminal: PropTypes.func,
         onRestoreDeviceState: PropTypes.func,
         onSetCircuitData: PropTypes.func,
+        onSetCircuit3dData: PropTypes.func,
+        onClearCircuit3dData: PropTypes.func,
         onSetSketchforgeData: PropTypes.func,
         projectChanged: PropTypes.shape({changed: PropTypes.bool, hasBeenSaved: PropTypes.bool}),
         requestProjectUpload: PropTypes.func,
@@ -463,6 +486,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         onSetCircuitData: circuitData => dispatch(setCircuitData(circuitData)),
         // Restore Circuito 3D data (Electronics Lab state)
         onSetCircuit3dData: circuit3dData => dispatch(setCircuit3dData(circuit3dData)),
+        onClearCircuit3dData: () => dispatch(clearCircuit3dData()),
         // Restore 3D SketchForge project (.skf)
         onSetSketchforgeData: sketchforgeData => dispatch(setSketchforgeData(sketchforgeData))
     });

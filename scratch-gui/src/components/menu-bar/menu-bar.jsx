@@ -61,7 +61,10 @@ import {
     getSelectedDevice,
     getDeviceProjects,
     getTerminalOutput,
-    getCodeViewContent
+    getCodeViewContent,
+    clearCircuit3dData,
+    clearCircuitData,
+    clearSketchforgeData
 } from '../../reducers/device-mode';
 import sharedMessages from '../../lib/shared-messages';
 
@@ -272,14 +275,45 @@ class MenuBar extends React.Component {
         // downloading or logging in first.
         // Note that if user is logged in and editing someone else's project,
         // they'll lose their work.
-        const readyToReplaceProject = this.props.confirmReadyToReplaceProject(
-            this.props.intl.formatMessage(sharedMessages.replaceProjectWarning)
-        );
-        this.props.onRequestCloseFile();
-        if (readyToReplaceProject) {
+        const confirmMsg = this.props.intl.formatMessage(sharedMessages.replaceProjectWarning);
+        const executeNew = () => {
             this.props.onClickNew(this.props.canSave && this.props.canCreateNew);
+            if (this.props.onClearCircuit3dData) {
+                this.props.onClearCircuit3dData();
+            }
+            if (this.props.onClearCircuitData) {
+                this.props.onClearCircuitData();
+            }
+            if (this.props.onClearSketchforgeData) {
+                this.props.onClearSketchforgeData();
+            }
+            this.props.onRequestCloseFile();
+        };
+
+        if (this.props.projectChanged && this.props.projectChanged.changed) {
+            if (typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__)) {
+                import('@tauri-apps/plugin-dialog')
+                    .then(({ confirm }) => confirm(confirmMsg, { title: 'STBlock', kind: 'warning' }))
+                    .then(ready => {
+                        if (ready) executeNew();
+                        else this.props.onRequestCloseFile();
+                    })
+                    .catch(() => executeNew());
+                return;
+            }
         }
+
+        const readyToReplaceProject = this.props.confirmReadyToReplaceProject(confirmMsg);
         this.props.onRequestCloseFile();
+        if (readyToReplaceProject instanceof Promise) {
+            readyToReplaceProject
+                .then(ready => {
+                    if (ready) executeNew();
+                })
+                .catch(() => executeNew());
+        } else if (readyToReplaceProject) {
+            executeNew();
+        }
     }
     handleClickRemix () {
         this.props.onClickRemix();
@@ -952,7 +986,10 @@ MenuBar.propTypes = {
     username: PropTypes.string,
     vm: PropTypes.instanceOf(VM).isRequired,
     classroomActive: PropTypes.bool,
-    onOpenClassroom: PropTypes.func
+    onOpenClassroom: PropTypes.func,
+    onClearCircuit3dData: PropTypes.func,
+    onClearCircuitData: PropTypes.func,
+    onClearSketchforgeData: PropTypes.func
 };
 
 
@@ -994,7 +1031,10 @@ const mapDispatchToProps = dispatch => ({
     onClickSave: () => dispatch(manualUpdateProject()),
     onClickSaveAsCopy: () => dispatch(saveProjectAsCopy()),
     onSetTimeTravelMode: mode => dispatch(setTimeTravel(mode)),
-    onSetDeviceMode: mode => dispatch(setDeviceMode(mode))
+    onSetDeviceMode: mode => dispatch(setDeviceMode(mode)),
+    onClearCircuit3dData: () => dispatch(clearCircuit3dData()),
+    onClearCircuitData: () => dispatch(clearCircuitData()),
+    onClearSketchforgeData: () => dispatch(clearSketchforgeData())
 });
 
 export default compose(

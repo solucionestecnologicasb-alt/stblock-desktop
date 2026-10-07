@@ -2513,9 +2513,18 @@ const GUIComponent = props => {
     }, []);
 
 
-    // Restaurar Circuito 3D cuando circuit3dData cambia (despues de cargar .flynt)
+    // Restaurar o limpiar Circuito 3D cuando circuit3dData cambia (despues de cargar .flynt o nuevo proyecto)
     useEffect(() => {
-        if (!circuit3dData) return;
+        if (!circuit3dData) {
+            try {
+                if (electronicsLabRef.current && electronicsLabRef.current.loadCircuitState) {
+                    electronicsLabRef.current.loadCircuitState({clear: true});
+                }
+            } catch (e) {
+                console.warn('[GUI] Error clearing Circuito 3D state:', e);
+            }
+            return;
+        }
 
         const restore3D = async () => {
             try {
@@ -2527,7 +2536,7 @@ const GUIComponent = props => {
             }
         };
 
-        const timer = setTimeout(restore3D, 1200);
+        const timer = setTimeout(restore3D, 500);
         return () => clearTimeout(timer);
     }, [circuit3dData]);
 
@@ -3520,6 +3529,8 @@ const GUIComponent = props => {
             onUploadFirmware={handleDeviceUploadFirmware}
             electronicsLabRef={electronicsLabRef}
             onSimulatorSerialOutput={handleSimulatorSerialOutput}
+            circuit3dData={circuit3dData}
+            onCircuit3DStateChange={onSetCircuit3dData}
         />
     );
 

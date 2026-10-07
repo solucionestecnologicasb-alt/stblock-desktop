@@ -107,6 +107,12 @@ fn kill_all_backends() {
     println!("[launcher] Procesos backend finalizados.");
 }
 
+#[tauri::command]
+fn prepare_for_update() {
+    println!("[updater] Preparando para actualizar: cerrando procesos secundarios...");
+    kill_all_backends();
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PortInfo {
     pub port_name: String,
@@ -270,32 +276,40 @@ fn save_file(path: String, content: Vec<u8>) -> Result<(), String> {
 
 #[tauri::command]
 fn install_drivers(app_handle: tauri::AppHandle) -> Result<String, String> {
-    use tauri::Manager;
-    let resource_dir = app_handle.path().resource_dir()
-        .map_err(|e| format!("Error al obtener el directorio de recursos: {}", e))?;
-    
-    let drivers_dir = resource_dir.join("drivers");
-    
-    let bat_file = if cfg!(target_pointer_width = "64") {
-        "install_x64.bat"
-    } else {
-        "install_x86.bat"
-    };
-    
-    let bat_path = drivers_dir.join(bat_file);
-    
-    if !bat_path.exists() {
-        return Err(format!("El script de instalación de drivers no existe en: {:?}", bat_path));
-    }
-    
-    // Spawn the installer script asynchronously
-    std::process::Command::new("cmd")
-        .args(["/c", bat_path.to_str().unwrap()])
-        .current_dir(&drivers_dir)
-        .spawn()
-        .map_err(|e| format!("Error al iniciar el instalador de drivers: {}", e))?;
+    #[cfg(windows)]
+    {
+        use tauri::Manager;
+        let resource_dir = app_handle.path().resource_dir()
+            .map_err(|e| format!("Error al obtener el directorio de recursos: {}", e))?;
         
-    Ok("Instalación de drivers iniciada en segundo plano.".to_string())
+        let drivers_dir = resource_dir.join("drivers");
+        
+        let bat_file = if cfg!(target_pointer_width = "64") {
+            "install_x64.bat"
+        } else {
+            "install_x86.bat"
+        };
+        
+        let bat_path = drivers_dir.join(bat_file);
+        
+        if !bat_path.exists() {
+            return Err(format!("El script de instalación de drivers no existe en: {:?}", bat_path));
+        }
+        
+        // Spawn the installer script asynchronously
+        std::process::Command::new("cmd")
+            .args(["/c", bat_path.to_str().unwrap()])
+            .current_dir(&drivers_dir)
+            .spawn()
+            .map_err(|e| format!("Error al iniciar el instalador de drivers: {}", e))?;
+            
+        Ok("Instalación de drivers iniciada en segundo plano.".to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        Ok("En Linux/ChromeOS los controladores serie (CH340, CP210x, CDC-ACM) están integrados en el sistema operativo.".to_string())
+    }
 }
 
 
@@ -362,6 +376,7 @@ pub fn run() {
             upload_firmware,
             install_drivers,
             fetch_update_policy,
+            prepare_for_update,
             // Modo Aula
             classroom_start_server,
             classroom_stop_server,
@@ -381,10 +396,15 @@ pub fn run() {
             let handle = app.handle();
 
             // Backend server (port 3001) — AI chat + Gearbot CRUD
+            let backend_exe = if cfg!(windows) {
+                "stblock-backend-server.exe"
+            } else {
+                "stblock-backend-server"
+            };
             launch_backend(
                 handle,
                 "Backend Server",
-                "stblock-backend-server.exe",
+                backend_exe,
                 3001,
                 vec![("PORT", "3001".to_string())],
             );
@@ -396,10 +416,13 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    // Event loop with cleanup on exit
+    // Event loop with cleanup on exit or exit requested
     app.run(|_app_handle, event| {
-        if let tauri::RunEvent::Exit = event {
-            kill_all_backends();
+        match event {
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                kill_all_backends();
+            }
+            _ => {}
         }
     });
 }

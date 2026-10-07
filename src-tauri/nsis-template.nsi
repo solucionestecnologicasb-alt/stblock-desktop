@@ -646,6 +646,7 @@ Section Install
   !endif
 
   !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  !insertmacro CheckIfAppIsRunning "stblock-backend-server.exe" "STBlock Backend Server"
 
   ; Copy main executable
   File "${MAINBINARYSRCPATH}"
@@ -783,6 +784,7 @@ Section Uninstall
   !endif
 
   !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  !insertmacro CheckIfAppIsRunning "stblock-backend-server.exe" "STBlock Backend Server"
 
   ; Delete the app directory and its content from disk
   ; Copy main executable

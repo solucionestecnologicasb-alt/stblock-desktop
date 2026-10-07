@@ -38,11 +38,34 @@ if (typeof window !== 'undefined') {
         const msg = args.map(a => (a && a.toString ? a.toString() : String(a))).join(' ');
         if (msg.includes('A listener indicated an asynchronous response') ||
             msg.includes('message channel closed before a response was received') ||
-            msg.includes('AudioContext was not allowed to start')) {
+            msg.includes('AudioContext was not allowed to start') ||
+            msg.includes('dialog.confirm not allowed')) {
             return;
         }
         originalError.apply(console, args);
     };
+
+    // Prevenir que errores asíncronos de dialog.confirm bloqueen la UI en WebView2 / Tauri
+    if (typeof window.confirm === 'function') {
+        const origConfirm = window.confirm;
+        window.confirm = function (message) {
+            try {
+                const res = origConfirm.call(window, message);
+                if (res && typeof res.catch === 'function') {
+                    res.catch(() => {});
+                }
+                return typeof res === 'boolean' ? res : true;
+            } catch (e) {
+                return true;
+            }
+        };
+    }
+
+    window.addEventListener('unhandledrejection', function (event) {
+        if (event && event.reason && String(event.reason).includes('dialog.confirm')) {
+            event.preventDefault();
+        }
+    });
 }
 
 import React from 'react';
