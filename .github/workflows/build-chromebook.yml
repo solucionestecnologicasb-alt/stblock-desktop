@@ -60,9 +60,14 @@ jobs:
 
       - name: Descargar arduino-cli para Linux 64-bit
         run: |
+          mkdir -p src-tauri/tools/Arduino
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR="src-tauri/tools/Arduino" sh
+          chmod +x src-tauri/tools/Arduino/arduino-cli
           mkdir -p tools/Arduino
-          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR="tools/Arduino" sh
-          chmod +x tools/Arduino/arduino-cli
+          cp src-tauri/tools/Arduino/arduino-cli tools/Arduino/arduino-cli
+          if [ -d "tools/Arduino/packages" ]; then
+            cp -rn tools/Arduino/* src-tauri/tools/Arduino/ 2>/dev/null || true
+          fi
 
       - name: Compilar backend Node SEA para Linux
         run: |
