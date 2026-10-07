@@ -45,6 +45,8 @@ if [ ! -d "$ROOT_DIR/node_modules" ]; then
     echo "Instalando dependencias de pnpm..."
     pnpm install
 fi
+pnpm --filter scratch-gui run prepublish
+pnpm --dir backend install
 
 # 5. Compilar frontend (Scratch GUI + SketchForge)
 echo "Compilando frontend (Scratch GUI + SketchForge)..."
