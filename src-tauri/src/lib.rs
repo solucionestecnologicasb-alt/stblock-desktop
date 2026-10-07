@@ -14,6 +14,15 @@ use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+// Platform-specific backend executable name
+fn backend_exe_name(name: &str) -> String {
+    if cfg!(windows) {
+        format!("{}.exe", name)
+    } else {
+        name.to_string()
+    }
+}
+
 // Arduino CLI integration module
 mod arduino_cli;
 use arduino_cli::*;
@@ -38,12 +47,13 @@ fn launch_backend(
     port: u16,
     extra_env: Vec<(&str, String)>,
 ) {
+    let exe_name_platform = backend_exe_name(exe_name);
     // Resolve the executable path
     let exe_path = app_handle
         .path()
         .resource_dir()
         .ok()
-        .map(|d| d.join("backends").join(exe_name))
+        .map(|d| d.join("backends").join(&exe_name_platform))
         .filter(|p| p.exists());
 
     let mut cmd = if let Some(ref path) = exe_path {
@@ -53,7 +63,7 @@ fn launch_backend(
         // Dev-mode fallback: look in src-tauri/backends/ relative to current dir
         let dev_path = std::env::current_dir()
             .ok()
-            .map(|d| d.join("backends").join(exe_name))
+            .map(|d| d.join("backends").join(&exe_name_platform))
             .filter(|p| p.exists());
         if let Some(ref dp) = dev_path {
             println!("[launcher] {} (dev): {:?}", name, dp);
@@ -396,15 +406,10 @@ pub fn run() {
             let handle = app.handle();
 
             // Backend server (port 3001) — AI chat + Gearbot CRUD
-            let backend_exe = if cfg!(windows) {
-                "stblock-backend-server.exe"
-            } else {
-                "stblock-backend-server"
-            };
             launch_backend(
                 handle,
                 "Backend Server",
-                backend_exe,
+                "stblock-backend-server",
                 3001,
                 vec![("PORT", "3001".to_string())],
             );
