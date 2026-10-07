@@ -451,3 +451,28 @@
     transform: none;
 }
 
+.chromebookNotice {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 8px;
+    text-align: left;
+}
+
+.chromebookNoticeTitle {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #0369a1;
+    margin-bottom: 4px;
+}
+
+.chromebookNoticeText {
+    font-size: 11px;
+    line-height: 1.45;
+    color: #0c4a6e;
+}
+
+

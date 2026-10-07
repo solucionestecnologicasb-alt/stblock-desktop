@@ -290,6 +290,16 @@ const UpdateModal = ({
                             </div>
                         </div>
                     ) : null}
+                    {available && info.isLinux ? (
+                        <div className={styles.chromebookNotice}>
+                            <div className={styles.chromebookNoticeTitle}>
+                                <span>💡 Nota para Chromebook / Linux</span>
+                            </div>
+                            <div className={styles.chromebookNoticeText}>
+                                Al hacer clic en <strong>Descargar actualización (.deb)</strong> se descargará el nuevo paquete. Muévelo a la carpeta <em>Archivos de Linux</em> y haz doble clic para actualizar sin perder tus proyectos.
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
 
                 <div className={styles.actions}>
@@ -340,13 +350,27 @@ const UpdateModal = ({
                                     Más tarde
                                 </button>
                             )}
-                            <button
-                                className={styles.primaryButton}
-                                disabled={!info.canInstall}
-                                onClick={onInstall}
-                            >
-                                Actualizar ahora
-                            </button>
+                            {info.isLinux ? (
+                                <button
+                                    className={styles.primaryButton}
+                                    onClick={() => {
+                                        const url = info.debDownloadUrl || info.releaseUrl;
+                                        if (url) {
+                                            window.open(url, '_blank');
+                                        }
+                                    }}
+                                >
+                                    Descargar actualización (.deb)
+                                </button>
+                            ) : (
+                                <button
+                                    className={styles.primaryButton}
+                                    disabled={!info.canInstall}
+                                    onClick={onInstall}
+                                >
+                                    Actualizar ahora
+                                </button>
+                            )}
                         </React.Fragment>
                     ) : (
                         <button className={styles.primaryButton} onClick={onDismiss}>

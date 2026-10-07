@@ -24,6 +24,7 @@ $policy = [ordered]@{
     title = $Title
     message = $Message
     releaseUrl = $releaseUrl
+    debUrl = "https://github.com/$Repo/releases/download/$Tag/STBlock_${Version}_amd64.deb"
     notes = $Notes
 }
 

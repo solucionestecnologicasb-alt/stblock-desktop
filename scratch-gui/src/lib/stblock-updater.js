@@ -166,12 +166,24 @@ export const checkForSTBlockUpdates = async ({manual = false} = {}) => {
     const rawMessage = (policy && policy.message) || 'Hay una nueva versión de STBlock disponible.';
     const rawNotes = (policy && (policy.notes || policy.body)) || (update && update.body) || '';
 
+    const isLinuxPlatform = () => {
+        if (typeof navigator === 'undefined') return false;
+        const ua = (navigator.userAgent || '').toLowerCase();
+        const plat = (navigator.platform || '').toLowerCase();
+        return (ua.includes('linux') || plat.includes('linux') || ua.includes('x11')) && !ua.includes('android');
+    };
+    const isLinux = isLinuxPlatform();
+    const debDownloadUrl = (policy && policy.debUrl) ||
+        `https://github.com/solucionestecnologicasb-alt/stblock-releases/releases/download/v${latestVersion}/STBlock_${latestVersion}_amd64.deb`;
+
     return {
         status: 'available',
         currentVersion,
         latestVersion,
         mandatory,
         canInstall: Boolean(update),
+        isLinux,
+        debDownloadUrl,
         title: cleanSpanishText(rawTitle),
         message: cleanSpanishText(rawMessage),
         releaseUrl: policy && policy.releaseUrl,
