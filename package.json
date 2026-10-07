@@ -2,10 +2,6 @@
     "name":  "stblock",
     "description":  "STBlock - Programacion visual, electronica, robotica y creacion de juegos.",
     "version":  "0.1.38",
-    "workspaces":  [
-                       "scratch-gui",
-                       "scratch-vm"
-                   ],
     "scripts":  {
                     "install:all":  "pnpm install \u0026\u0026 pnpm --filter scratch-gui run prepublish \u0026\u0026 pnpm --dir backend install",
                     "start:gui":  "pnpm --filter scratch-gui start",
