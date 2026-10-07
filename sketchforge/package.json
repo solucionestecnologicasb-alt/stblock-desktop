@@ -11,7 +11,7 @@
     "prebuild": "npm run copy:occt",
     "build": "next build apps/web",
     "export": "set STATIC_EXPORT=true&& next build apps/web && node scripts/verify-static-worker-assets.mjs",
-    "export:stblock": "npm run copy:occt && set STATIC_EXPORT=true&& set SKETCHFORGE_BASE_PATH=/sketchforge&& next build apps/web && node scripts/verify-static-worker-assets.mjs --prefix /sketchforge",
+    "export:stblock": "node scripts/export-stblock.mjs",
     "verify:static-worker-assets": "node scripts/verify-static-worker-assets.mjs",
     "start": "next start apps/web",
     "typecheck": "tsc -p apps/web/tsconfig.json --noEmit",
