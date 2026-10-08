@@ -1,7 +1,7 @@
 packages:
-  - "scratch-gui"
-  - "scratch-vm"
-  - "sketchforge"
+  - "apps/gui"
+  - "apps/vm"
+  - "apps/electronics"
 
 allowBuilds:
   chromedriver: set this to true or false

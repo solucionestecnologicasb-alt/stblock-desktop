@@ -1,18 +1,18 @@
 // Copia el static export de SketchForge dentro del build de scratch-gui
-// (scratch-gui/build/sketchforge/), para que Tauri lo empaquete en el .exe.
-// Debe ejecutarse DESPUES de `pnpm --filter scratch-gui build`, porque ese build
-// hace `clean` y borra scratch-gui/build/.
+// (apps/gui/build/sketchforge/), para que Tauri lo empaquete en el .exe.
+// Debe ejecutarse DESPUES DE `pnpm --filter gui build`, porque ese build
+// hace `clean` y borra apps/gui/build/.
 import { cp, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const srcRoot = join(root, "sketchforge", "apps", "web", ".next-export");
-const destRoot = join(root, "scratch-gui", "build", "sketchforge");
+const srcRoot = join(root, "apps", "electronics", "apps", "web", ".next-export");
+const destRoot = join(root, "apps", "gui", "build", "sketchforge");
 
 if (!existsSync(srcRoot)) {
-  console.error(`[copy-sketchforge-to-build] Export no encontrado en ${srcRoot}. Ejecuta \`pnpm run build:sketchforge\` primero.`);
+  console.error(`[copy-sketchforge-to-build] Export no encontrado en ${srcRoot}. Ejecuta \`pnpm run build:electronics\` primero.`);
   process.exit(1);
 }
 

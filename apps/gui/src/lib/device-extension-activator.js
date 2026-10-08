@@ -4,7 +4,7 @@
  * registers them with the VM runtime, and handles activation/deactivation.
  */
 
-import {buildExtensionCategoryInfo, generateBlockJSON, EXTENSION_COLORS} from '../../../scratch-vm/src/devices/device-extensions';
+import {buildExtensionCategoryInfo, generateBlockJSON, EXTENSION_COLORS} from '@stb/vm/devices/device-extensions';
 
 const activateDeviceExtension = (vm, extension) => {
     if (!vm || !vm.runtime) {

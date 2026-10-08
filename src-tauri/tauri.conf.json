@@ -4,7 +4,7 @@
     "version": "0.1.38",
     "identifier": "com.stbacademy.stblock",
     "build": {
-        "frontendDist": "../scratch-gui/build",
+        "frontendDist": "../apps/gui/build",
         "devUrl": "http://localhost:8601",
         "beforeDevCommand": "pnpm run dev:servers",
         "beforeBuildCommand": "pnpm run build:app"

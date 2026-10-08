@@ -5,8 +5,8 @@
  * cuando se está en modo dispositivo (Arduino, ESP32, etc.)
  */
 
-import extensionCatalog from '../../../../../scratch-vm/src/devices/extension-catalog.json';
-import isCompatible from '../../../../../scratch-vm/src/devices/extension-compatibility';
+import extensionCatalog from '@stb/vm/devices/extension-catalog.json';
+import isCompatible from '@stb/vm/devices/extension-compatibility';
 import {getIconForExtension} from '../../device-extension-icons';
 
 // Definición de categorías de extensiones

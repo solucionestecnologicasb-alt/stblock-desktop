@@ -13,8 +13,8 @@ const electronicsLabDir = "C:\\Users\\bello\\OneDrive\\Desktop\\prueba\\electron
 // emite DEP0190 con args+shell). Los comandos son constantes, sin input del
 // usuario, por lo que no hay riesgo de inyección.
 const servers = [
-  { name: "scratch-gui", command: "pnpm --filter scratch-gui start", port: 8601 },
-  { name: "sketchforge", command: "pnpm --filter sketchforge dev", port: 3000 },
+  { name: "gui", command: "pnpm --filter gui start", port: 8601 },
+  { name: "electronics", command: "pnpm --filter electronics dev", port: 3000 },
 ];
 
 if (existsSync(electronicsLabDir)) {
