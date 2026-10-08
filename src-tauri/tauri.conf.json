@@ -47,8 +47,7 @@
         },
         "resources": [
             "drivers/**/*",
-            "tools/Arduino/**/*",
-            "backends/**/*"
+            "tools/Arduino/**/*"
         ],
         "createUpdaterArtifacts": false,
         "windows": {

@@ -27,27 +27,6 @@ if (existsSync(electronicsLabDir)) {
 
 const children = [];
 
-// Detiene backends STBlock que quedaron vivos de una sesión anterior.
-// Al cerrar tauri dev con Ctrl+C o taskkill, `kill_all_backends` (Rust) no
-// siempre corre, y el proceso `stblock-backend-server.exe`
-// sobrevive apuntando a `src-tauri/backends/`. Si un build posterior intenta leer
-// ese archivo (tauri_build los lee como recursos) falla con "os error 32":
-//   El proceso no tiene acceso al archivo porque está siendo utilizado por otro proceso.
-// Este nombre de proceso es exclusivo de STBlock, así que no hay riesgo de
-// matar procesos ajenos.
-function killStBlockBackends() {
-  if (isWindows) {
-    try {
-      spawnSync("taskkill", ["/F", "/T", "/IM", "stblock-backend-server.exe"], { stdio: "ignore" });
-      console.log("[start-dev] Backend STBlock anterior detenido (evita lock de archivos).");
-    } catch {
-      // si ya no existen, no pasa nada
-    }
-  } else {
-    try { spawnSync("pkill", ["-f", "stblock-backend-server"]); } catch {}
-  }
-}
-
 // Libera el puerto antes de arrancar cada server. Previene el escenario en que
 // un dev server colgado de una sesión anterior deja el puerto ocupado y el
 // nuevo no puede bindearlo (el iframe de SketchForge apunta fijo a :3000).
@@ -108,10 +87,6 @@ function shutdown(code) {
   for (const child of children) killTree(child);
   process.exit(code);
 }
-
-// Limpia backends huérfanos ANTES de que cargo/tauri_build intente leer los
-// recursos `src-tauri/backends/*` (os error 32 si un proxy viejo los mantiene).
-killStBlockBackends();
 
 for (const { name, command, port } of servers) {
   if (port) freePort(port);

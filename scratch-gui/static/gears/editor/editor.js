@@ -13,6 +13,82 @@
 
   var API_BASE = resolveApiBase();
 
+  // Tauri invoke wrapper for Gearbot CRUD operations
+  async function tauriInvoke(cmd, args) {
+    if (window.__TAURI__ && window.__TAURI__.invoke) {
+      try {
+        return await window.__TAURI__.invoke(cmd, args);
+      } catch (err) {
+        console.error('[Tauri invoke] ' + cmd + ' failed:', err);
+        throw err;
+      }
+    }
+    // Not in Tauri - fall back to fetch (for web/WordPress)
+    throw new Error('Not in Tauri environment');
+  }
+
+  // Map API calls to Tauri commands
+  async function gearsApi(path, options) {
+    var method = (options && options.method) || 'GET';
+    var body = options && options.body;
+    var headers = options && options.headers;
+
+    // In Tauri, use invoke commands
+    if (window.__TAURI__ && window.__TAURI__.invoke) {
+      if (path.startsWith('/api/gears/maps')) {
+        var idMatch = path.match(/\/api\/gears\/maps\/(.+)/);
+        var id = idMatch ? decodeURIComponent(idMatch[1]) : null;
+        if (method === 'GET' && id) {
+          return await tauriInvoke('gears_maps_get', {id: id});
+        }
+        if (method === 'GET' && !id) {
+          return await tauriInvoke('gears_maps_list', {});
+        }
+        if (method === 'PUT' && id) {
+          var data = typeof body === 'string' ? JSON.parse(body) : body;
+          return await tauriInvoke('gears_maps_save', {id: id, data: data});
+        }
+        if (method === 'DELETE' && id) {
+          return await tauriInvoke('gears_maps_delete', {id: id});
+        }
+      }
+      if (path.startsWith('/api/gears/robots/admin')) {
+        var idMatch = path.match(/\/api\/gears\/robots\/admin\/(.+)/);
+        var id = idMatch ? decodeURIComponent(idMatch[1]) : null;
+        if (method === 'GET' && id) {
+          return await tauriInvoke('gears_robots_get', {id: id});
+        }
+        if (method === 'GET' && !id) {
+          return await tauriInvoke('gears_robots_list', {});
+        }
+        if (method === 'PUT' && id) {
+          var data = typeof body === 'string' ? JSON.parse(body) : body;
+          return await tauriInvoke('gears_robots_save', {id: id, data: data});
+        }
+        if (method === 'DELETE' && id) {
+          return await tauriInvoke('gears_robots_delete', {id: id});
+        }
+      }
+      if (path.startsWith('/api/gears/assets')) {
+        var idMatch = path.match(/\/api\/gears\/assets\/(.+)/);
+        var filename = idMatch ? decodeURIComponent(idMatch[1]) : null;
+        if (method === 'GET' && filename) {
+          var bytes = await tauriInvoke('gears_assets_get', {filename: filename});
+          return new Response(new Uint8Array(bytes));
+        }
+        if (method === 'PUT' && filename && body) {
+          // body is a Blob/File
+          var arrayBuffer = await body.arrayBuffer();
+          var bytes = new Uint8Array(arrayBuffer);
+          return await tauriInvoke('gears_assets_save', {filename: filename, content: Array.from(bytes)});
+        }
+      }
+    }
+    // Fallback to fetch for non-Tauri environments
+    var url = API_BASE + path;
+    return fetch(url, options);
+  }
+
   var $ = function (id) { return document.getElementById(id); };
   var canvas = $('editorCanvas');
   var ctx = canvas.getContext('2d');
@@ -1521,7 +1597,7 @@
 
   async function saveMap() {
     var payload = mapPayload();
-    var response = await fetch(API_BASE + '/api/gears/maps/' + encodeURIComponent(payload.metadata.id), {
+    var response = await gearsApi('/api/gears/maps/' + encodeURIComponent(payload.metadata.id), {
       method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
     });
     if (!response.ok) throw new Error(await response.text());
@@ -1532,7 +1608,7 @@
 
   async function refreshMaps() {
     try {
-      var maps = await fetch(API_BASE + '/api/gears/maps').then(function (response) { return response.json(); });
+      var maps = await gearsApi('/api/gears/maps').then(function (response) { return response.json(); });
       $('savedMaps').innerHTML = '';
       maps.forEach(function (map) {
         var row = document.createElement('div');
@@ -1544,7 +1620,7 @@
         remove.textContent = 'X';
         remove.className = 'danger';
         remove.onclick = async function () {
-          await fetch(API_BASE + '/api/gears/maps/' + encodeURIComponent(map.id), {method: 'DELETE'});
+          await gearsApi('/api/gears/maps/' + encodeURIComponent(map.id), {method: 'DELETE'});
           refreshMaps();
         };
         row.append(load, remove);
@@ -1554,7 +1630,14 @@
   }
 
   async function loadMapUrl(url) {
-    var payload = await fetch(withCacheBuster(url)).then(function (response) { return response.json(); });
+    // If URL is an API URL, use gearsApi (which routes to Tauri invoke in Tauri env)
+    var response;
+    if (url.indexOf('/api/gears/') !== -1) {
+      response = await gearsApi(url.replace(API_BASE, ''));
+    } else {
+      response = await fetch(withCacheBuster(url));
+    }
+    var payload = await response.json();
     applyPayload(payload);
     toast('Escenario cargado');
   }
@@ -1590,7 +1673,7 @@
 
   async function uploadAsset(file) {
     var filename = safeAssetName(file.name);
-    var response = await fetch(API_BASE + '/api/gears/assets/' + encodeURIComponent(filename), {
+    var response = await gearsApi('/api/gears/assets/' + encodeURIComponent(filename), {
       method: 'PUT', headers: {'Content-Type': file.type || 'application/octet-stream'}, body: file
     });
     if (!response.ok) throw new Error(await response.text());
@@ -5181,7 +5264,7 @@
     if (selectedRobotPartId) syncRobotPartFromForm(activePartConnectionBoard);
     syncRobotStateFromForm();
     normalizeCustomPresetRobotParts();
-    var response = await fetch(API_BASE + '/api/gears/robots/admin/' + encodeURIComponent(robotState.id), {
+    var response = await gearsApi('/api/gears/robots/admin/' + encodeURIComponent(robotState.id), {
       method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(robotState)
     });
     if (!response.ok) throw new Error(await response.text());
@@ -5192,7 +5275,7 @@
 
   async function refreshAdminRobots() {
     try {
-      var list = await fetch(API_BASE + '/api/gears/robots/admin').then(function(r) { return r.json(); });
+      var list = await gearsApi('/api/gears/robots/admin').then(function(r) { return r.json(); });
       var container = $('savedAdminRobots');
       if (!container) return;
       container.innerHTML = '';
@@ -5208,7 +5291,7 @@
         remove.textContent = 'X';
         remove.className = 'danger';
         remove.onclick = async function() {
-          await fetch(API_BASE + '/api/gears/robots/admin/' + encodeURIComponent(robot.id), {method: 'DELETE'});
+          await gearsApi('/api/gears/robots/admin/' + encodeURIComponent(robot.id), {method: 'DELETE'});
           refreshAdminRobots();
         };
 
@@ -5351,7 +5434,13 @@
 
   async function loadRobotUrl(url) {
     try {
-      var data = await fetch(withCacheBuster(url)).then(function(r) { return r.json(); });
+      var response;
+      if (url.indexOf('/api/gears/') !== -1) {
+        response = await gearsApi(url.replace(API_BASE, ''));
+      } else {
+        response = await fetch(withCacheBuster(url));
+      }
+      var data = await response.json();
       robotState = data;
       loadRobotForm();
       if (robotScene) renderRobot3D();
