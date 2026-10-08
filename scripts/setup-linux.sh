@@ -173,6 +173,41 @@ install_system_deps() {
                 atk-devel \
                 gdk-pixbuf-devel
             ;;
+        void)
+            sudo xbps-install -S \
+                libwebkitgtk41-devel \
+                libwebkit2gtk41 \
+                gtk+3-devel \
+                libayatana-appindicator-gtk3-devel \
+                librsvg-devel \
+                libudev-devel \
+                openssl-devel \
+                gcc \
+                g++ \
+                make \
+                pkg-config \
+                curl \
+                wget \
+                git \
+                alsa-lib-devel \
+                pulseaudio-devel \
+                libX11-devel \
+                libXrandr-devel \
+                libXi-devel \
+                libXcursor-devel \
+                libXinerama-devel \
+                libXcomposite-devel \
+                libXdamage-devel \
+                libXfixes-devel \
+                libXext-devel \
+                libXrender-devel \
+                libXtst-devel \
+                glib-devel \
+                cairo-devel \
+                pango-devel \
+                atk-devel \
+                gdk-pixbuf-devel
+            ;;
         *)
             log_warn "Unknown distro: $distro. Skipping system package installation."
             log_warn "Please install Tauri dependencies manually: https://tauri.app/v1/guides/getting-started/prerequisites"
