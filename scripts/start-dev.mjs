@@ -4,8 +4,12 @@
 // Reemplaza el beforeDevCommand de un solo server en tauri.conf.json.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const isWindows = process.platform === "win32";
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const devTargetDir = join(projectRoot, "src-tauri", "target");
 
 const electronicsLabDir = "C:\\Users\\bello\\OneDrive\\Desktop\\prueba\\electronics-lab";
 
@@ -27,24 +31,27 @@ if (existsSync(electronicsLabDir)) {
 
 const children = [];
 
-// Detiene backends STBlock que quedaron vivos de una sesión anterior.
-// Al cerrar tauri dev con Ctrl+C o taskkill, `kill_all_backends` (Rust) no
-// siempre corre, y el proceso `stblock-backend-server.exe`
-// sobrevive apuntando a `src-tauri/backends/`. Si un build posterior intenta leer
-// ese archivo (tauri_build los lee como recursos) falla con "os error 32":
+// Detiene procesos huérfanos que quedaron vivos de una sesión anterior de
+// `tauri dev`. Al cerrar con Ctrl+C o taskkill, `kill_all_backends` (Rust) no
+// siempre corre y sobreviven el backend `stblock-backend-server.exe` y los
+// demonios `python3` que Arduino lanza para `pluggable_discovery.py`. Mantienen
+// bloqueados archivos bajo `src-tauri/target/...` y el siguiente build falla con
+// "os error 32":
 //   El proceso no tiene acceso al archivo porque está siendo utilizado por otro proceso.
-// Este nombre de proceso es exclusivo de STBlock, así que no hay riesgo de
-// matar procesos ajenos.
-function killStBlockBackends() {
+// El filtro es por ruta del ejecutable, así que no toca apps instaladas ni otros
+// procesos ajenos (incluidos otros Python del sistema).
+function killStaleDevProcesses() {
   if (isWindows) {
+    const target = devTargetDir.replace(/'/g, "''");
+    const script = `Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith('${target}', [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
     try {
-      spawnSync("taskkill", ["/F", "/T", "/IM", "stblock-backend-server.exe"], { stdio: "ignore" });
-      console.log("[start-dev] Backend STBlock anterior detenido (evita lock de archivos).");
+      spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], { stdio: "ignore" });
+      console.log("[start-dev] Procesos anteriores de STBlock detenidos (evita lock de archivos).");
     } catch {
       // si ya no existen, no pasa nada
     }
   } else {
-    try { spawnSync("pkill", ["-f", "stblock-backend-server"]); } catch {}
+    try { spawnSync("pkill", ["-f", devTargetDir]); } catch {}
   }
 }
 
@@ -109,9 +116,9 @@ function shutdown(code) {
   process.exit(code);
 }
 
-// Limpia backends huérfanos ANTES de que cargo/tauri_build intente leer los
-// recursos `src-tauri/backends/*` (os error 32 si un proxy viejo los mantiene).
-killStBlockBackends();
+// Limpia procesos huérfanos ANTES de que cargo/tauri_build intente leer y
+// sobrescribir los recursos de `src-tauri/target/` (os error 32).
+killStaleDevProcesses();
 
 for (const { name, command, port } of servers) {
   if (port) freePort(port);

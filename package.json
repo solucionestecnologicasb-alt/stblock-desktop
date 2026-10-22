@@ -1,7 +1,7 @@
 {
     "name":  "stblock",
     "description":  "STBlock - Programacion visual, electronica, robotica y creacion de juegos.",
-    "version":  "0.1.47",
+    "version":  "0.1.48",
     "workspaces":  [
                        "scratch-gui",
                        "scratch-vm"
