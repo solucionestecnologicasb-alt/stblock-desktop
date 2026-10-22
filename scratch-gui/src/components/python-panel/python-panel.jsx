@@ -198,6 +198,9 @@ const PythonPanel = ({
     const [showHelp, setShowHelp] = useState(false);
     const [showVariables, setShowVariables] = useState(false);
     const [variablesList, setVariablesList] = useState([]);
+    // Firma de la última lista de variables para evitar setState redundantes
+    // (MONITORS_UPDATE puede emitirse a alta frecuencia durante la ejecución).
+    const variablesSignatureRef = useRef('');
     const [newVarName, setNewVarName] = useState('');
     const [errors, setErrors] = useState([]); // Lista de errores
     const [showErrors, setShowErrors] = useState(true); // Mostrar/ocultar panel de errores
@@ -449,12 +452,21 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
             }
         }
 
-        setVariablesList(vars);
+        // Evitar re-render si la lista no cambió realmente (mismo contenido).
+        const nextSignature = vars.map(v =>
+            `${v.id}:${v.name}:${v.type}:${v.visible ? 1 : 0}:${v.value}`).join('|');
+        if (nextSignature !== variablesSignatureRef.current) {
+            variablesSignatureRef.current = nextSignature;
+            setVariablesList(vars);
+        }
     }, [vm]);
 
     useEffect(() => {
+        // Solo mantener el refresco activo mientras el panel está visible.
+        // El panel vive montado (oculto por CSS), así que sin esta guarda sus
+        // listeners y su polling consumían recursos de forma continua.
+        if (!isOpen || !vm) return;
         refreshVariables();
-        if (!vm) return;
 
         const handleUpdate = () => refreshVariables();
         vm.addListener('MONITORS_UPDATE', handleUpdate);
@@ -463,17 +475,14 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
         vm.addListener('targetsUpdate', handleUpdate);
         vm.addListener('targetStateUpdate', handleUpdate);
 
-        const timer = setInterval(refreshVariables, 1000);
-
         return () => {
             vm.removeListener('MONITORS_UPDATE', handleUpdate);
             vm.removeListener('PROJECT_CHANGED', handleUpdate);
             vm.removeListener('workspaceUpdate', handleUpdate);
             vm.removeListener('targetsUpdate', handleUpdate);
             vm.removeListener('targetStateUpdate', handleUpdate);
-            clearInterval(timer);
         };
-    }, [vm, refreshVariables]);
+    }, [vm, refreshVariables, isOpen]);
 
     const handleToggleMonitor = useCallback((varItem) => {
         if (!vm || !vm.runtime) return;
@@ -689,59 +698,17 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
             const diff = hs.clientWidth - ta.clientWidth;
             if (Math.abs(diff) > 1) {
                 nextSbw = Math.max(0, currentSbw + diff);
-                console.log('[PythonEditor][sync] ancho corregido:', {
-                    hsClientW: hs.clientWidth,
-                    taClientW: ta.clientWidth,
-                    diff,
-                    currentSbw,
-                    nextSbw
-                });
             }
         }
 
         const next = `${nextSbw}px`;
         if (wrapper.style.getPropertyValue('--editor-sbw') !== next) {
             wrapper.style.setProperty('--editor-sbw', next);
-            console.log('[PythonEditor][sync] sbw:', nextSbw, 'px', {
-                taClientW: ta.clientWidth,
-                hsClientW: hs ? hs.clientWidth : null
-            });
         }
         // La barra de plegado no debe cubrir el scrollbar del textarea: termina
         // donde acaba el área de texto (a la izquierda del scrollbar).
         if (wrapper.style.getPropertyValue('--py-overlay-sbw') !== next) {
             wrapper.style.setProperty('--py-overlay-sbw', next);
-        }
-
-        // 3) Diagnóstico de wrap desincronizado (limitado para no inundar).
-        if (hs && Math.abs(ta.scrollHeight - hs.scrollHeight) > 3) {
-            const now = performance.now();
-            if (now - lastScrollLogRef.current > 300) {
-                lastScrollLogRef.current = now;
-                // Medidas extra para localizar la causa del desfase:
-                //  - lineContentW: ancho real del texto del highlighter
-                //    (si > taTextW, la línea no se encogió → palabra larga
-                //    sin romper = min-width:auto del flex item).
-                //  - taTextW: ancho del texto del textarea (clientWidth - paddings).
-                //  - codeDisplayH: altura del contenido del highlighter.
-                const codeDisplay = hs.firstElementChild || null;
-                const firstLine = codeDisplay ? codeDisplay.firstElementChild : null;
-                const lineContent = firstLine ? firstLine.children[1] || null : null;
-                const taPadL = parseFloat(getComputedStyle(ta).paddingLeft);
-                const taPadR = parseFloat(getComputedStyle(ta).paddingRight);
-                const taTextW = isNaN(taPadL) ? null : ta.clientWidth - taPadL - taPadR;
-                console.warn('[PythonEditor][sync] ALTURAS DESINCRONIZADAS (wrap distinto → escribes en otra línea):', {
-                    textareaScrollHeight: ta.scrollHeight,
-                    highlighterScrollHeight: hs.scrollHeight,
-                    diff: hs.scrollHeight - ta.scrollHeight,
-                    sbw: nextSbw,
-                    taClientW: ta.clientWidth,
-                    hsClientW: hs.clientWidth,
-                    lineContentW: lineContent ? lineContent.clientWidth : null,
-                    taTextW,
-                    codeDisplayH: codeDisplay ? codeDisplay.scrollHeight : null
-                });
-            }
         }
     }, []);
 
@@ -780,18 +747,6 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
     useEffect(() => {
         const t = setTimeout(() => {
             syncLayout();
-            const ta = codeRef.current;
-            const hs = highlighterRef.current;
-            const wr = editorWrapperRef.current;
-            console.log('[PythonEditor][init] layout:', {
-                taClientW: ta ? ta.clientWidth : null,
-                hsClientW: hs ? hs.clientWidth : null,
-                taScrollH: ta ? ta.scrollHeight : null,
-                hsScrollH: hs ? hs.scrollHeight : null,
-                taScrollTop: ta ? Math.round(ta.scrollTop) : null,
-                sbw: wr ? wr.style.getPropertyValue('--editor-sbw') : null,
-                fontSize
-            });
         }, 500);
         return () => clearTimeout(t);
     }, [isLocked, syncLayout, fontSize]);
@@ -841,16 +796,6 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
             if (highlighterRef.current) {
                 highlighterRef.current.scrollTop = scrollTop;
                 highlighterRef.current.scrollLeft = scrollLeft;
-                // Diagnóstico: si el highlighter no pudo llegar a scrollTop
-                // (contenido más corto por wrap distinto), el scroll está
-                // desincronizado y el texto visible no coincide con el cursor.
-                const hsScroll = highlighterRef.current.scrollTop;
-                if (Math.abs(hsScroll - scrollTop) > 1) {
-                    console.warn('[PythonEditor][sync] scroll clamp (highlighter no alcanza):', {
-                        textareaScrollTop: scrollTop,
-                        highlighterScrollTop: hsScroll
-                    });
-                }
             }
             positionFolds();
             scrollFrameRef.current = null;
@@ -903,7 +848,6 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
         const upTo = ta.value.slice(0, selStart);
         const line = upTo.split('\n').length;
         if (activeLine !== line) {
-            console.log('[PythonEditor] línea activa:', line);
             setActiveLine(line);
         }
 
@@ -924,31 +868,6 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
         collapsedFolds.forEach(f => {
             if (line >= f.start && line <= f.end) toggleFold(f.sig);
         });
-
-        // Diagnóstico del bug "escribes arriba/abajo de donde estás parado":
-        // si al mover el cursor las alturas de contenido difieren, el wrap está
-        // desincronizado y el caret no coincide con lo que se ve.
-        const hs = highlighterRef.current;
-        if (hs) {
-            const heightDelta = ta.scrollHeight - hs.scrollHeight;
-            const scrollDelta = Math.abs(ta.scrollTop - hs.scrollTop);
-            if (Math.abs(heightDelta) > 3 || scrollDelta > 1) {
-                const now = performance.now();
-                if (now - lastScrollLogRef.current > 300) {
-                    lastScrollLogRef.current = now;
-                    const wrapperSbw = editorWrapperRef.current ?
-                        editorWrapperRef.current.style.getPropertyValue('--editor-sbw') : '?';
-                    console.warn('[PythonEditor][caret] cursor en línea', line, 'con desync:', {
-                        taScrollTop: Math.round(ta.scrollTop),
-                        hsScrollTop: Math.round(hs.scrollTop),
-                        taScrollHeight: ta.scrollHeight,
-                        hsScrollHeight: hs.scrollHeight,
-                        diffAlturas: heightDelta,
-                        sbw: wrapperSbw
-                    });
-                }
-            }
-        }
     }, [activeLine, findMatchingBracket, collapsedFolds, toggleFold]);
 
     // Coincidencias de búsqueda sobre el código que muestra el highlighter.
@@ -965,7 +884,6 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
             matches.push({start: idx, end: idx + q.length, line});
             idx = displayCode.toLowerCase().indexOf(q, idx + q.length);
         }
-        console.log('[PythonEditor] coincidencias:', matches.length);
         return matches;
     }, [searchQuery, displayCode]);
 
@@ -995,7 +913,6 @@ const ensureMonitorBlockForVariable = (vm, varItem) => {
         }
         scrollToLine(match.line);
         setActiveLine(match.line);
-        console.log('[PythonEditor] ir a coincidencia línea:', match.line);
     };
 
     const goToMatch = (direction) => {

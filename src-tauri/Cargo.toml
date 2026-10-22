@@ -1,6 +1,6 @@
 [package]
 name = "stblock-desktop"
-version = "0.1.38"
+version = "0.1.47"
 description = "STBlock desktop application for visual programming, electronics and robotics"
 authors = ["STB Academy"]
 license = "AGPL-3.0-only"
@@ -24,12 +24,21 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
-tauri-plugin-updater = "2"
 serialport = "4.6"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
 once_cell = "1.19"
 which = "5.0"
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 local-ip-address = "0.6"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+tauri-plugin-updater = "2"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

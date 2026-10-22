@@ -12,6 +12,7 @@ import DeviceExtensionLibrary from '../device-extension-library/device-extension
 import codeIcon from '../gui/icon--code.svg';
 
 import ElectronicsLabPanel from '../electronics-lab/electronics-lab-panel.jsx';
+import {isMobileDevice} from '../../lib/device-detector';
 
 // Lock icons for code editor
 import lockIcon from './icon--lock.svg';
@@ -69,7 +70,8 @@ const CodeHeader = ({
     onDisconnect,
     onUpload,
     isUploading,
-    onUploadFirmware
+    onUploadFirmware,
+    hideActions
 }) => {
     const ledClass = getLedClass(connectionState, isConnected);
     const statusText = getConnectionText(connectionState, isConnected, deviceName, portName);
@@ -95,6 +97,9 @@ const CodeHeader = ({
                         <img src={largeSizeIcon} alt="" className={styles.sizeButtonIcon} />
                     </button>
                 </div>
+                <div className={styles.mobileCodeHeaderTitle}>
+                    <span className={styles.mobileCodeBadge}>C++ / Arduino</span>
+                </div>
             </div>
             <div className={styles.codeHeaderRight}>
                 {/* Connection Info */}
@@ -105,56 +110,60 @@ const CodeHeader = ({
                         title={statusText}
                     />
                 </div>
-                {/* Connect/Disconnect USB Button */}
-                <button
-                    className={classNames(styles.connectBtnUsb, {
-                        [styles.connectBtnUsbConnected]: isActuallyConnected,
-                        [styles.connectBtnUsbConnecting]: isConnecting
-                    })}
-                    onClick={isActuallyConnected ? onDisconnect : onConnect}
-                    disabled={isConnecting}
-                    title={isActuallyConnected ? 'Desconectar dispositivo' : isConnecting ? 'Conectando...' : 'Conectar dispositivo'}
-                >
-                    {isConnecting ? (
-                        <div className={styles.buttonSpinner} />
-                    ) : isActuallyConnected ? (
-                        // Premium Connected USB Icon (Socket & Plug Joined)
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="13" width="18" height="8" rx="2" strokeWidth="2.2" />
-                            <path d="M7 17h10" strokeWidth="1.5" />
-                            <path d="M8 13V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v7" strokeWidth="2.2" />
-                            <path d="M12 4v4" strokeWidth="1.5" />
-                            <circle cx="12" cy="17" r="1.2" fill="currentColor" stroke="none" />
-                        </svg>
-                    ) : (
-                        // Premium Disconnected USB Icon (Socket & Plug Separated, with Diagonal Slash)
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="15" width="18" height="6" rx="1.5" opacity="0.65" />
-                            <path d="M8 10V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6" opacity="0.65" />
-                            <line x1="2" y1="22" x2="22" y2="2" stroke="#ef4444" strokeWidth="2.5" />
-                        </svg>
-                    )}
-                </button>
+                {/* Connect/Disconnect USB Button (se oculta en la vista móvil) */}
+                {!hideActions && (
+                    <button
+                        className={classNames(styles.connectBtnUsb, {
+                            [styles.connectBtnUsbConnected]: isActuallyConnected,
+                            [styles.connectBtnUsbConnecting]: isConnecting
+                        })}
+                        onClick={isActuallyConnected ? onDisconnect : onConnect}
+                        disabled={isConnecting}
+                        title={isActuallyConnected ? 'Desconectar dispositivo' : isConnecting ? 'Conectando...' : 'Conectar dispositivo'}
+                    >
+                        {isConnecting ? (
+                            <div className={styles.buttonSpinner} />
+                        ) : isActuallyConnected ? (
+                            // Premium Connected USB Icon (Socket & Plug Joined)
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="13" width="18" height="8" rx="2" strokeWidth="2.2" />
+                                <path d="M7 17h10" strokeWidth="1.5" />
+                                <path d="M8 13V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v7" strokeWidth="2.2" />
+                                <path d="M12 4v4" strokeWidth="1.5" />
+                                <circle cx="12" cy="17" r="1.2" fill="currentColor" stroke="none" />
+                            </svg>
+                        ) : (
+                            // Premium Disconnected USB Icon (Socket & Plug Separated, with Diagonal Slash)
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="15" width="18" height="6" rx="1.5" opacity="0.65" />
+                                <path d="M8 10V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v6" opacity="0.65" />
+                                <line x1="2" y1="22" x2="22" y2="2" stroke="#ef4444" strokeWidth="2.5" />
+                            </svg>
+                        )}
+                    </button>
+                )}
 
-                {/* Upload Button */}
-                <button
-                    className={classNames(styles.uploadButtonLong, {
-                        [styles.uploadingLong]: isUploading,
-                        [styles.uploadBtnTextSmall]: !isLarge
-                    })}
-                    onClick={onUpload}
-                    disabled={!isActuallyConnected || isUploading}
-                    title={isUploading ? 'Subiendo...' : 'Cargar Código'}
-                >
-                    {isUploading ? (
-                        <div className={styles.buttonSpinner} style={{marginRight: '6px'}} />
-                    ) : (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{marginRight: '6px'}}>
-                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-                        </svg>
-                    )}
-                    {isLarge ? (isUploading ? 'Subiendo...' : 'Cargar Código') : (isUploading ? 'Subiendo...' : 'Cargar')}
-                </button>
+                {/* Upload Button (se oculta en la vista móvil) */}
+                {!hideActions && (
+                    <button
+                        className={classNames(styles.uploadButtonLong, {
+                            [styles.uploadingLong]: isUploading,
+                            [styles.uploadBtnTextSmall]: !isLarge
+                        })}
+                        onClick={onUpload}
+                        disabled={!isActuallyConnected || isUploading}
+                        title={isUploading ? 'Subiendo...' : 'Cargar Código'}
+                    >
+                        {isUploading ? (
+                            <div className={styles.buttonSpinner} style={{marginRight: '6px'}} />
+                        ) : (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{marginRight: '6px'}}>
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                            </svg>
+                        )}
+                        {isLarge ? (isUploading ? 'Subiendo...' : 'Cargar Código') : (isUploading ? 'Subiendo...' : 'Cargar')}
+                    </button>
+                )}
             </div>
         </div>
     );
@@ -171,7 +180,8 @@ CodeHeader.propTypes = {
     onConnect: PropTypes.func,
     onDisconnect: PropTypes.func,
     onUpload: PropTypes.func,
-    isUploading: PropTypes.bool
+    isUploading: PropTypes.bool,
+    hideActions: PropTypes.bool
 };
 
 CodeHeader.defaultProps = {
@@ -192,19 +202,49 @@ const CodeViewPanel = ({
     const textareaRef = useRef(null);
 
     // The displayed code depends on lock state
-    const displayedCode = isLocked ? code : manualCode;
+    const displayedCode = isLocked ? (code || '// No hay código generado aún') : (manualCode || code || '');
 
     const handleCopy = useCallback(() => {
-        // Si hay texto seleccionado, copiar solo la selección
-        const selection = window.getSelection().toString();
-        const textToCopy = selection || displayedCode;
-        if (navigator.clipboard && textToCopy) {
-            navigator.clipboard.writeText(textToCopy).then(() => {
-                setCopySuccess(true);
-                setTimeout(() => setCopySuccess(false), 2000);
-            });
+        // Si hay texto seleccionado, copiar solo la selección; si no, todo el código.
+        const selection = window.getSelection ? window.getSelection().toString() : '';
+        const textToCopy = selection || displayedCode || '';
+        if (!textToCopy) return;
+
+        const showSuccess = () => {
+            setCopySuccess(true);
+            setTimeout(() => setCopySuccess(false), 2000);
+            if (onCopy) onCopy(textToCopy);
+        };
+
+        // Fallback clásico (textarea temporal + execCommand). Es necesario porque
+        // en contextos no seguros (HTTP) o en el WebView de Tauri/APK
+        // navigator.clipboard puede no existir o rechazar la operación.
+        const fallbackCopy = () => {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = textToCopy;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.top = '-1000px';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                ta.setSelectionRange(0, ta.value.length);
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                if (ok) showSuccess();
+            } catch (err) {
+                console.warn('No se pudo copiar el código al portapapeles:', err);
+            }
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToCopy)
+                .then(showSuccess)
+                .catch(fallbackCopy);
+        } else {
+            fallbackCopy();
         }
-        if (onCopy) onCopy(textToCopy);
     }, [displayedCode, onCopy]);
 
     const handleCodeChange = useCallback((e) => {
@@ -217,6 +257,7 @@ const CodeViewPanel = ({
         <div className={classNames(styles.codePanel, {[styles.codePanelLarge]: isLarge})}>
             {/* Lock button */}
             <button
+                type="button"
                 className={classNames(styles.lockButton, {[styles.lockButtonUnlocked]: !isLocked})}
                 onClick={onToggleLock}
                 title={isLocked ? 'Desbloquear para editar código manualmente' : 'Bloquear para usar código de bloques'}
@@ -238,7 +279,7 @@ const CodeViewPanel = ({
                     <textarea
                         ref={textareaRef}
                         className={styles.codeTextarea}
-                        value={manualCode}
+                        value={manualCode || code || ''}
                         onChange={handleCodeChange}
                         spellCheck={false}
                         placeholder="// Escribe tu código Arduino aquí..."
@@ -246,6 +287,7 @@ const CodeViewPanel = ({
                 )}
             </div>
             <button
+                type="button"
                 className={classNames(styles.copyButton, {[styles.copySuccess]: copySuccess})}
                 onClick={handleCopy}
                 title={copySuccess ? 'Copiado!' : 'Copiar código'}
@@ -837,6 +879,7 @@ VerticalResizer.propTypes = {
 const DeviceModeGUI = ({
     vm,
     code,
+    deviceProjects,
     terminalOutput,
     terminalSettings,
     device,
@@ -862,10 +905,24 @@ const DeviceModeGUI = ({
     electronicsLabRef,
     onSimulatorSerialOutput,
     circuit3dData,
-    onCircuit3DStateChange
+    onCircuit3DStateChange,
+    onTabChange,
+    mobileSerialOpen: propMobileSerialOpen,
+    onCloseMobileSerial: propOnCloseMobileSerial
 }) => {
     // Size mode state - default to small view
     const [isLarge, setIsLarge] = useState(false);
+
+    // Mobile serial drawer state fallback
+    const [localMobileSerialOpen, setLocalMobileSerialOpen] = useState(false);
+    const mobileSerialOpen = propMobileSerialOpen !== undefined ? propMobileSerialOpen : localMobileSerialOpen;
+    const handleCloseMobileSerial = useCallback(() => {
+        if (propOnCloseMobileSerial) {
+            propOnCloseMobileSerial();
+        } else {
+            setLocalMobileSerialOpen(false);
+        }
+    }, [propOnCloseMobileSerial]);
 
     // Code/Terminal split ratio (0.65 = code takes 65% of space)
     const [codeTerminalRatio, setCodeTerminalRatio] = useState(0.65);
@@ -890,6 +947,7 @@ const DeviceModeGUI = ({
         }
     }, [code, isCodeLocked, onManualCodeChange]);
 
+
     // Handle toggle lock
     const handleToggleLock = useCallback(() => {
         const newLockState = !isCodeLocked;
@@ -899,15 +957,17 @@ const DeviceModeGUI = ({
             setLocalIsCodeLocked(newLockState);
         }
 
-        // If locking again, reset manual code to block code
-        if (newLockState && code) {
+        // When locking again, reset manual code to block code.
+        // When unlocking, seed manual code with block code if manual code is empty.
+        const codeToSync = code || '';
+        if (newLockState || !manualCode) {
             if (onManualCodeChange) {
-                onManualCodeChange(code);
+                onManualCodeChange(codeToSync);
             } else {
-                setLocalManualCode(code);
+                setLocalManualCode(codeToSync);
             }
         }
-    }, [isCodeLocked, code, onCodeLockChange, onManualCodeChange]);
+    }, [isCodeLocked, code, manualCode, onCodeLockChange, onManualCodeChange]);
 
     // Handle manual code change
     const handleManualCodeChange = useCallback((newCode) => {
@@ -940,6 +1000,16 @@ const DeviceModeGUI = ({
     const [tabOrder, setTabOrder] = useState([0, 1, 2]);
     const [isDragToSplit, setIsDragToSplit] = useState(false);
     const [dragZone, setDragZone] = useState(null);
+
+    // Mobile view mode tab state: 'blocks', 'code', 'simulator', 'circuits3d'
+    const [mobileTab, setMobileTab] = useState('blocks');
+
+    // Generate code when switching to code tab
+    useEffect(() => {
+        if (vm && mobileTab === 'code' && vm.requestCodeUpdate) {
+            vm.requestCodeUpdate();
+        }
+    }, [vm, mobileTab]);
 
     // Device extension library state
     const [extensionLibraryVisible, setExtensionLibraryVisible] = useState(false);
@@ -987,6 +1057,13 @@ const DeviceModeGUI = ({
         {id: 'circuits3d', label: <span>Circuito 3D</span>, icon: circuit3dIcon}
     ], []);
 
+    // Reportar la pestaña activa al host (para elegir el modo del asistente de IA).
+    useEffect(() => {
+        if (!onTabChange) return;
+        const tabId = isMobileDevice() ? mobileTab : (tabsConfig[activeTabIndex] && tabsConfig[activeTabIndex].id);
+        onTabChange(tabId || 'code');
+    }, [activeTabIndex, mobileTab, onTabChange, tabsConfig]);
+
     // Split mode computation
     const isInSplit = splitMode && splitPrimaryIndex != null &&
         (activeTabIndex === splitPrimaryIndex || activeTabIndex === secondaryTabIndex);
@@ -1021,12 +1098,13 @@ const DeviceModeGUI = ({
             vm={vm}
             code={effectiveCode}
             deviceId={currentDeviceId}
+            deviceProjects={deviceProjects}
             active={isCircuits3DVisible}
             pointerEvents={isDragToSplit ? 'none' : 'auto'}
             circuit3dData={circuit3dData}
             onCircuitStateChange={onCircuit3DStateChange}
         />
-    ), [isCircuits3DVisible, electronicsLabRef, vm, effectiveCode, currentDeviceId, isDragToSplit, circuit3dData, onCircuit3DStateChange]);
+    ), [isCircuits3DVisible, electronicsLabRef, vm, effectiveCode, currentDeviceId, deviceProjects, isDragToSplit, circuit3dData, onCircuit3DStateChange]);
 
     const panels = useMemo(() => [blocksPanel, simulatorPanel, circuits3DPanel],
         [blocksPanel, simulatorPanel, circuits3DPanel]);
@@ -1080,6 +1158,185 @@ const DeviceModeGUI = ({
         setSplitMode(false);
         setSplitPrimaryIndex(null);
     }, []);
+
+    const isMobile = isMobileDevice();
+
+    if (isMobile) {
+        return (
+            <>
+                <Box className={classNames(styles.bodyWrapper, styles.mobileDeviceBodyWrapper)}>
+                    {/* Barra de navegación segmentada móvil para electrónica, idéntica visualmente a la de programación */}
+                    <div className={styles.mobileTabBarContainer}>
+                        <div className={styles.mobileTabBar}>
+                            <button
+                                type="button"
+                                className={classNames(styles.mobileTabItem, {[styles.mobileTabItemActive]: mobileTab === 'blocks'})}
+                                onClick={() => setMobileTab('blocks')}
+                                onTouchEnd={() => setMobileTab('blocks')}
+                            >
+                                <span className={styles.mobileTabIcon}>🧩</span>
+                                <span className={styles.mobileTabLabel}>Bloques</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={classNames(styles.mobileTabItem, {[styles.mobileTabItemActive]: mobileTab === 'code'})}
+                                onClick={() => setMobileTab('code')}
+                                onTouchEnd={() => setMobileTab('code')}
+                            >
+                                <span className={styles.mobileTabIcon}>💻</span>
+                                <span className={styles.mobileTabLabel}>C++</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={classNames(styles.mobileTabItem, {[styles.mobileTabItemActive]: mobileTab === 'circuits3d'})}
+                                onClick={() => setMobileTab('circuits3d')}
+                                onTouchEnd={() => setMobileTab('circuits3d')}
+                            >
+                                <span className={styles.mobileTabIcon}>🔌</span>
+                                <span className={styles.mobileTabLabel}>Circuito 3D</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={classNames(styles.mobileTabItem, {[styles.mobileTabItemActive]: mobileTab === 'simulator'})}
+                                onClick={() => setMobileTab('simulator')}
+                                onTouchEnd={() => setMobileTab('simulator')}
+                            >
+                                <span className={styles.mobileTabIcon}>🎮</span>
+                                <span className={styles.mobileTabLabel}>Simulador</span>
+                            </button>
+                        </div>
+                        {device && device.name && (
+                            <div className={styles.mobileDeviceBadge} title={`Placa: ${device.name}`}>
+                                {device.iconURL && (
+                                    <img src={device.iconURL} alt="" className={styles.mobileDeviceBadgeThumb} />
+                                )}
+                                <span className={styles.mobileDeviceBadgeName}>{device.name}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Vistas en pantalla completa según tab activo */}
+                    <div className={styles.mobileContentArea}>
+                        {/* 1. Panel de Bloques */}
+                        <div
+                            className={classNames(styles.mobilePanelFull, {
+                                [styles.mobilePanelHidden]: mobileTab !== 'blocks'
+                            })}
+                        >
+                            {blocksPanel}
+                        </div>
+
+                        {/* 2. Panel Código C++ */}
+                        <div
+                            className={classNames(styles.mobilePanelFull, styles.mobileCodePanel, {
+                                [styles.mobilePanelHidden]: mobileTab !== 'code'
+                            })}
+                        >
+                            <CodeHeader
+                                isLarge={true}
+                                onSetLarge={() => {}}
+                                onSetSmall={() => {}}
+                                isConnected={isConnected}
+                                connectionState={connectionState}
+                                deviceName={device ? device.name : null}
+                                portName={port}
+                                onConnect={onConnect}
+                                onDisconnect={onDisconnect}
+                                onUpload={handleUpload}
+                                isUploading={isUploading}
+                                onUploadFirmware={onUploadFirmware}
+                                hideActions={true}
+                            />
+                            <div className={styles.mobileCodeEditorContainer}>
+                                <CodeViewPanel
+                                    code={code}
+                                    isLarge={true}
+                                    isLocked={isCodeLocked}
+                                    onToggleLock={handleToggleLock}
+                                    manualCode={manualCode}
+                                    onCodeChange={handleManualCodeChange}
+                                />
+                            </div>
+                        </div>
+
+                        {/* 3. Laboratorio Electrónica / Circuito 3D */}
+                        <div
+                            className={classNames(styles.mobilePanelFull, {
+                                [styles.mobilePanelHidden]: mobileTab !== 'circuits3d'
+                            })}
+                        >
+                            <ElectronicsLabPanel
+                                ref={electronicsLabRef}
+                                vm={vm}
+                                code={effectiveCode}
+                                deviceId={currentDeviceId}
+                                deviceProjects={deviceProjects}
+                                active={mobileTab === 'circuits3d'}
+                                pointerEvents="auto"
+                                circuit3dData={circuit3dData}
+                                onCircuitStateChange={onCircuit3DStateChange}
+                            />
+                        </div>
+
+                        {/* 4. Panel Simulador */}
+                        <div
+                            className={classNames(styles.mobilePanelFull, styles.mobileSimulatorPanel, {
+                                [styles.mobilePanelHidden]: mobileTab !== 'simulator'
+                            })}
+                        >
+                            <SimulatorPanel
+                                code={effectiveCode}
+                                deviceId={currentDeviceId}
+                                active={mobileTab === 'simulator'}
+                                onSerialOutput={onSimulatorSerialOutput}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Monitor Serial acoplable inferior (disponible en todos los tabs) */}
+                    {mobileSerialOpen && (
+                        <div className={styles.mobileSerialDrawer}>
+                            <div className={styles.mobileSerialDrawerHeader}>
+                                <div className={styles.mobileSerialDrawerHeaderLeft}>
+                                    <span className={styles.mobileSerialDrawerTitle}>📟 Monitor Serial</span>
+                                    {isConnected && (
+                                        <span className={styles.mobileSerialStatusBadge}>● Conectado</span>
+                                    )}
+                                </div>
+                                <button
+                                    type="button"
+                                    className={styles.mobileSerialDrawerCloseBtn}
+                                    onClick={handleCloseMobileSerial}
+                                    aria-label="Cerrar Monitor Serial"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                            <div className={styles.mobileSerialDrawerContent}>
+                                <TerminalPanel
+                                    output={terminalOutput}
+                                    isConnected={isConnected}
+                                    onClear={onClearTerminal}
+                                    onSend={onSendToTerminal}
+                                    settings={terminalSettings}
+                                    onSettingsChange={onTerminalSettingsChange}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </Box>
+
+                {/* Device Extension Library Modal */}
+                <DeviceExtensionLibrary
+                    visible={extensionLibraryVisible}
+                    loadedExtensions={loadedExtensions}
+                    device={device}
+                    onSelectExtension={handleSelectExtension}
+                    onClose={handleCloseExtensionLibrary}
+                />
+            </>
+        );
+    }
 
     return (
     <>
@@ -1225,7 +1482,10 @@ DeviceModeGUI.propTypes = {
     electronicsLabRef: PropTypes.object,
     onSimulatorSerialOutput: PropTypes.func,
     circuit3dData: PropTypes.object,
-    onCircuit3DStateChange: PropTypes.func
+    onCircuit3DStateChange: PropTypes.func,
+    onTabChange: PropTypes.func,
+    mobileSerialOpen: PropTypes.bool,
+    onCloseMobileSerial: PropTypes.func
 };
 
 DeviceModeGUI.defaultProps = {

@@ -2,6 +2,16 @@ import { Matrix4, Vector3 } from 'three';
 import type { EditEdge } from './editableMesh';
 export type AssistSettings = { snap: 'off' | 'grid' | 'vertex' | 'edge'; step: number; proportional: boolean; radius: number; symmetry: 'off' | 'x' | 'y' | 'z' };
 export const defaultAssist: AssistSettings = { snap:'off', step:1, proportional:false, radius:10, symmetry:'off' };
+// Convierte la escala de la manija (que puede venir en uno o dos ejes) en un
+// único factor para escalar la selección de forma uniforme. Se toma el eje con
+// mayor desviación respecto a 1: al arrastrar X/Y/Z el resultado es exactamente
+// el factor de ese eje; en las manijas de plano o central también es estable.
+export function uniformScaleFactor(scale: { x: number; y: number; z: number }): number {
+  const deltas = [scale.x - 1, scale.y - 1, scale.z - 1];
+  let best = 0;
+  for (let i = 1; i < deltas.length; i++) if (Math.abs(deltas[i]) > Math.abs(deltas[best])) best = i;
+  return deltas[best] === 0 ? 1 : [scale.x, scale.y, scale.z][best];
+}
 type KD = { id:number; axis:number; left:KD|null; right:KD|null };
 function kdTree(ids:number[], p:Float32Array, depth=0):KD|null { if(!ids.length)return null;const axis=depth%3;ids.sort((a,b)=>p[a*3+axis]-p[b*3+axis]);const mid=ids.length>>1;return {id:ids[mid],axis,left:kdTree(ids.slice(0,mid),p,depth+1),right:kdTree(ids.slice(mid+1),p,depth+1)}; }
 function nearest(node:KD|null,p:Float32Array,q:Vector3,best:number):number {if(!node)return best;const dx=p[node.id*3]-q.x,dy=p[node.id*3+1]-q.y,dz=p[node.id*3+2]-q.z;best=Math.min(best,dx*dx+dy*dy+dz*dz);const delta=q.getComponent(node.axis)-p[node.id*3+node.axis];best=nearest(delta<0?node.left:node.right,p,q,best);return delta*delta<best?nearest(delta<0?node.right:node.left,p,q,best):best;}

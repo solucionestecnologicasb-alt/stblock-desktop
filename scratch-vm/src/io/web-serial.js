@@ -210,6 +210,11 @@ class WebSerial {
             this._portName = portName;
             this._isConnected = true;
             this._isTauriPort = true;
+            // The native port is already open at this baud rate. Record it so
+            // setBaudRate() does not try to change it again later.
+            this._baudRate = baudRate;
+            this._readErrorCount = 0;
+            this._connectionGeneration = (this._connectionGeneration || 0) + 1;
 
             // Start reading in Tauri mode
             this._startTauriReadLoop();
@@ -284,27 +289,35 @@ class WebSerial {
      * Disconnect from the port
      */
     async disconnect () {
+        const wasTauriPort = this._isTauriPort;
+        const portId = this._portId;
+
+        // Mark the connection as closed *before* awaiting the native close.
+        // This makes in-flight read-loop callbacks no-ops instead of treating
+        // the resulting "port not found" error as a fatal read failure.
+        this._connectionGeneration = (this._connectionGeneration || 0) + 1;
+        this._isConnected = false;
         this._readLoopRunning = false;
+        this._isTauriPort = false;
+        this._portId = null;
 
         // Tauri mode cleanup
-        if (this._isTauriPort) {
+        if (wasTauriPort) {
             if (this._tauriReadInterval) {
                 clearInterval(this._tauriReadInterval);
                 this._tauriReadInterval = null;
             }
 
-            if (this._portId && isTauri()) {
+            if (portId && isTauri()) {
                 try {
                     const {invoke} = window.__TAURI__.core;
-                    await invoke('close_serial_port', {portId: this._portId});
+                    await invoke('close_serial_port', {portId});
                 } catch (e) {
                     log.warn('Error closing Tauri serial port:', e);
                 }
             }
 
-            this._portId = null;
             this._portName = null;
-            this._isTauriPort = false;
         } else {
             // Web Serial mode cleanup
             if (this._reader) {
@@ -336,7 +349,6 @@ class WebSerial {
             }
         }
 
-        this._isConnected = false;
         log.info('Serial port disconnected');
 
         if (this._onDisconnect) {
@@ -349,6 +361,10 @@ class WebSerial {
      * @returns {boolean}
      */
     isConnected () {
+        if (this._isTauriPort) {
+            // Tauri connections never set `_port`; the native handle is `_portId`.
+            return this._isConnected && this._portId !== null;
+        }
         return this._isConnected && this._port !== null;
     }
 
@@ -429,6 +445,9 @@ class WebSerial {
      * @param {number} baudRate - New baud rate
      */
     async setBaudRate (baudRate) {
+        if (this._baudRate === baudRate) {
+            return;
+        }
         this._baudRate = baudRate;
         if (this._isConnected) {
             log.info(`Changing baud rate to ${baudRate}...`);
@@ -443,7 +462,7 @@ class WebSerial {
                         baudRate: baudRate
                     });
                 } catch (error) {
-                    log.error('Tauri serial change baud rate error:', error);
+                    log.warn('Tauri serial change baud rate warning:', error);
                 }
                 return;
             }
@@ -491,6 +510,14 @@ class WebSerial {
         }
         this._onData = callback;
     }
+    offData (callback) {
+        if (this._onDataListeners) {
+            this._onDataListeners = this._onDataListeners.filter(cb => cb !== callback);
+        }
+        if (this._onData === callback) {
+            this._onData = null;
+        }
+    }
     onConnect (callback) { this._onConnect = callback; }
     onDisconnect (callback) { this._onDisconnect = callback; }
     onError (callback) { this._onError = callback; }
@@ -506,7 +533,10 @@ class WebSerial {
         }
 
         this._tauriReadInterval = setInterval(async () => {
-            if (!this._isConnected || !this._portId || !this._isTauriPort) {
+            const generation = this._connectionGeneration;
+            const portId = this._portId;
+
+            if (!this._isConnected || !portId || !this._isTauriPort) {
                 return;
             }
 
@@ -514,17 +544,26 @@ class WebSerial {
                 const {invoke} = window.__TAURI__.core;
 
                 // Check available bytes
-                const available = await invoke('read_serial_port_available', {
-                    portId: this._portId
-                });
+                const available = await invoke('read_serial_port_available', {portId});
+
+                // Ignore results belonging to a connection that has since
+                // been closed or replaced.
+                if (generation !== this._connectionGeneration) {
+                    return;
+                }
 
                 if (available > 0) {
                     const data = await invoke('read_serial_port', {
-                        portId: this._portId,
+                        portId,
                         size: Math.min(available, 1024)
                     });
 
+                    if (generation !== this._connectionGeneration) {
+                        return;
+                    }
+
                     if (data && data.length > 0) {
+                        this._readErrorCount = 0;
                         const uint8Array = new Uint8Array(data);
                         if (this._onDataListeners) {
                             this._onDataListeners.forEach(cb => {
@@ -533,19 +572,27 @@ class WebSerial {
                         } else if (this._onData) {
                             this._onData(uint8Array);
                         }
+                    } else {
+                        this._readErrorCount = 0;
                     }
+                } else {
+                    this._readErrorCount = 0;
                 }
             } catch (error) {
-                if (this._isConnected) {
-                    log.error('Tauri serial read error:', error);
-                    if (this._onError) {
-                        this._onError(error);
+                if (this._isConnected && generation === this._connectionGeneration) {
+                    this._readErrorCount = (this._readErrorCount || 0) + 1;
+                    if (this._readErrorCount > 3) {
+                        log.error('Tauri serial read error (disconnecting):', error);
+                        if (this._onError) {
+                            this._onError(error);
+                        }
+                        this.disconnect();
+                    } else {
+                        log.warn('Tauri serial transient read error:', error);
                     }
-                    // Disconnect on error
-                    this.disconnect();
                 }
             }
-        }, 10); // Poll every 10ms
+        }, 50); // Poll every 50ms (20 Hz) — suficiente para datos serie y menos IPC
     }
 
     async _startReadLoop () {

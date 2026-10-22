@@ -1,0 +1,865 @@
+SketchForge — Catálogo CAD verificable
+=======================================
+
+Adafruit revision: ab3dfc47c32468ba87e7652556cab25efd906eb0
+FreeCAD-library revision: be5e71491051cef75da46831b6fd77c6313cb497
+
+Los activos se descargan bajo demanda, se validan y se almacenan en caché.
+
+1. Feather HUZZAH ESP8266 (adafruit-2821-feather-esp8266)
+   Fabricante / referencia: Adafruit 2821
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2821 Feather HUZZAH ESP8266
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 690e1e59545a3107d506a4197d68550c0b6c83bd38cb351466b57243a8a107c8
+
+2. Feather M0 WiFi (adafruit-3010-feather-m0-wifi)
+   Fabricante / referencia: Adafruit 3010
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3010 Adafruit Feather M0 WiFi
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 49a9e797481d401e345fc7cbbea2c05bb5f9ec68689cceb6b7fe73cc2c3882cf
+
+3. Metro Mini V2 (adafruit-2590-metro-mini-v2)
+   Fabricante / referencia: Adafruit 2590
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2590 Metro Mini V2
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 34633c4f1c004a9877560952eec8368418aa406436cdb9702f128c25d8b0fae9
+
+4. Feather M0 Bluefruit LE (adafruit-2995-feather-bluefruit)
+   Fabricante / referencia: Adafruit 2995
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2995 Feather M0 Bluefruit LE
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: c65c259a03c982e51a77bde7aff4716f35fcfc37add6303e11359253d03fd2e7
+
+5. HUZZAH ESP8266 Breakout (adafruit-2471-huzzah-esp8266)
+   Fabricante / referencia: Adafruit 2471
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2471 HUZZAH ESP8266 Breakout
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 2b62805b3f1facb4abe61dd35dbf31d056a78fbbcaeb135cacf7ac6bb1d9e1cc
+
+6. Sensor BNO055 (adafruit-2472-bno055)
+   Fabricante / referencia: Adafruit 2472
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2472 BNO055 Breakout
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: f13845a9136dc1f123f570cf609fb2737b7c03a1c324f094edf4d264cb586586
+
+7. Sensor BME280 STEMMA QT (adafruit-2652-bme280)
+   Fabricante / referencia: Adafruit 2652
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2652 Adafruit BME280
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: ef3187ed7b76c782b3622b9416e2bf05a4dac6a26dac9bfc4dab3103ae16a383
+
+8. Acelerómetro LIS3DH (adafruit-2809-lis3dh)
+   Fabricante / referencia: Adafruit 2809
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2809 LIS3DH
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 2513407c98328e280cd10c8553efba295e8d2623d1cc6126f5d204426a707acd
+
+9. Sensor SHT31-D (adafruit-2857-sht31)
+   Fabricante / referencia: Adafruit 2857
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2857 SHT31-D
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 6ca3283fb707c886c175e8040bc81195fd32b4f807536ba965552a20ea24b8af
+
+10. RTC DS3231 (adafruit-3013-ds3231)
+   Fabricante / referencia: Adafruit 3013
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3013 DS3231 RTC
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: ba311619c4c91cf300d7a144bef1b3b6c032f13f7171d06bc8b5e7ff6bb495c9
+
+11. Microservo de engranajes metálicos (adafruit-1143-micro-servo-metal)
+   Fabricante / referencia: Adafruit 1143
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1143 Micro Servo - High Torque Metal Gear
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 6855b3fe182c318434dee40c2efec86dacbdc34048bcd39a3d7cf7cd406677ec
+
+12. Submicroservo SG51R (adafruit-2201-submicro-servo)
+   Fabricante / referencia: Adafruit 2201
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2201 Submicro servo
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 1d92ffba6c2ad2271db85d28060931037f1fdb533f736534ce462bdce2e71ea4
+
+13. Microservo MG923B (adafruit-2307-microservo-mg923b)
+   Fabricante / referencia: Adafruit 2307
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2307 MicroServo MG923B
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 25001484f4463b6f253f7784952e6bcc4072bafdccbf795c6a40bf9346d215e1
+
+14. Diodo láser (adafruit-1054-laser-diode)
+   Fabricante / referencia: Adafruit 1054
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1054 Laser Diode
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 8bff066245b0c7c7c76509bc05acb6915a2c4fd56b46602aaeac270ca0c4b56b
+
+15. Matriz LED 8×8 de 1.2 pulgadas (adafruit-1048-matrix-8x8)
+   Fabricante / referencia: Adafruit 1048
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1048 1.2in 8x8 Matrix Backpack
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 1a7ee712a9ea33b8e4a79405de2760c354ecc9aa59739463bdc88ccebd9d15de
+
+16. Display de 7 segmentos 1.2 pulgadas (adafruit-1264-seven-segment)
+   Fabricante / referencia: Adafruit 1264
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1264 1.2in 7 Segment Display
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 5ca95edf00915e4730c974d2d5277a3492cac471fccef69ad2b292d9c5bffea5
+
+17. Anillo NeoPixel 16 (adafruit-1463-neopixel-ring-16)
+   Fabricante / referencia: Adafruit 1463
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1463 16x NeoPixel Ring
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: f3d38925401989ec04a18bd87b27dfa6f72eb72354ff812fa88cc1a144988b70
+
+18. Pantalla TFT 1.44 pulgadas (adafruit-2088-tft-144)
+   Fabricante / referencia: Adafruit 2088
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2088 1.44in TFT Display
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: bcd61509d575973b51f2800212ecd8e2e31bf44022e8e87a0ebc91479f64be00
+
+19. Anillo NeoPixel 12 (adafruit-2643-neopixel-ring-12)
+   Fabricante / referencia: Adafruit 2643
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2643 NeoPixel Ring 12
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: cb990fca1ceb93e1db25d2baf32e68b2ccddf29d95d17fe1c37765edf7aa782f
+
+20. Cargador MicroLipo V2 (adafruit-1304-microlipo)
+   Fabricante / referencia: Adafruit 1304
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1304 MicroLipo Charger
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: f9bd5124d65f4fb215195602c1b4c9e5ca76af36d22e7d23f932d0ed91bfbd4f
+
+21. Batería CR2032 (adafruit-1870-cr2032)
+   Fabricante / referencia: Adafruit 1870
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1870 Coin Cell CR2032
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: dd43c5cacf3de30f8816c1aef8ade9301bf49f445489383bbf960c9ca671293c
+
+22. Cargador LiPo MicroUSB (adafruit-1904-microusb-lipo)
+   Fabricante / referencia: Adafruit 1904
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1904 MicroUSB Lipo Charger
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 7c8b564ec4172f1d3ef55be26d6a25691d5df5c4b2c4cf2dc1a25b009b46a47a
+
+23. Batería LiPo 1200 mAh (adafruit-258-lipo-1200)
+   Fabricante / referencia: Adafruit 258
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/258 1200mAh lipo
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: abe4ffb89a83d1ee48780c04e4dbb38808b326f491f312eef56e2552ad5d2103
+
+24. Pulsador táctil 12 mm (adafruit-1119-tactile-switch)
+   Fabricante / referencia: Adafruit 1119
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1119 Tactile Switch 12mm (B3F-40XX)
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 5ab0d3a8954d5ee554b2d56b7efc568146c028a8907ec845d6e67e2f80a59028
+
+25. Pulsador de 16 mm (adafruit-1145-button-16mm)
+   Fabricante / referencia: Adafruit 1145
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1145 16mm button
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: dcf0ef5a791fff09d70315e020f06a5168ea825aadba65b5cf0317a9297bbfe9
+
+26. Interruptor de 8 direcciones (adafruit-2925-eight-way-switch)
+   Fabricante / referencia: Adafruit 2925
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2925 8-Way Switch
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 6c77844f032a609bc914e2876ad06f0bc7bfda688130f01afd171ac2836c1332
+
+27. Breakout MicroUSB (adafruit-1833-microusb-breakout)
+   Fabricante / referencia: Adafruit 1833
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1833 microUSB breakout
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 32f764d486c4acd3ebe4aa3b6497468452c4582704442c7a19b3ab5e016bbd35
+
+28. Perma-Proto media placa (adafruit-1609-permaproto-half)
+   Fabricante / referencia: Adafruit 1609
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1609 Perma-Proto HalfSize
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 61df3608856c9fc4341d4a55d2608e5b77aa1baa55f10b22d41a9f5a5571277a
+
+29. Controlador Motor FeatherWing (adafruit-2927-motor-featherwing)
+   Fabricante / referencia: Adafruit 2927
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2927 Motor FeatherWing
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 20ba0ea24294523af8e1603d2ad5be8e503c41335d65aa69eb08ac3255aa2a2b
+
+30. Controlador Servo PWM FeatherWing (adafruit-2928-servo-featherwing)
+   Fabricante / referencia: Adafruit 2928
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2928 Servo PWM FeatherWing
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: ab3fce089ce04c5eb93b7ee2035fa8c783c7015c215d582755e3b9773a4b0e29
+
+31. Metro M4 Express (adafruit-3382-metro-m4)
+   Fabricante / referencia: Adafruit 3382
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3382 Metro M4
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: fb429f0bbca35d66279e72df9c01f2e19506134e6e00188eaf62923e0d8a110f
+
+32. Metro ESP32-S2 (adafruit-4775-metro-esp32-s2)
+   Fabricante / referencia: Adafruit 4775
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4775 Metro ESP32-S2
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 757b0617ed39e134acf16baf68a69ef359202495ad7b08753ac28ad46a760fa0
+
+33. Feather RP2040 USB Host (adafruit-5723-feather-rp2040-host)
+   Fabricante / referencia: Adafruit 5723
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/5723 Feather RP2040 USB Host
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 09581e223bdbdb840302deed8e5e5a5877011421a5ec52937a2d17fe6489729f
+
+34. Arduino UNO (freecad-arduino-uno)
+   Fabricante / referencia: Genérico UNO
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Boards/Arduino
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 192f582cc4bdc6d66ce1bcaf88fd70d0fd8a57ec550f3e6d08c008728061f194
+
+35. Arduino Mega (freecad-arduino-mega)
+   Fabricante / referencia: Genérico MEGA
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Boards/Arduino
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 250c7b571623c6a37f532f35127fc943b19095ae465486ce2bf62b82ff9877f2
+
+36. Arduino Nano Rev3 (freecad-arduino-nano)
+   Fabricante / referencia: Genérico NANO-R3
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Boards/Arduino
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: da6f0a8cec8ccce293e4c0f2fbf50684a6938d2eb26bb4be10fa946c5d837d88
+
+37. Sensor ultrasónico HC-SR04 (freecad-hcsr04)
+   Fabricante / referencia: Genérico HC-SR04
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Ultrasonic Sensors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 1a3a6da9ff36a2bb5336d00674dc17e388bcf82b0322fa882bd74e3cd35d4e0d
+
+38. Sensor ultrasónico MaxSonar MB1010 (freecad-maxsonar-mb1010)
+   Fabricante / referencia: Genérico MB1010
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Ultrasonic Sensors/MaxSonar/MB1010
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 3faba496494fd0cc99b40172a7eb8d616457c2e339f6220a6dda71d13e869a1c
+
+39. Sensor APDS9960 (adafruit-3595-apds9960)
+   Fabricante / referencia: Adafruit 3595
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3595 APDS9960 Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 0380514ab5ae96feafa511167b5b4500cbc1a69152f76e40c445cccb1eab5908
+
+40. Sensor ToF VL53L1X (adafruit-3967-vl53l1x)
+   Fabricante / referencia: Adafruit 3967
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3967 VL5SL1X TOF Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: dc3295dc140ade6db0903944e80005aa7f9767a8824570ec9e7a3a05e6c6eaf2
+
+41. Sensor capacitivo de suelo (adafruit-4026-soil)
+   Fabricante / referencia: Adafruit 4026
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4026 STEMMA Soil Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: cb635986e962752dc2ce7868b261feb4859776a813b2cd3dfe7b07466739e69d
+
+42. Sensor de temperatura ADT7410 (adafruit-4089-adt7410)
+   Fabricante / referencia: Adafruit 4089
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4089 ADT7410 Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 4e3c530aa27837cef7e978f49ec8a32ae96502fc0ec2cd05ce52181ff7ca21c1
+
+43. Sensor barométrico DPS310 (adafruit-4494-dps310)
+   Fabricante / referencia: Adafruit 4494
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4494 DPS310 Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 7ebd64ece374b753336fdc60f0d9cd9d496e7456172ad9a45ed08a929dbeb477
+
+44. Sensor AHT20 (adafruit-4566-aht20)
+   Fabricante / referencia: Adafruit 4566
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4566 AHT20 Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: f593856fae9e5a5f1a7e14fc4ccade10062864352c93805a2538d2983c2577a0
+
+45. Sensor espectral AS7341 (adafruit-4698-as7341)
+   Fabricante / referencia: Adafruit 4698
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4698 AS7341 Light Color Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: ec8d06f4d23d474b8c0bfa28642c413d8cc1eba265585a9fea556ec3562686c2
+
+46. Sensor de calidad de aire SGP40 (adafruit-4829-sgp40)
+   Fabricante / referencia: Adafruit 4829
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4829 SGP40 Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 726f9ac2b20bd4706c7442858a4d89e183d49e20c41cab233c65e710d7515323
+
+47. Sensor CO₂ SCD-30 (adafruit-4867-scd30)
+   Fabricante / referencia: Adafruit 4867
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4867 SCD-30 C02 Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 0e16bc6483ef3c047d530482535f03e17551f081eeedf248484d6d9a4f549b21
+
+48. Sensor SHT40 (adafruit-4885-sht40)
+   Fabricante / referencia: Adafruit 4885
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4885 SHT40 Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 7e23a24662743d5a2c7c669a8aa5b872c370370b9fc1c7a6cf9b6f7c850b2866
+
+49. Sensor CO₂ SCD-40 (adafruit-5187-scd40)
+   Fabricante / referencia: Adafruit 5187
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/5187 SCD-40 C02 Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: c2441aead89da9134d272eb333955f14d54d291bd1c126658fde24359a01488f
+
+50. Sensor de luz VEML7700 (adafruit-5378-veml7700)
+   Fabricante / referencia: Adafruit 5378
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/5378 VEML7700 Lux Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 44aaddeb49b598e3a4e69d047040f727981b8d0065c44e9a6cf47fbdf44aa490
+
+51. Sensor ToF VL53L4CD (adafruit-5396-vl53l4cd)
+   Fabricante / referencia: Adafruit 5396
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/5396 VL53L4CD Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 7577fb25c047835acd3af6dce7bcd166172237db6cdbfb0e8e9338824b19e067
+
+52. Sensor de aire ENS160 (adafruit-5606-ens160)
+   Fabricante / referencia: Adafruit 5606
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/5606 ENS160 Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 449415678e50f7b4b3efa99e49d15355ebb179c433350a89538dcb363141fa38
+
+53. Sensor reflectivo TCRT1000 (adafruit-5913-tcrt1000)
+   Fabricante / referencia: Adafruit 5913
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/5913 TCRT1000 Sensor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 796ddbf0c27d0e54eaf1934bab03349a023bca03b0d42c7136e8c576b3d05900
+
+54. Receptor infrarrojo (adafruit-5939-ir-receiver)
+   Fabricante / referencia: Adafruit 5939
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/5939 IR Remote Receiver
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: a918a10a232dbe4ac74bbfb2c24d7eca267605a3be6e32d8809d2f0d0e4147b8
+
+55. Motorreductor TT (adafruit-3777-tt-motor)
+   Fabricante / referencia: Adafruit 3777
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3777 TT Motor
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: c457c4533b41aff66b93870e2cd8662058e75253c84b16c1cc085d7cb690ad8c
+
+56. Motorreductor TT metálico (adafruit-3802-tt-metal)
+   Fabricante / referencia: Adafruit 3802
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3802 TT Motor Metal Gear
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 1b3f3780941f4a1d2afa4496151a573417c946a13f3230f8066249aac30d0ffd
+
+57. Solenoide grande (adafruit-413-solenoid)
+   Fabricante / referencia: Adafruit 413
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/413 Large Solenoid
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 1d389e3b249e7409e8e5529ecd0f4c0960a288e6ebfe99528f44a61818c5cbf3
+
+58. Altavoz STEMMA (adafruit-3885-stemma-speaker)
+   Fabricante / referencia: Adafruit 3885
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3885 STEMMA Speaker
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: fccd9b3fde1d50037193a92b20db1dd322e37a25f8c4a520d0ce4797ce3b2c5c
+
+59. Micrófono PDM (adafruit-4346-pdm-mic)
+   Fabricante / referencia: Adafruit 4346
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4346 PDM Mic Breakout
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 8808162abafecd910cf8c60165276da0abbe5b4fc285c2af20e8ba0bb494fc35
+
+60. Zumbador electrónico (freecad-buzzer)
+   Fabricante / referencia: Genérico BUZZER
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Buzzers
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 055f69b4bc2bd68e7834ae6fa01e155b7b6236766a52a59e03e70da411f89374
+
+61. Batería de 9 V (adafruit-1321-battery-9v)
+   Fabricante / referencia: Adafruit 1321
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1321 Battery 9V
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STEP — SHA-256: be0717e78c93fb059196e59a17c26cfd222940d852340920fa30cb141ae5c375
+
+62. Batería LiPo 4400 mAh (adafruit-354-lipo-4400)
+   Fabricante / referencia: Adafruit 354
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/354 4400mah battery
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 2e528f367ff74d070aba91c01ee7ff0af2915d2bf6ec893b8b8bcd764c85428f
+
+63. Batería LiPo 400 mAh (adafruit-3898-lipo-400)
+   Fabricante / referencia: Adafruit 3898
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3898 400mah Battery
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 5ae4e6f4294292b366db06ad76d0933fc5a8b5b20a8b825cdc6524a18fad9270
+
+64. Portabaterías 3×AAA (adafruit-727-holder-3aaa)
+   Fabricante / referencia: Adafruit 727
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/727 3x AAA Battery Holder
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 04fe26dd31672f315957892718b542e158feef42c3246018ce5863fde92a54eb
+
+65. Cargador MicroLipo USB-C (adafruit-4410-microlipo-usbc)
+   Fabricante / referencia: Adafruit 4410
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4410 Micro Lipo USBC
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: e9cd7e222569e2beae2b84e97a760a1e334a57b7845c806957244c34ea5efbd6
+
+66. Cargador solar USB (adafruit-4755-solar-charger)
+   Fabricante / referencia: Adafruit 4755
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/4755 USB Solar Charger
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 4cee5cf9fa164567f22c80d76cc6e9c5a3f9867db35029ab5c962afb69d95408
+
+67. Cargador LiPo BFF (adafruit-5397-lipo-bff)
+   Fabricante / referencia: Adafruit 5397
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/5397 Lipo Charger BFF
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: a055483ca1931c76a5c72fb0f454e136df199a716ed8784a6fa60e7dd889d3f8
+
+68. Batería AA (freecad-battery-aa)
+   Fabricante / referencia: Genérico AA
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electrical Parts/Batteries
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 61f95827cdcbbb356ba9d2a4aeb358f6d51f272db5d9aead2cb29b353425e4f4
+
+69. Batería AAA (freecad-battery-aaa)
+   Fabricante / referencia: Genérico AAA
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electrical Parts/Batteries
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: a58acfdf89a894dabafd3c9c915ffe2a0ee94fabd2deac27ca4b7ebe1dd78fb5
+
+70. Puente H DRV8871 (adafruit-3190-drv8871)
+   Fabricante / referencia: Adafruit 3190
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3190 DRV8871 Breakout
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: fd3512ff4fb637e1ad961b18a606c1b4825712e88cc3c82aade3f967a2c1b6ab
+
+71. Controlador Motor HAT (adafruit-2348-motor-hat)
+   Fabricante / referencia: Adafruit 2348
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/2348 Adafruit Motor HAT
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 8dc8c8602d7f10758fd7c7cb96752aa0c994fb6535e110e9905aa9d4ce5615da
+
+72. Controlador LED TLC59711 (adafruit-1455-tlc59711)
+   Fabricante / referencia: Adafruit 1455
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/1455 LED driver TLC59711
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 91c50e53a858dd622a4509858000681d060f3eea72b89816909d0677913d3e10
+
+73. Relé de potencia FeatherWing (adafruit-3191-power-relay)
+   Fabricante / referencia: Adafruit 3191
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/3191 Power Relay FeatherWing
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 0f67f39dd6b53144caaa679f2092089ea7ee451ffa0b215697328c82fe07426d
+
+74. Controlador MOSFET (adafruit-5648-mosfet-driver)
+   Fabricante / referencia: Adafruit 5648
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/5648 MOSFET Driver
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: ed559860c8c4a0acf09dde9e715bf68f329201bfc129da71208891c82b8392bf
+
+75. Controlador de pasos A4988 (adafruit-6109-a4988)
+   Fabricante / referencia: Adafruit 6109
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/6109 A4988 Driver
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 19b0070a502629800de73e6f89f8bbef7b11773ac7ebfbf1312d4911f4909322
+
+76. Controlador de pasos TMC2209 (adafruit-6121-tmc2209)
+   Fabricante / referencia: Adafruit 6121
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/6121 TMC2209 Driver
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 68522e9cc947bdb67a8f5cf25c2d9454156a2ac3d4c4dfd03ddc520cdbca2fe4
+
+77. Controlador de 16 servos (adafruit-815-servo-driver)
+   Fabricante / referencia: Adafruit 815
+   Fuente: https://github.com/adafruit/Adafruit_CAD_Parts/tree/ab3dfc47c32468ba87e7652556cab25efd906eb0/815 Servo Driver 16 Channel
+   Licencia: MIT — Adafruit Industries — Adafruit CAD Parts (MIT)
+   Formato: STL — SHA-256: 1ad7a11923b4c7656264837491fe6964f4377ec674cf9c0437bbadb3b9f59541
+
+78. Resistencia 1 kΩ 1/4 W (freecad-resistor-1k)
+   Fabricante / referencia: Genérico 1K-0.25W
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Resistors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: a5d1f04ea6e6f8e33dc14d211dda448998d410a29c6f0f9f3e04df22212341c6
+
+79. Resistencia 220 Ω 1/4 W (freecad-resistor-220)
+   Fabricante / referencia: Genérico 220R-0.25W
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Resistors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: d7dc77eb305bf0abdad2ff51d6ead32f39904ae8214b5ae81429021fa24d654c
+
+80. Capacitor electrolítico 470 µF (freecad-capacitor-470uf)
+   Fabricante / referencia: Genérico 470UF-25V
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Capacitors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 0489331d56b0dd648e0745ebccde732a0755708125143107214156d644ee5354
+
+81. Capacitor de película (freecad-capacitor-film)
+   Fabricante / referencia: Genérico MKT
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Capacitors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 39b6e9e219403b8c57715dcbd641b947ebb1ff2d43905080529909cdff109a4a
+
+82. LED de 5 mm (freecad-led-5mm)
+   Fabricante / referencia: Genérico LED-5MM
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/LEDs
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: e3ead08135ee1aaa3c0f765bc0594620b8e0ab067c24148cccf2f55781bf5537
+
+83. LED RGB de 5 mm (freecad-rgb-led-5mm)
+   Fabricante / referencia: Genérico RGB-LED-5MM
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/LEDs
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 0d266497cb2174f4523ae730cbdc27b7057c45f22835df63f99933e296472fd2
+
+84. Diodo SMD SOD-323 (freecad-diode-sod323)
+   Fabricante / referencia: Genérico SOD-323
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Diodes/SMD
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 5800ad7d0ecd7d3a80428475b430f9de60b49b6056a0cc44da36788385b74834
+
+85. Transistor TO-92 (freecad-transistor-to92)
+   Fabricante / referencia: Genérico TO-92
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Transistors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: d17891b92f3f316878835bdf99f9e924166eeffdab5752e00f869b57394127a4
+
+86. MOSFET P55NF06L (freecad-mosfet-p55)
+   Fabricante / referencia: Genérico P55NF06L
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Transistors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 61dd343775cd3dfa2d0986d8fb613e45b39b2ba99f19475757b11049bf3024b9
+
+87. Circuito integrado DIP-8 (freecad-dip8)
+   Fabricante / referencia: Genérico DIP-8
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Microcontroller/IntCirc-DIL
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: fe89eb0557e8c0976055e2090f83f39feff53b0e8d9e824ac9430f1d9753f171
+
+88. Fotoresistencia LDR (freecad-photoresistor)
+   Fabricante / referencia: Genérico LDR
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Photoresistor
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 48782341e256dd8955de07c6ee7ce624b837a1ef28c42a09da00af1949920bdd
+
+89. Potenciómetro rotatorio (freecad-potentiometer)
+   Fabricante / referencia: Genérico POT
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Potentiometer
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: cd01acfc4c84adcaa3e1961d3b326774d8884b7e8390efcaee5fab51851bfbf1
+
+90. Pulsador electrónico THT (freecad-electronic-button)
+   Fabricante / referencia: Genérico TACT-SW
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Buttons/THT
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 881641533124d8b33dfd16d611e774f4a38b47ba00b56188222339ba17d122f6
+
+91. Rodamiento 608ZZ (freecad-bearing-608zz)
+   Fabricante / referencia: Genérico 608ZZ
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Mechanical Parts/Bearings
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: eef786ad404c7e180d2c55eeac1e33c7152770b9d451ec197c3923153d8a30e2
+
+92. Rodamiento 623ZZ (freecad-bearing-623zz)
+   Fabricante / referencia: Genérico 623ZZ
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Mechanical Parts/Bearings
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 2a1a0077298b75b7921439d37dddbf52cdd6fe29ddd76f1de27103a47369bf11
+
+93. Rodamiento 624ZZ (freecad-bearing-624zz)
+   Fabricante / referencia: Genérico 624ZZ
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Mechanical Parts/Bearings
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 2bcf1a12adda3113ad8bab313184e0b4dbf80a41e5030a13a67b8beb84ee98fa
+
+94. Rodamiento lineal LM8UU (freecad-bearing-lm8uu)
+   Fabricante / referencia: Genérico LM8UU
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Mechanical Parts/Bearings/linear_bearings
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: b7f04dc8792a0dfdd52ec2d97bb93cd6671faecd8b9386d269117dc6db332389
+
+95. Polea GT2 de 16 dientes (freecad-gt2-pulley-16t)
+   Fabricante / referencia: Genérico GT2-16T
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Mechanical Parts/Pulleys
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 02e4c39dc5a73bd15657d07975169aab7f7f332d7d8a43883103f9849841c89e
+
+96. Polea dentada GT2 V2 (freecad-gt2-pulley-v2)
+   Fabricante / referencia: Genérico GT2-V2
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Mechanical Parts/Pulleys
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: e7774250a2d37993a1ef7b1e94bac869d870aee8dcd4cbaed8d25678f640334d
+
+97. Motorreductor DC de 37 mm (freecad-gearmotor-37mm)
+   Fabricante / referencia: Genérico GEARMOTOR-37
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Motors/DC motor/Gear-Motor-37mm
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 0069e7328e22b6dcd0fdfce691a3b3809dbac42d337acf785c988e26c65db2c9
+
+98. Motorreductor amarillo recto (freecad-yellow-gearmotor)
+   Fabricante / referencia: Genérico TT-STRAIGHT
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Motors/DC motor/Yellow_gearmotor/straight
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 1e0f5692b9fdcb0a67cc5385f944b717682749aab9d59512438d6cfe5d443915
+
+99. Rueda robótica de 65 mm (freecad-yellow-wheel-65)
+   Fabricante / referencia: Genérico WHEEL-65
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Motors/DC motor/Yellow_wheel_65mm
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: f91c03f652aa3b409ca2f2d5d3864e46770d0cd5eb7cd760972af69feba4218b
+
+100. Motor paso a paso NEMA 17 (freecad-nema17-40)
+   Fabricante / referencia: Genérico NEMA17-40
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Motors/Stepper/NEMA/Old
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 9d0b2bfb5982bd6765173406d118dc0285d3ad25c4f217481453efb49d829b6a
+
+101. Conector Dupont hembra 1×3 (freecad-dupont-1x3)
+   Fabricante / referencia: Genérico DUPONT-1X3
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Connectors/dupont-connectors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 50b83afd12a940e0d60e58bc2b2af9463aa312f983ab5747b34cde1eed570354
+
+102. Bornera PCB 1×2 (freecad-terminal-1x2)
+   Fabricante / referencia: Genérico TERMINAL-1X2
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Connectors/power-connectors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: cb57108dae07bc2a0db69db000faefb34c964746741768699f00a4eebd8507ab
+
+103. Conector RJ45 con LED (freecad-rj45)
+   Fabricante / referencia: Genérico RJ45
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Connectors/Ethernet-connectors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: 13c178cde22c27ec17401115afac461224835318a6da0e35c7f979d86ffbcb2a
+
+104. Jack DC 2.1 mm (freecad-dc-jack)
+   Fabricante / referencia: Genérico DC-2.1MM
+   Fuente: https://github.com/FreeCAD/FreeCAD-library/tree/be5e71491051cef75da46831b6fd77c6313cb497/Electronics Parts/Connectors/power-connectors
+   Licencia: CC BY 3.0 — FreeCAD-library contributors — autor individual en el historial del archivo (CC BY 3.0)
+   Formato: STL — SHA-256: b47eddc02486d35a817bfcec4099da8f45051843f778bc4d1c76f329e033fa96
+
+105. Engranaje recto M0.5 Z12 (gear-spur-m05-z12)
+   Fabricante / referencia: SketchForge M0.5-Z12
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: bb4387df74ad7edb1b73da425b7b650954e00a410684d8609ad15e5519420633
+
+106. Engranaje recto M0.5 Z20 (gear-spur-m05-z20)
+   Fabricante / referencia: SketchForge M0.5-Z20
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 1045742923b9c4be467ff283b78742f73b2a83617086263f5497ec98b2b6a1c2
+
+107. Engranaje recto M0.5 Z36 (gear-spur-m05-z36)
+   Fabricante / referencia: SketchForge M0.5-Z36
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 8c092c40be1669e69314d4e28a8bcd6d7e01afb36873f0c19233c8561680df1d
+
+108. Piñón recto M1 Z8 (gear-spur-m1-z8)
+   Fabricante / referencia: SketchForge M1-Z8
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 443100ed914f960ce413067798a1389092f23b248ae6e67a0114af54fbde3933
+
+109. Engranaje recto M1 Z12 (gear-spur-m1-z12)
+   Fabricante / referencia: SketchForge M1-Z12
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 3ed3b9785dfbc5641bb0219bb6b712cad3752fdb94e38f88dc860d0c772f770d
+
+110. Engranaje recto M1 Z16 (gear-spur-m1-z16)
+   Fabricante / referencia: SketchForge M1-Z16
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 669888680c83dca7cb79340a2904932e4f34a77ec8519e4ecbcf33a717a69d03
+
+111. Engranaje recto M1 Z20 (gear-spur-m1-z20)
+   Fabricante / referencia: SketchForge M1-Z20
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: eb4d3c58930393f1256559ae0cbd480152f0f3d056c7beca68bb47600102e79c
+
+112. Engranaje recto M1 Z24 (gear-spur-m1-z24)
+   Fabricante / referencia: SketchForge M1-Z24
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: e674bf3e0a67217f8f55b4db8e15ba5ec34810e6c612c6fc4c4970ae561267fd
+
+113. Engranaje recto M1 Z36 (gear-spur-m1-z36)
+   Fabricante / referencia: SketchForge M1-Z36
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: d279ba5c6823ff7c31318c3594d43fd625464a858fe1dedbbe43e663ce48f911
+
+114. Engranaje recto M1 Z48 (gear-spur-m1-z48)
+   Fabricante / referencia: SketchForge M1-Z48
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 7fe25a091bd936ed4078692a888fdcaa2d9f5d708bd29f5456c4eaaa7f290e0d
+
+115. Engranaje recto M1.5 Z12 (gear-spur-m15-z12)
+   Fabricante / referencia: SketchForge M1.5-Z12
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 572d01a08a4bf39675243b7cb78dbf3fb6dd27965d4828f9fc8d053440cecc18
+
+116. Engranaje recto M1.5 Z20 (gear-spur-m15-z20)
+   Fabricante / referencia: SketchForge M1.5-Z20
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: dab0c8ded6d8ee31eaa0629c37a709d40e02ece9c40d6d1a1e8edeb3b9533d7d
+
+117. Engranaje recto M1.5 Z32 (gear-spur-m15-z32)
+   Fabricante / referencia: SketchForge M1.5-Z32
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 27cd8500cbe81b868ec8aba11bcd6321e2a972049c5ff57eda1371f7de783874
+
+118. Engranaje recto M2 Z12 (gear-spur-m2-z12)
+   Fabricante / referencia: SketchForge M2-Z12
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 6e39455ddff9b4642214ef999d50ecf0a750a926816a1f43177dd87dd1baa201
+
+119. Engranaje recto M2 Z16 (gear-spur-m2-z16)
+   Fabricante / referencia: SketchForge M2-Z16
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: b1c5e5df67014ee055c0712e73001d3fb12557a7a77629460f8ce887230ae934
+
+120. Engranaje recto M2 Z24 (gear-spur-m2-z24)
+   Fabricante / referencia: SketchForge M2-Z24
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: f7f79f71ab444eaef8dcde84727bb1b8ec13b29f952542dc1339a0275cfbe5e6
+
+121. Engranaje recto M2 Z32 (gear-spur-m2-z32)
+   Fabricante / referencia: SketchForge M2-Z32
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: bf8e879e094e04dd22d1409c0435201760092a3ef752627b77c7abb9ece6df94
+
+122. Engranaje recto M2 Z40 (gear-spur-m2-z40)
+   Fabricante / referencia: SketchForge M2-Z40
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 8e7a277d3eddb961728e817d13b42a5f38b83db07bf453bf954409ea56341013
+
+123. Cremallera M1 de 20 dientes (gear-rack-m1-z20)
+   Fabricante / referencia: SketchForge RACK-M1-Z20
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 0284d037fd818a99ff3ea9287e61c7e7954f4e03d9198b8e14862cb85c3e1a1b
+
+124. Cremallera M2 de 12 dientes (gear-rack-m2-z12)
+   Fabricante / referencia: SketchForge RACK-M2-Z12
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 273b8c23648386f707a2adc2ad3b6c7cc9b5c777d9721e756a999916d143f18d
+
+125. Polea con pestaña D20 eje 5 mm (pulley-flat-d20-bore5)
+   Fabricante / referencia: SketchForge PULLEY-FLAT-D20-BORE5
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: ce4e5db01888486628431ab8cde1e1c3c93647bf6e7ba8b506ef5cc0bea7f8c3
+
+126. Polea con pestaña D30 eje 8 mm (pulley-flat-d30-bore8)
+   Fabricante / referencia: SketchForge PULLEY-FLAT-D30-BORE8
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 5920cbcff9714c61dc1973626a3b84d11a48c7a64c1fa148d07e197516856cc3
+
+127. Polea con pestaña D40 eje 8 mm (pulley-flat-d40-bore8)
+   Fabricante / referencia: SketchForge PULLEY-FLAT-D40-BORE8
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 46a649a6a13602fb8fa2431a6508fbf742439ec3ed2cb22b2fa3b19d45ed8e1a
+
+128. Volante de inercia D60 eje 8 mm (flywheel-d60-bore8)
+   Fabricante / referencia: SketchForge FLYWHEEL-D60-BORE8
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 77bc33b480bdfe226708b3627bb570ee4ea7bc88b0a18f11bc087a02aa1eb24e
+
+129. Acople rígido eje 3 a 5 mm (coupler-rigid-3-5)
+   Fabricante / referencia: SketchForge COUPLER-RIGID-3-5
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: fef0d091001a1b1ac9639397be7062d87a9b0289eee99149314df6e33479c605
+
+130. Acople rígido eje 5 a 5 mm (coupler-rigid-5-5)
+   Fabricante / referencia: SketchForge COUPLER-RIGID-5-5
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 08b10f1b696d918805a612753b6b8e3afada4fad21e79c725aa35e5693beb30c
+
+131. Acople rígido eje 5 a 8 mm (coupler-rigid-5-8)
+   Fabricante / referencia: SketchForge COUPLER-RIGID-5-8
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 2321ee0f5faf72606dea550c553c33de197d834b3c7185c5f12c18f51a90c2ac
+
+132. Acople rígido eje 8 a 8 mm (coupler-rigid-8-8)
+   Fabricante / referencia: SketchForge COUPLER-RIGID-8-8
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 6bb617b21f6dc5c28d40cc935041b30169ce0e000b45ab0f260972112efc46cc
+
+133. Eje liso 3 × 60 mm (shaft-d3-l60)
+   Fabricante / referencia: SketchForge SHAFT-D3-L60
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 94a0dd6743ec037e42c50b9ded4c4b630b60bb54792949a34de6793b6c008889
+
+134. Eje liso 5 × 100 mm (shaft-d5-l100)
+   Fabricante / referencia: SketchForge SHAFT-D5-L100
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 22b5c1ac4bcd1956556354d57fd37ba671cbaffc86b0d71995274c21281eecc4
+
+135. Eje liso 8 × 120 mm (shaft-d8-l120)
+   Fabricante / referencia: SketchForge SHAFT-D8-L120
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 22add740dbc70bbe393bb33822e88e82df3124583f54aa2de802abe480045396
+
+136. Collar para eje de 3 mm (shaft-collar-d3)
+   Fabricante / referencia: SketchForge SHAFT-COLLAR-D3
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: ae8a0b36482691aa2e21df1eaf0b1860f984748572f4d62589ffad6f7f84c275
+
+137. Collar para eje de 5 mm (shaft-collar-d5)
+   Fabricante / referencia: SketchForge SHAFT-COLLAR-D5
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: e7137da2100e6432da7fe4c0d1b4f62b63a5f87662f487175d76b6025b38c2aa
+
+138. Collar para eje de 8 mm (shaft-collar-d8)
+   Fabricante / referencia: SketchForge SHAFT-COLLAR-D8
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 809feb6fbc3eb93b8835b271d11cd539d91d25fa38033f8c2a0c4d7796f2d645
+
+139. Disco de manivela D40 eje 5 mm (crank-disc-d40-bore5)
+   Fabricante / referencia: SketchForge CRANK-DISC-D40-BORE5
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 6e153bb870cf80c9effffb3892a337c467dddfd2c76c1bec9ed42527e7e734ae
+
+140. Leva excéntrica 40 × 30 eje 5 mm (cam-eccentric-40x30-bore5)
+   Fabricante / referencia: SketchForge CAM-ECCENTRIC-40X30-BORE5
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 224ad642cb375d30e0e9f39dfe60d090f90766c365574d70a884524930d60e4a
+
+141. Biela 30 mm agujero 3 mm (link-bar-30-hole3)
+   Fabricante / referencia: SketchForge LINK-BAR-30-HOLE3
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 324f211a7a1dccbd941258467274bd7a099cd563d6e12c76e594c5e73285aec1
+
+142. Biela 50 mm agujero 5 mm (link-bar-50-hole5)
+   Fabricante / referencia: SketchForge LINK-BAR-50-HOLE5
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: ef266dc847babef27d0671969717e8ed38a79f95c68fd7ab9163c9016b29d387
+
+143. Biela 80 mm agujero 5 mm (link-bar-80-hole5)
+   Fabricante / referencia: SketchForge LINK-BAR-80-HOLE5
+   Fuente: https://en.wikipedia.org/wiki/Mechanical_system
+   Licencia: MIT — Generado paramétricamente por SketchForge
+   Formato: STL — SHA-256: 3aa67bd4c97f069a1fd6ac13605d5ef432c01a8aa1def54a7390543212476efa

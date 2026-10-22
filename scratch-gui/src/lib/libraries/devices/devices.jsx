@@ -77,6 +77,23 @@ const deviceData = [
         tags: ['arduino']
     },
     {
+        name: 'Arduino Nano LGT8F328P',
+        deviceId: 'arduinoLGT8F328P',
+        manufactor: 'Logic Green (clon)',
+        type: DEVICE_TYPES.arduino,
+        iconURL: arduinoNanoIconURL,
+        description: 'Clon de Nano con MCU LGT8F328P a 32 MHz. Requiere su propio firmware Firmata.',
+        featured: true,
+        serialportRequired: true,
+        defaultBaudRate: '9600',
+        // Only live control is available: STBlock does not bundle the lgt8fx
+        // compiler core yet, so uploading sketches would produce incompatible
+        // code. The Firmata firmware is precompiled and flashed from Settings.
+        programMode: ['realtime'],
+        defaultProgramMode: 'realtime',
+        tags: ['arduino']
+    },
+    {
         name: 'Arduino Leonardo',
         deviceId: 'arduinoLeonardo',
         manufactor: 'arduino.cc',

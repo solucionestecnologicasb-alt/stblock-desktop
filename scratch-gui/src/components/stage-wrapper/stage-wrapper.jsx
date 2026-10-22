@@ -29,11 +29,12 @@ const StageWrapperComponent = function (props) {
         <Box
             className={classNames(
                 styles.stageWrapper,
+                'stage-wrapper-root',
                 {[styles.fullScreen]: isFullScreen}
             )}
             dir={isRtl ? 'rtl' : 'ltr'}
         >
-            <Box className={styles.stageMenuWrapper}>
+            <Box className={classNames(styles.stageMenuWrapper, 'stage-menu-wrapper-root')}>
                 <StageHeader
                     isPythonEditMode={isPythonEditMode}
                     onSyncPythonToBlocks={onSyncPythonToBlocks}
@@ -43,7 +44,7 @@ const StageWrapperComponent = function (props) {
                     vm={vm}
                 />
             </Box>
-            <Box className={styles.stageCanvasWrapper}>
+            <Box className={classNames(styles.stageCanvasWrapper, 'stage-canvas-wrapper-root')}>
                 {
                     isRendererSupported ?
                         <Stage

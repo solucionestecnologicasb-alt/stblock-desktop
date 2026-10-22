@@ -289,4 +289,48 @@ export default function registerCustomDeviceBlocks (ScratchBlocks) {
             });
         }
     };
+
+    // ========================================================================
+    // DEVICE STARTUP HATS
+    // ========================================================================
+
+    /**
+     * Arduino program entry point
+     */
+    SB.Blocks['arduino_whenArduinoBegin'] = {
+        init: function () {
+            this.jsonInit({
+                message0: 'al iniciar Arduino',
+                category: SB.Categories.event,
+                extensions: ['colours_event', 'shape_hat']
+            });
+        }
+    };
+
+    /**
+     * MicroPython program entry point
+     */
+    SB.Blocks['event_whenmicropythonbegin'] = {
+        init: function () {
+            this.jsonInit({
+                message0: 'al iniciar MicroPython',
+                category: SB.Categories.event,
+                extensions: ['colours_event', 'shape_hat']
+            });
+        }
+    };
+
+    /**
+     * Micro:bit program entry point
+     */
+    SB.Blocks['microbit_whenmicrobitbegin'] = {
+        init: function () {
+            this.jsonInit({
+                message0: 'al iniciar micro:bit',
+                category: SB.Categories.event,
+                extensions: ['colours_event', 'shape_hat']
+            });
+        }
+    };
 }
+

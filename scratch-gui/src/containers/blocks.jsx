@@ -18,6 +18,7 @@ import BlocksComponent from '../components/blocks/blocks.jsx';
 import BlockSearch from '../components/block-search/block-search.jsx';
 import {buildSearchToolboxXML} from '../lib/block-search-index.js';
 import installSafeFlyout from '../lib/safe-flyout';
+import {isMobileDevice} from '../lib/device-detector';
 
 import ExtensionLibrary from './extension-library.jsx';
 import extensionData from '../lib/libraries/extensions/index.jsx';
@@ -114,6 +115,7 @@ class Blocks extends React.Component {
             'onTargetsUpdate',
             'onVisualReport',
             'onWorkspaceUpdate',
+            'applyWorkspaceUpdate',
             'onWorkspaceMetricsChange',
             'recalcWrapperWidth',
             'setBlocks',
@@ -130,7 +132,7 @@ class Blocks extends React.Component {
         this.state = {
             prompt: null,
             showAdvancedBlocks: false,
-            showDeviceBlocks: false
+            showDeviceBlocks: true
         };
         this.onTargetsUpdate = debounce(this.onTargetsUpdate, 100);
         this.toolboxUpdateQueue = [];
@@ -147,6 +149,10 @@ class Blocks extends React.Component {
         // _toolboxCacheGeneration (EXTENSION_ADDED / BLOCKSINFO_UPDATE).
         this._toolboxCache = null;
         this._toolboxCacheGeneration = 0;
+        // Coalescer de workspaceUpdate: las ráfagas de eventos se colapsan en
+        // una sola pasada pesada (evita serializar + dispatch + re-render en bucle).
+        this._workspaceUpdateLocked = false;
+        this._pendingWorkspaceUpdate = null;
     }
     componentDidMount () {
         this.ScratchBlocks = VMScratchBlocks(this.props.vm, this.props.useCatBlocks);
@@ -181,9 +187,41 @@ class Blocks extends React.Component {
             FlyoutProto.stepScrollAnimation.__stblockGuarded = true;
         }
 
+        const isMobile = isMobileDevice();
+        if (isMobile && FlyoutProto && !FlyoutProto.__stblockMobilePositionPatched) {
+            const origPosition = FlyoutProto.position;
+            const selfBlocks = this;
+            FlyoutProto.position = function () {
+                origPosition.call(this);
+                if (this.toolboxPosition_ == selfBlocks.ScratchBlocks.TOOLBOX_AT_BOTTOM && this.svgGroup_) {
+                    const toolboxEl = document.querySelector('.blocklyToolboxDiv') || document.querySelector('.blocklyToolboxWrapper');
+                    const toolboxHeight = toolboxEl ? toolboxEl.getBoundingClientRect().height : 46;
+                    const targetMetrics = this.targetWorkspace_ ? this.targetWorkspace_.getMetrics() : null;
+                    if (targetMetrics) {
+                        const parentSvg = this.targetWorkspace_.getParentSvg();
+                        const svgHeight = parentSvg ? parentSvg.getBoundingClientRect().height : (targetMetrics.viewHeight + (targetMetrics.toolboxHeight || 0));
+                        const adjustedY = Math.max(0, svgHeight - toolboxHeight - this.height_);
+                        const currentTransform = this.svgGroup_.getAttribute('transform') || '';
+                        const xMatch = currentTransform.match(/translate\(\s*([-\d.]+)/);
+                        const currentX = xMatch ? xMatch[1] : 0;
+                        selfBlocks.ScratchBlocks.utils.setCssTransform(this.svgGroup_, `translate(${currentX}px, ${adjustedY}px)`);
+                        if (this.scrollbar_) {
+                            this.scrollbar_.setOrigin(Number(currentX), adjustedY);
+                        }
+                    }
+                }
+            };
+            FlyoutProto.__stblockMobilePositionPatched = true;
+        }
+
+        const mobileOverrides = isMobile ? {
+            horizontalLayout: true,
+            toolboxPosition: 'end'
+        } : {};
         const workspaceConfig = defaultsDeep({},
             Blocks.defaultOptions,
             this.props.options,
+            mobileOverrides,
             {rtl: this.props.isRtl, toolbox: this.props.toolboxXML, colours: getColorsForTheme(this.props.theme)}
         );
         this.workspace = this.ScratchBlocks.inject(this.blocks, workspaceConfig);
@@ -202,10 +240,37 @@ class Blocks extends React.Component {
             return metrics;
         };
 
+        // En móvil: Conectar la papelera flotante (.mobile-trash-can) con la zona de eliminación nativa de Blockly
+        if (isMobile) {
+            const origRecordDeleteAreas = this.workspace.recordDeleteAreas_.bind(this.workspace);
+            this.workspace.recordDeleteAreas_ = () => {
+                origRecordDeleteAreas();
+                const trashEl = document.getElementById('stblock-mobile-trashcan');
+                if (trashEl) {
+                    const rect = trashEl.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        this.workspace.deleteAreaTrash_ = {
+                            left: rect.left,
+                            top: rect.top,
+                            width: rect.width,
+                            height: rect.height,
+                            contains: function (coord) {
+                                if (!coord) return false;
+                                const x = typeof coord.x !== 'undefined' ? coord.x : coord.clientX;
+                                const y = typeof coord.y !== 'undefined' ? coord.y : coord.clientY;
+                                return x >= this.left && x <= (this.left + this.width) &&
+                                       y >= this.top && y <= (this.top + this.height);
+                            }
+                        };
+                    }
+                }
+            };
+        }
+
         // Wrap toolbox + flyout + header into a single container.
-        // This lets the search bar span across the combined width.
+        // This lets the search bar span across the combined width on desktop.
         const injectionDiv = this.blocks.querySelector('.injectionDiv');
-        if (injectionDiv) {
+        if (injectionDiv && !isMobile) {
             const toolboxDiv = injectionDiv.querySelector('.blocklyToolboxDiv');
             const flyoutSvg = injectionDiv.querySelector('.blocklyFlyout');
             if (toolboxDiv && flyoutSvg) {
@@ -237,6 +302,18 @@ class Blocks extends React.Component {
         }
 
         window.addEventListener('resize', this.recalcWrapperWidth);
+        if (isMobile) {
+            this.handleMobileResize = () => {
+                if (this.workspace) {
+                    this.ScratchBlocks.svgResize(this.workspace);
+                    const flyout = this.workspace.getFlyout();
+                    if (flyout && typeof flyout.position === 'function' && flyout.isVisible && flyout.isVisible()) {
+                        flyout.position();
+                    }
+                }
+            };
+            window.addEventListener('resize', this.handleMobileResize);
+        }
 
         // Register buttons under new callback keys for creating variables,
         // lists, and procedures from extensions.
@@ -462,29 +539,44 @@ class Blocks extends React.Component {
                 const currentItem = toolbox.selectedItem_;
                 if (currentItem && item && currentItem.id_ === item.id_ &&
                     !self._preventFlyoutShow && !self._restoringToolboxSelection) {
-                    // Same category clicked again → show all categories first, THEN clear selection
-                    // (showAll_ may trigger scroll events that need the selected item to be valid)
-                    const self = this;
-                    self._preventFlyoutShow = true;
-                    if (typeof toolbox.showAll_ === 'function' && flyout) {
-                        toolbox.showAll_();
+                    if (isMobile) {
+                        // En móvil: solo ocultar si el flyout está actualmente visible y abierto
+                        if (flyout && flyout.isVisible && flyout.isVisible()) {
+                            self._preventFlyoutShow = true;
+                            flyout.hide();
+                            self._preventFlyoutShow = false;
+                            currentItem.setSelected(false);
+                            toolbox.selectedItem_ = null;
+                            return;
+                        }
+                        // Si el flyout estaba cerrado, continuar hacia abajo para abrirlo y mostrar sus bloques
+                    } else {
+                        // Comportamiento original para escritorio
+                        const self = this;
+                        self._preventFlyoutShow = true;
+                        if (typeof toolbox.showAll_ === 'function' && flyout) {
+                            toolbox.showAll_();
+                        }
+                        self._preventFlyoutShow = false;
+                        currentItem.setSelected(false);
+                        toolbox.selectedItem_ = null;
+                        return;
                     }
-                    self._preventFlyoutShow = false;
-                    // Now clear the selection (unhighlight the category)
-                    currentItem.setSelected(false);
-                    toolbox.selectedItem_ = null;
-                    return;
                 }
                 self.cancelFlyoutScrollAnimation();
                 origSetSelected(item, false);
-                if (item && flyout.isVisible() && !self._preventFlyoutShow) {
+                const shouldShowFlyout = isMobile ? !self._preventFlyoutShow : (flyout.isVisible() && !self._preventFlyoutShow);
+                if (item && shouldShowFlyout) {
+                    if (isMobile && !flyout.isVisible()) {
+                        flyout.setVisible(true);
+                    }
                     const contents = item.getContents();
                     if (!contents || (typeof contents === 'string' && contents.length === 0) ||
                         (Array.isArray(contents) && contents.length === 0)) return;
                     const labelStr = `<xml><label text="${item.name_}" id="${item.id_}" category-label="true" web-class="categoryLabel"></label></xml>`;
                     const labelDOM = this.ScratchBlocks.Xml.textToDom(labelStr);
                     const contentArray = Array.isArray(contents) ? contents : [contents];
-                    flyout.show([labelDOM.firstChild, ...contentArray]);
+                    flyout.show(isMobile ? contentArray : [labelDOM.firstChild, ...contentArray]);
 
                     // recordCategoryScrollPositions_ uses getCategoryByIndex(i) which
                     // maps to toolbox menu order, not flyout content order.
@@ -495,7 +587,21 @@ class Blocks extends React.Component {
                         }
                     }
 
-                    this.animateFlyoutBlocks(flyout);
+                    if (isMobile) {
+                        if (flyout.scrollToStart) {
+                            flyout.scrollToStart();
+                        }
+                        if (flyout.position) {
+                            flyout.position();
+                        }
+                        requestAnimationFrame(() => {
+                            if (flyout && flyout.position) {
+                                flyout.position();
+                            }
+                        });
+                    } else {
+                        this.animateFlyoutBlocks(flyout);
+                    }
                 }
             };
 
@@ -533,21 +639,39 @@ class Blocks extends React.Component {
             }
 
             // Trigger initial single-category view (inject already ran populate_)
+            flyout.autoClose = false;
             const initialItem = toolbox.getSelectedItem();
             if (initialItem) {
                 const initContents = initialItem.getContents();
                 if (initContents && !(typeof initContents === 'string' && initContents.length === 0) &&
                     !(Array.isArray(initContents) && initContents.length === 0)) {
-                    const labelStr = `<xml><label text="${initialItem.name_}" id="${initialItem.id_}" category-label="true" web-class="categoryLabel"></label></xml>`;
-                    const labelDOM = this.ScratchBlocks.Xml.textToDom(labelStr);
                     const contentArray = Array.isArray(initContents) ? initContents : [initContents];
-                    flyout.show([labelDOM.firstChild, ...contentArray]);
+                    if (isMobile) {
+                        flyout.show(contentArray);
+                        if (flyout.scrollToStart) {
+                            flyout.scrollToStart();
+                        }
+                        if (flyout.position) {
+                            flyout.position();
+                        }
+                        requestAnimationFrame(() => {
+                            if (flyout && flyout.position) {
+                                flyout.position();
+                            }
+                        });
+                    } else {
+                        const labelStr = `<xml><label text="${initialItem.name_}" id="${initialItem.id_}" category-label="true" web-class="categoryLabel"></label></xml>`;
+                        const labelDOM = this.ScratchBlocks.Xml.textToDom(labelStr);
+                        flyout.show([labelDOM.firstChild, ...contentArray]);
+                    }
                     if (flyout.categoryScrollPositions && flyout.categoryScrollPositions.length > 0) {
                         for (let i = 0; i < flyout.categoryScrollPositions.length; i++) {
                             flyout.categoryScrollPositions[i].categoryId = initialItem.id_;
                         }
                     }
-                    this.animateFlyoutBlocks(flyout);
+                    if (!isMobile) {
+                        this.animateFlyoutBlocks(flyout);
+                    }
                 }
             }
 
@@ -602,11 +726,16 @@ class Blocks extends React.Component {
             this.props.splitMode !== nextProps.splitMode ||
             this.props.trashBlocks !== nextProps.trashBlocks ||
             this.props.selectedDevice !== nextProps.selectedDevice ||
+            this.props.deviceMode !== nextProps.deviceMode ||
             this.state.showAdvancedBlocks !== nextState.showAdvancedBlocks ||
             this.state.showDeviceBlocks !== nextState.showDeviceBlocks
         );
     }
     componentDidUpdate (prevProps) {
+        if (this.props.deviceMode !== prevProps.deviceMode) {
+            this.requestToolboxUpdate();
+        }
+
         // If any modals are open, call hideChaff to close z-indexed field editors
         if (this.props.anyModalVisible && !prevProps.anyModalVisible) {
             try {
@@ -636,8 +765,8 @@ class Blocks extends React.Component {
             }
         }
 
-        if (this.props.selectedDevice !== prevProps.selectedDevice && this.state.showDeviceBlocks) {
-            this.setState({showDeviceBlocks: false}, () => {
+        if (this.props.selectedDevice !== prevProps.selectedDevice && !this.state.showDeviceBlocks) {
+            this.setState({showDeviceBlocks: true}, () => {
                 const xml = this.getToolboxXML();
                 if (xml) {
                     this.props.updateToolboxState(xml);
@@ -688,6 +817,9 @@ class Blocks extends React.Component {
     }
     componentWillUnmount () {
         window.removeEventListener('resize', this.recalcWrapperWidth);
+        if (this.handleMobileResize) {
+            window.removeEventListener('resize', this.handleMobileResize);
+        }
         this.detachVM();
         this.workspace.dispose();
         clearTimeout(this.toolboxUpdateTimeout);
@@ -706,7 +838,7 @@ class Blocks extends React.Component {
     }
 
     recalcWrapperWidth () {
-        if (!this.flyoutWrapper) return;
+        if (!this.flyoutWrapper || isMobileDevice()) return;
         const injectionDiv = this.blocks.querySelector('.injectionDiv');
         if (!injectionDiv) return;
         const toolboxDiv = injectionDiv.querySelector('.blocklyToolboxDiv');
@@ -1000,14 +1132,17 @@ class Blocks extends React.Component {
             if (!target) target = stage; // If no editingTarget, use the stage
 
             // Cache de la construcción del toolbox (~315 bloques de stbBoardV2).
-            // La firma incluye todo lo que puede afectar al XML resultante.
-            // _toolboxCacheGeneration se invalida en EXTENSION_ADDED/BLOCKSINFO_UPDATE.
+            // La firma incluye solo lo que realmente afecta al XML resultante.
+            // NOTA: no incluir target.blocks.toXML(); el contenido del toolbox no
+            // depende de los bloques del usuario y serializarlos aquí costaba O(n)
+            // en cada llamada (incluso con acierto de caché). El toolbox se
+            // invalida vía _toolboxCacheGeneration (EXTENSION_ADDED/BLOCKSINFO_UPDATE).
             const cacheKey = JSON.stringify([
                 target.id,
-                target.blocks.toXML(),
                 this._toolboxCacheGeneration || 0,
                 this.props.theme,
                 this.props.selectedDevice ? this.props.selectedDevice.deviceId : 'none',
+                this.props.deviceMode,
                 runtime.getProgramMode(),
                 runtime.isHardwareModeActive(),
                 this.state.showAdvancedBlocks,
@@ -1026,7 +1161,8 @@ class Blocks extends React.Component {
                     this.props.vm.runtime.getBlocksXML(target),
                     this.props.theme
                 ).map(normalizeCategoryXML);
-                if (runtime.isHardwareModeActive()) {
+                const isHardwareMode = runtime.isHardwareModeActive() || this.props.deviceMode === 'device';
+                if (isHardwareMode) {
                     const selectedDevice = this.props.selectedDevice;
                     if (selectedDevice) {
                         baseXML = makeToolboxXML(false, target.isStage, target.id, dynamicBlocksXML,
@@ -1078,9 +1214,27 @@ class Blocks extends React.Component {
         }
     }
     onWorkspaceUpdate (data) {
+        // Coalescer: procesa el primer evento al instante (leading) y colapsa los
+        // que lleguen en la misma ráfaga; solo se reprocesa el último (trailing).
+        if (!this._workspaceUpdateLocked) {
+            this.applyWorkspaceUpdate(data);
+            this._workspaceUpdateLocked = true;
+            setTimeout(() => {
+                this._workspaceUpdateLocked = false;
+                if (this._pendingWorkspaceUpdate) {
+                    const pending = this._pendingWorkspaceUpdate;
+                    this._pendingWorkspaceUpdate = null;
+                    this.onWorkspaceUpdate(pending);
+                }
+            }, 0);
+        } else {
+            this._pendingWorkspaceUpdate = data;
+        }
+    }
+    applyWorkspaceUpdate (data) {
         // When we change sprites, update the toolbox to have the new sprite's blocks
         const toolboxXML = this.getToolboxXML();
-        if (toolboxXML) {
+        if (toolboxXML && toolboxXML !== this.props.toolboxXML) {
             this.props.updateToolboxState(toolboxXML);
         }
 
@@ -1614,6 +1768,7 @@ class Blocks extends React.Component {
             onCodeGenerated,
             isPythonEditMode,
             selectedDevice,
+            deviceMode,
             workspaceReadOnly,
             ...props
         } = this.props;
@@ -1760,7 +1915,8 @@ const mapStateToProps = state => ({
     splitMode: state.scratchGui.editorTab.secondaryTabIndex !== null,
     reducedMotion: state.scratchGui.animations.reducedMotion,
     trashBlocks: state.scratchGui.blockTrash.blocks,
-    selectedDevice: state.scratchGui.deviceMode.selectedDevice
+    selectedDevice: state.scratchGui.deviceMode.selectedDevice,
+    deviceMode: state.scratchGui.deviceMode.mode
 });
 
 const mapDispatchToProps = dispatch => ({

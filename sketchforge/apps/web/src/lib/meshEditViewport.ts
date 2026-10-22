@@ -1,5 +1,5 @@
 import { knifeFace, loopCut, insetFaces, bevelEdges, weldVertices, dissolveEdges, polygonLoop, requirePlanar } from "./meshPolygonTools";
-import { defaultAssist, influenceWeights, symmetryPairs, assistedTransform, snapPosition, type AssistSettings } from "./meshTransformAssist";
+import { defaultAssist, influenceWeights, symmetryPairs, assistedTransform, snapPosition, uniformScaleFactor, type AssistSettings } from "./meshTransformAssist";
 import { expandMeshSelection, editMeshSurface } from "./meshEditOperations";
 import { connectMeshVertices } from "./meshConnect";
 import * as THREE from "three";
@@ -8,7 +8,7 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import { cloneEditableMesh, editableEdges, extrudeEditableFaces, fillMeshSelection, deleteMeshSelection, meshPoint, selectionCenter, selectionVertices, subdivideEditableEdges, type EditableMesh, type EditEdge, type EditSelectionMode } from "./editableMesh";
 
 export type MeshEditTool = "translate" | "rotate" | "scale";
-export type MeshEditState = { mode: EditSelectionMode; tool: MeshEditTool; count: number; xray: boolean; undo: boolean; redo: boolean; active: boolean; assist?: AssistSettings; operation?: string; value?: number };
+export type MeshEditState = { mode: EditSelectionMode; tool: MeshEditTool; count: number; xray: boolean; undo: boolean; redo: boolean; active: boolean; uniformScale: boolean; assist?: AssistSettings; operation?: string; value?: number };
 type Snapshot = { mesh: EditableMesh; mode: EditSelectionMode; selection: Set<number> };
 type Transaction = { weights: Float32Array; pairs: Array<[number, number]>; before: Snapshot; base: Float32Array; vertices: number[]; center: THREE.Vector3; start: THREE.Vector2; tool: MeshEditTool; axis: "x" | "y" | "z" | null; numeric: string; direction: THREE.Vector3 | null; modal: boolean; moved: boolean; label: string };
 export type MeshEditCallbacks = { state: (state: MeshEditState) => void; commit: (mesh: EditableMesh, label: string, history?: "undo" | "redo") => void; activity: (active: boolean) => void; exit: () => void; notice: (message: string) => void };
@@ -32,6 +32,7 @@ export class MeshEditViewport {
   private selected = new Set<number>();
   private mode: EditSelectionMode;
   private tool: MeshEditTool = "translate";
+  private uniformScale = false;
   private xray = false;
   private assist: AssistSettings = { ...defaultAssist };
   private symmetryOrigin = new THREE.Vector3();
@@ -42,6 +43,8 @@ export class MeshEditViewport {
   private transaction: Transaction | null = null;
   private pointer = new THREE.Vector2();
   private pointerDown: { x: number; y: number; id: number | null; additive: boolean; button: number } | null = null;
+  private touchPointers = new Map<number, { pageX: number; pageY: number }>();
+  private touchTap: { x: number; y: number; at: number } | null = null;
   private history: Snapshot[] = [];
   private historyIndex = 0;
   private frame = 0;
@@ -78,6 +81,7 @@ export class MeshEditViewport {
     }
     this.orbit = new OrbitControls(this.camera, this.renderer.domElement); this.orbit.enableDamping = false;
     this.orbit.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.ROTATE };
+    this.orbit.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     this.orbit.addEventListener("change", this.requestRender);
     this.gizmo = new TransformControls(this.camera, this.renderer.domElement); this.gizmo.setSize(0.85); this.gizmo.setSpace("world");
     this.scene.add(this.gizmo.getHelper());
@@ -87,6 +91,12 @@ export class MeshEditViewport {
     this.gizmo.addEventListener("mouseUp", () => this.finish());
     this.box = document.createElement("div"); this.box.className = "mesh-edit-marquee"; this.box.hidden = true; this.host.append(this.box);
     const canvas = this.renderer.domElement, signal = this.abort.signal;
+    // En captura sobre el host para ejecutarse antes que OrbitControls: con dos
+    // dedos hay que reactivar la cámara y descartar el gesto de selección.
+    host.addEventListener("pointerdown", this.onTouchPointerDownCapture, { capture: true, signal });
+    window.addEventListener("pointerup", this.releaseTouchPointer, { capture: true, signal });
+    window.addEventListener("pointercancel", this.releaseTouchPointer, { capture: true, signal });
+    window.addEventListener("blur", this.releaseAllTouches, { signal });
     canvas.addEventListener("pointerdown", this.onPointerDown, { signal });
     canvas.addEventListener("pointermove", this.onPointerMove, { signal });
     canvas.addEventListener("pointerup", this.onPointerUp, { signal });
@@ -102,7 +112,7 @@ export class MeshEditViewport {
     this.history = [this.snapshot()]; this.publish(); canvas.focus({ preventScroll: true });
   }
 
-  private publish() { this.callbacks.state({ mode: this.mode, tool: this.tool, count: this.selected.size, xray: this.xray, undo: this.historyIndex > 0, redo: this.historyIndex + 1 < this.history.length, active: !!this.transaction || !!this.operation, assist: { ...this.assist }, operation: this.operation?.kind, value: this.operation?.value }); }
+  private publish() { this.callbacks.state({ mode: this.mode, tool: this.tool, count: this.selected.size, xray: this.xray, undo: this.historyIndex > 0, redo: this.historyIndex + 1 < this.history.length, active: !!this.transaction || !!this.operation, uniformScale: this.uniformScale, assist: { ...this.assist }, operation: this.operation?.kind, value: this.operation?.value }); }
   private message(text: string) { this.output.textContent = text; }
   private requestRender = () => {
     if (this.frame || this.dead) return;
@@ -154,6 +164,13 @@ export class MeshEditViewport {
   }
   setMode(mode: EditSelectionMode) { if (this.transaction || this.operation) this.cancel(); this.mode = mode; this.selected.clear(); this.updateSelection(); this.message("Selecciona con clic · Shift añade · B selección rectangular"); }
   setTool(tool: MeshEditTool) { if (this.transaction || this.operation) this.cancel(); this.tool = tool; this.gizmo.setMode(tool); this.publish(); }
+  setUniformScale(enabled: boolean) {
+    if (this.transaction || this.operation) this.cancel();
+    this.uniformScale = enabled;
+    if (enabled && this.tool !== "scale") { this.tool = "scale"; this.gizmo.setMode("scale"); }
+    this.publish();
+    this.message(enabled ? "Escala uniforme: cualquier manija escala igual en X, Y y Z · U alterna" : "Escala por eje: usa las manijas X, Y o Z · U activa la escala uniforme");
+  }
   toggleXray() { this.xray = !this.xray; (this.dots.material as THREE.PointsMaterial).depthTest = !this.xray; (this.wire.material as THREE.LineBasicMaterial).depthTest = !this.xray; this.body.material.opacity = this.xray ? 0.35 : 1; this.body.material.transparent = this.xray; this.body.material.depthWrite = !this.xray; this.publish(); this.requestRender(); }
   selectAll(clear = false) { if (this.transaction) return; const count = this.mode === "vertex" ? this.mesh.positions.length / 3 : this.mode === "edge" ? this.edges.length : this.mesh.faces.length; this.selected = new Set(clear ? [] : Array.from({ length: count }, (_, i) => i)); this.updateSelection(); }
   frameSelection(all = false) {
@@ -177,9 +194,14 @@ export class MeshEditViewport {
   private applyPivot() {
     const tx = this.transaction; if (!tx || tx.modal) return;
     this.pivot.updateMatrixWorld();
-    const matrix = this.pivot.matrixWorld.clone().multiply(new THREE.Matrix4().makeTranslation(-tx.center.x, -tx.center.y, -tx.center.z));
+    // En modo uniforme cualquier manija de escala produce el mismo factor en
+    // X/Y/Z y se aplica alrededor del centro de la selección.
+    const uniform = tx.tool === "scale" && this.uniformScale ? uniformScaleFactor(this.pivot.scale) : null;
+    const matrix = uniform === null
+      ? this.pivot.matrixWorld.clone().multiply(new THREE.Matrix4().makeTranslation(-tx.center.x, -tx.center.y, -tx.center.z))
+      : new THREE.Matrix4().compose(tx.center, new THREE.Quaternion(), new THREE.Vector3(uniform, uniform, uniform)).multiply(new THREE.Matrix4().makeTranslation(-tx.center.x, -tx.center.y, -tx.center.z));
     this.applySnap(matrix, tx); assistedTransform(tx.base, this.mesh.positions, matrix, tx.weights, tx.pairs, this.assist.symmetry); tx.moved = tx.vertices.some(id => Math.abs(this.mesh.positions[id * 3] - tx.base[id * 3]) + Math.abs(this.mesh.positions[id * 3 + 1] - tx.base[id * 3 + 1]) + Math.abs(this.mesh.positions[id * 3 + 2] - tx.base[id * 3 + 2]) > 1e-6); this.geometryDirty = true; this.requestRender();
-    const delta = this.pivot.position.clone().sub(tx.center); this.message(tx.tool === "translate" ? `Mover  X ${delta.x.toFixed(2)}  Y ${delta.y.toFixed(2)}  Z ${delta.z.toFixed(2)} mm · Esc cancela` : `${tx.label} · Esc cancela`);
+    const delta = this.pivot.position.clone().sub(tx.center); this.message(uniform !== null ? `Escalar uniforme: ${uniform.toFixed(3)}× · Esc cancela` : tx.tool === "translate" ? `Mover  X ${delta.x.toFixed(2)}  Y ${delta.y.toFixed(2)}  Z ${delta.z.toFixed(2)} mm · Esc cancela` : `${tx.label} · Esc cancela`);
   }
   private applyModal() {
     const tx = this.transaction; if (!tx || !tx.modal) return;
@@ -226,7 +248,7 @@ export class MeshEditViewport {
     if (this.operation) { const before = this.operation.before; this.operation = null; this.operationPoint = undefined; this.restore(before); }
     const tx = this.transaction; this.transaction = null;
     if (tx) this.restore(tx.before);
-    this.pointerDown = null; this.box.hidden = true; this.boxSelecting = false;
+    this.pointerDown = null; this.touchTap = null; this.box.hidden = true; this.boxSelecting = false;
     this.gizmo.enabled = true; this.gizmo.getHelper().visible = true; this.orbit.enabled = true; this.callbacks.activity(false); this.updateSelection(); this.message("Operación cancelada");
   };
   private restore(snapshot: Snapshot) { this.mesh = cloneEditableMesh(snapshot.mesh); this.mode = snapshot.mode; this.selected = new Set(snapshot.selection); this.rebuild(); }
@@ -342,8 +364,37 @@ export class MeshEditViewport {
     else this.edges.forEach((edge, id) => { const a = meshPoint(this.mesh, edge.a), b = meshPoint(this.mesh, edge.b), aa = this.project(a), bb = this.project(b), direction = bb.clone().sub(aa); const t = THREE.MathUtils.clamp(pointer.clone().sub(aa).dot(direction) / (direction.lengthSq() || 1), 0, 1), d = aa.addScaledVector(direction, t).distanceTo(pointer); if (d < distance && this.visible(a.lerp(b, t))) { distance = d; best = id; } });
     return best;
   }
+  private onTouchPointerDownCapture = (event: PointerEvent) => {
+    if (event.pointerType !== "touch") return;
+    this.touchPointers.set(event.pointerId, { pageX: event.pageX, pageY: event.pageY });
+    if (this.touchPointers.size < 2) { this.touchTap = null; return; }
+    // Dos dedos: se abandona la selección/transformación y manda la cámara.
+    this.pointerDown = null;
+    this.box.hidden = true; this.boxSelecting = false;
+    if (!this.operation && this.transaction) this.finish();
+    this.orbit.enabled = true;
+    // Refresca la posición del primer dedo para que el pinch no salte.
+    const tracker = this.orbit as unknown as {
+      _trackPointer?: (pointer: { pointerId: number; pageX: number; pageY: number }) => void;
+    };
+    this.touchPointers.forEach((position, pointerId) => {
+      if (pointerId !== event.pointerId) tracker._trackPointer?.({ pointerId, pageX: position.pageX, pageY: position.pageY });
+    });
+  };
+  private releaseTouchPointer = (event: PointerEvent) => {
+    if (event.pointerType === "touch") this.touchPointers.delete(event.pointerId);
+  };
+  private releaseAllTouches = () => {
+    this.touchPointers.clear();
+    this.touchTap = null;
+  };
   private onPointerDown = (event: PointerEvent) => {
     this.pointer.set(event.clientX, event.clientY); this.renderer.domElement.focus({ preventScroll: true });
+    const touch = event.pointerType === "touch";
+    if (touch) {
+      this.touchPointers.set(event.pointerId, { pageX: event.pageX, pageY: event.pageY });
+      if (this.touchPointers.size > 1) return;
+    }
     if (this.operation) {
       if (event.button === 2) { this.cancel(); return; }
       if (event.button !== 0) return;
@@ -359,6 +410,11 @@ export class MeshEditViewport {
     if (this.transaction?.modal) { if (event.button === 0) this.finish(); else if (event.button === 2) this.cancel(); return; }
     if (event.button !== 0 || this.gizmo.dragging || this.gizmo.axis) return;
     const id = this.boxSelecting ? null : this.pick(event.clientX, event.clientY), additive = event.shiftKey || event.ctrlKey || event.metaKey;
+    if (touch && id === null) {
+      // Un dedo sobre el vacío orbita la cámara; el toque sin arrastre deselecciona.
+      this.touchTap = { x: event.clientX, y: event.clientY, at: performance.now() };
+      return;
+    }
     this.pointerDown = { x: event.clientX, y: event.clientY, id, additive, button: event.button };
     this.renderer.domElement.setPointerCapture(event.pointerId);
     if (id !== null) {
@@ -369,14 +425,28 @@ export class MeshEditViewport {
   };
   private onPointerMove = (event: PointerEvent) => {
     this.pointer.set(event.clientX, event.clientY);
+    if (event.pointerType === "touch") {
+      this.touchPointers.set(event.pointerId, { pageX: event.pageX, pageY: event.pageY });
+      if (this.touchPointers.size > 1) return;
+    }
     if (this.operation) { if (!this.operationFrame) this.operationFrame=requestAnimationFrame(()=>{this.operationFrame=0;this.moveOperation();}); return; }
     if (this.transaction?.modal) { this.applyModal(); return; }
     const down = this.pointerDown; if (!down || this.gizmo.dragging) return;
     const moved = Math.hypot(event.clientX - down.x, event.clientY - down.y) > 3;
-    if (down.id !== null && moved && !down.additive) { this.tool = "translate"; this.begin(true, new THREE.Vector2(down.x, down.y)); this.gizmo.enabled = false; this.applyModal(); }
+    if (down.id !== null && moved && !down.additive) { this.tool = "translate"; this.orbit.enabled = false; this.begin(true, new THREE.Vector2(down.x, down.y)); this.gizmo.enabled = false; this.applyModal(); }
     else if (down.id === null && moved) { const rect = this.host.getBoundingClientRect(); this.box.hidden = false; Object.assign(this.box.style, { left: `${Math.min(down.x, event.clientX) - rect.left}px`, top: `${Math.min(down.y, event.clientY) - rect.top}px`, width: `${Math.abs(down.x - event.clientX)}px`, height: `${Math.abs(down.y - event.clientY)}px` }); }
   };
   private onPointerUp = (event: PointerEvent) => {
+    if (event.pointerType === "touch") {
+      this.touchPointers.delete(event.pointerId);
+      const tap = this.touchTap;
+      if (tap) {
+        this.touchTap = null;
+        if (Math.hypot(event.clientX - tap.x, event.clientY - tap.y) <= 8 && performance.now() - tap.at <= 500) {
+          this.selected.clear(); this.updateSelection(); this.requestRender();
+        }
+      }
+    }
     if (this.operation) return;
     const down = this.pointerDown; this.pointerDown = null;
     if (this.transaction?.modal && down?.id !== null && down) { this.pointer.set(event.clientX, event.clientY); this.applyModal(); this.finish(); }
@@ -391,6 +461,7 @@ export class MeshEditViewport {
     }
     this.box.hidden = true; this.boxSelecting = false;
     if (this.renderer.domElement.hasPointerCapture(event.pointerId)) this.renderer.domElement.releasePointerCapture(event.pointerId);
+    if (!this.operation && !this.transaction) this.orbit.enabled = true;
   };
   private onKeyDown = (event: KeyboardEvent) => {
     const target = event.target as HTMLElement | null;
@@ -419,10 +490,11 @@ export class MeshEditViewport {
       }
       return;
     }
-    if (["tab", "1", "2", "3", "g", "r", "s", "a", "b", "e", "f", "delete", "backspace", "escape", "."].includes(key) || (ctrl && ["z", "y"].includes(key)) || (event.altKey && key === "z")) event.preventDefault();
+    if (["tab", "1", "2", "3", "g", "r", "s", "u", "a", "b", "e", "f", "delete", "backspace", "escape", "."].includes(key) || (ctrl && ["z", "y"].includes(key)) || (event.altKey && key === "z")) event.preventDefault();
     if (key==='k' || key==='i' && !ctrl || ctrl && (key==='r' || key==='b')) { event.preventDefault(); this.startOperation(key==='k'?'knife':key==='i'?'inset':key==='r'?'loop':'bevel'); }
     else if (key==='m' && !ctrl) { event.preventDefault(); this.merge(null); }
     else if (key==='o') { event.preventDefault(); this.setAssist({proportional:!this.assist.proportional}); }
+    else if (key==='u') { event.preventDefault(); this.setUniformScale(!this.uniformScale); }
     else if (event.shiftKey && key==='s') { event.preventDefault(); this.setAssist({snap:this.assist.snap==='off'?'grid':'off'}); }
     else if (ctrl && ["i", "l", "+", "=", "-", "t"].includes(key)) {
       event.preventDefault();

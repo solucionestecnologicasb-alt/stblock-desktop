@@ -125,9 +125,7 @@ const reducer = function (state = initialState, action) {
         }
         return {
             ...state,
-            programMode: action.programMode,
-            isConnected: false,
-            selectedPort: null
+            programMode: action.programMode
         };
     case OPEN_DEVICE_MODAL:
         return {
@@ -151,7 +149,8 @@ const reducer = function (state = initialState, action) {
             ...state,
             isCodeLocked: action.isLocked,
             // When locking, sync manual code with current block-generated code
-            manualCode: action.isLocked ? state.codeViewContent : state.manualCode
+            // When unlocking, ensure manualCode is seeded with block code if empty
+            manualCode: action.isLocked ? state.codeViewContent : (state.manualCode || state.codeViewContent)
         };
     case SET_MANUAL_CODE:
         return {
@@ -207,13 +206,15 @@ const reducer = function (state = initialState, action) {
     case SAVE_DEVICE_PROJECT: {
         const deviceId = action.deviceId;
         if (!deviceId) return state;
+        const savedCode = action.code || (state.isCodeLocked ? state.codeViewContent : state.manualCode);
         return {
             ...state,
             deviceProjects: {
                 ...state.deviceProjects,
                 [deviceId]: {
                     projectData: action.projectData,
-                    hasBlocks: action.hasBlocks || false
+                    hasBlocks: action.hasBlocks || false,
+                    code: savedCode
                 }
             }
         };
@@ -375,11 +376,12 @@ const setTerminalSettings = settings => ({
     settings
 });
 
-const saveDeviceProject = (deviceId, projectData, hasBlocks = false) => ({
+const saveDeviceProject = (deviceId, projectData, hasBlocks = false, code = null) => ({
     type: SAVE_DEVICE_PROJECT,
     deviceId,
     projectData,
-    hasBlocks
+    hasBlocks,
+    code
 });
 
 const openDeviceChangeConfirm = device => ({

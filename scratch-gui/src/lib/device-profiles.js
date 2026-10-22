@@ -2,6 +2,9 @@ const DEVICE_PROFILES = {
     arduinoUno: {platform: 'arduino:avr', fqbn: 'arduino:avr:uno'},
     stBoardExtension: {platform: 'arduino:avr', fqbn: 'arduino:avr:uno'},
     arduinoNano: {platform: 'arduino:avr', fqbn: 'arduino:avr:nano:cpu=atmega328old'},
+    // The lgt8fx compiler core is not bundled, so sketch compilation is not
+    // offered. Live control works through the precompiled Firmata hex.
+    arduinoLGT8F328P: {platform: 'lgt8fx:avr', fqbn: null},
     arduinoLeonardo: {platform: 'arduino:avr', fqbn: 'arduino:avr:leonardo'},
     arduinoMega2560: {platform: 'arduino:avr', fqbn: 'arduino:avr:mega:cpu=atmega2560'},
     stbBoardV2: {platform: 'arduino:avr', fqbn: 'arduino:avr:mega:cpu=atmega2560'},

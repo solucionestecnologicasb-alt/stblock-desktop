@@ -138,6 +138,18 @@ export function ShapeLibrary({ open, onToggle, onAddAsset, onImportStlFile, onIm
       <div className="shape-library-header"><span className="shape-library-title">Librería <small>{allAssets.length} objetos</small></span><button className="shape-library-collapse" type="button" onClick={onToggle} title="Plegar librería" aria-label="Plegar librería"><ChevronsRight /></button></div>
       <div className="shape-library-toolbar"><input className="shape-library-search" type="text" placeholder="Buscar componente, fabricante o referencia…" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Buscar formas" /></div>
       {errorMessage ? <div className="shape-library-error" role="alert">{errorMessage}</div> : null}
+      <div className="shape-library-categories-bar">
+        {libraryCategories.map((cat) => (
+          <button
+            key={cat.id}
+            type="button"
+            className={`shape-library-cat-chip ${openCategory === cat.id ? "active" : ""}`}
+            onClick={() => setOpenCategory(cat.id)}
+          >
+            {cat.label}
+          </button>
+        ))}
+      </div>
       <div className="shape-library-body">
         {isFiltering ? <WindowedList items={results} itemHeight={ITEM_HEIGHT} overscan={ITEM_OVERSCAN} emptyMessage="Sin resultados" className="shape-library-results" renderItem={renderLibraryItem} /> :
           libraryCategories.map((category) => <section key={category.id} className="shape-library-category"><button className="shape-library-category-header" type="button" aria-expanded={openCategory === category.id} onClick={() => setOpenCategory((current) => current === category.id ? null : category.id)}><span>{category.label} <small>{category.items.length}</small></span><span className={openCategory === category.id ? "shape-library-caret open" : "shape-library-caret"} aria-hidden="true">▾</span></button>{openCategory === category.id ? <div className="shape-library-items">{category.items.map(renderLibraryItem)}</div> : null}</section>)}

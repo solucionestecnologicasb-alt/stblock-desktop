@@ -1,5 +1,7 @@
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
+import { patchSketchforgeDirectory } from "./patch-sketchforge-relative.mjs";
+
 
 const [sourceArg, destinationArg, versionArg = "dev"] = process.argv.slice(2);
 
@@ -162,7 +164,14 @@ if (!html.includes(registrationMarker)) {
 }
 await writeFile(indexPath, html, "utf8");
 
+const destSketchforge = join(destination, "sketchforge");
+try {
+  await stat(destSketchforge);
+  await patchSketchforgeDirectory(destSketchforge);
+} catch {}
+
 const deployedFiles = [];
+
 async function collect(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {

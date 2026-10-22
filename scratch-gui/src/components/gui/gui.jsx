@@ -16,9 +16,14 @@ import TargetPane from '../../containers/target-pane.jsx';
 import Loader from '../loader/loader.jsx';
 import Box from '../box/box.jsx';
 import MenuBar from '../menu-bar/menu-bar.jsx';
+import MobileMenuBar from '../menu-bar/mobile-menu-bar.jsx';
+import HomeHub from './home-hub.jsx';
+import {isMobileDevice} from '../../lib/device-detector';
 import CostumeLibrary from '../../containers/costume-library.jsx';
 import BackdropLibrary from '../../containers/backdrop-library.jsx';
+import SpriteLibrary from '../../containers/sprite-library.jsx';
 import Watermark from '../../containers/watermark.jsx';
+import MobileTabsBar from './mobile-tabs-bar.jsx';
 
 import WebGlModal from '../../containers/webgl-modal.jsx';
 import TipsLibrary from '../../containers/tips-library.jsx';
@@ -43,6 +48,7 @@ import {
     installPendingSTBlockUpdate
 } from '../../lib/stblock-updater';
 import {STBLOCK_SKETCHFORGE_URL} from '../../lib/sketchforge-url';
+import defaultProject from '../../lib/default-project';
 
 import styles from './gui.css';
 
@@ -121,7 +127,8 @@ import {
     setCircuit3dData,
     clearCircuit3dData,
     getSketchforgeData,
-    clearSketchforgeData
+    clearSketchforgeData,
+    setProgramMode
 } from '../../reducers/device-mode';
 import DeviceChangeConfirm from '../device-change-confirm/device-change-confirm.jsx';
 import UploadProgress from '../upload-progress/upload-progress.jsx';
@@ -372,6 +379,7 @@ const GUIComponent = props => {
         circuit3dData,
         sketchforgeSkf,
         deviceModeProgramMode,
+        onSetProgramMode,
         onRestoreDeviceState,
         onSetCircuitData,
         onClearCircuitData,
@@ -422,6 +430,13 @@ const GUIComponent = props => {
         vm,
         pendingExplain,
         projectKey,
+        sprites,
+        stage,
+        editingTarget,
+        spriteLibraryVisible,
+        onRequestOpenSpriteLibrary,
+        onRequestCloseSpriteLibrary,
+        onRequestOpenBackdropLibrary,
         onSetSecondaryTab,
         onSetSplitRatio,
         onSwapTabs,
@@ -429,6 +444,8 @@ const GUIComponent = props => {
         onClearExplain,
         onSetProjectKey,
         onSetHasBeenSaved,
+        projectTitle,
+        reduxProjectTitle,
         ...componentProps
     } = omit(props, 'dispatch');
     if (children) {
@@ -454,6 +471,7 @@ const GUIComponent = props => {
     const sketchforgeResolversRef = useRef(new Map()); // requestId -> resolver
     const sketchforgeImportQueueRef = useRef([]); // importaciones 3D pendientes de la IA (cola)
     const sketchforgeImportResolversRef = useRef(new Map()); // requestId -> resolver de import 3D
+    const sketchforgeShapesResolversRef = useRef(new Map()); // requestId -> resolver de lectura de formas 3D
     const sketchforgeCaptureTimerRef = useRef(null); // debounce de captura
     const sketchforgeRestoredRef = useRef(false); // evita re-importar el .skf restaurado
     const [sketchforgeReady, setSketchforgeReady] = useState(false);
@@ -479,6 +497,15 @@ const GUIComponent = props => {
     const [updateInfo, setUpdateInfo] = useState(null);
     const [updateInstalling, setUpdateInstalling] = useState(false);
     const [updateProgress, setUpdateProgress] = useState(null);
+    const [mobileHubOpen, setMobileHubOpen] = useState(() => isMobileDevice());
+    const [mobileStageMode, setMobileStageMode] = useState(() => (isMobileDevice() ? 'pip' : 'hidden')); // 'hidden' | 'pip' | 'fullscreen'
+    const [mobileActiveTab, setMobileActiveTab] = useState('code');
+    // Posición arrastrable del PiP (esquina superior izquierda en px) o null para la posición por defecto (arriba-derecha).
+    const [mobilePipPos, setMobilePipPos] = useState(null);
+    const [mobileSerialOpen, setMobileSerialOpen] = useState(false);
+    // Pestaña activa dentro del modo Electrónica ('code' | 'simulator' | 'circuits3d'),
+    // reportada por DeviceModeGui; se usa para elegir el modo del asistente de IA.
+    const [deviceTabId, setDeviceTabId] = useState('code');
 
     const [classroomSetupOpen, setClassroomSetupOpen] = useState(false);
     const [classroomConsoleOpen, setClassroomConsoleOpen] = useState(false);
@@ -1523,7 +1550,8 @@ const GUIComponent = props => {
     const isPythonEditMode = !effectivePanelLocked && !classroomForceBlocks && deviceMode !== 'device';
 
     // Modo activo del asistente de IA según el contexto actual de la app.
-    const aiActiveMode = deviceMode === 'device' ? 'device'
+    const aiActiveMode = deviceMode === 'device'
+        ? (deviceTabId === 'circuits3d' ? 'circuit' : 'device')
         : deviceMode === 'diseno' ? '3d'
         : deviceMode === 'evaluacion' ? 'blocks'
         : (isPythonEditMode ? 'python' : 'blocks');
@@ -1743,11 +1771,9 @@ const GUIComponent = props => {
     // ── Gearbot secret editor: Ctrl+Alt+E ──
     useEffect(() => {
         var openEditor = function (source, customUrl) {
-            console.log('[DEBUG-STB] 🚀 openEditor invocado desde:', source || 'desconocido');
             const targetUrl = customUrl || 'static/gears/editor/index.html';
             setAdminEditorUrl(targetUrl);
             setAdminEditorModalOpen(true);
-            console.log('[DEBUG-STB] ✅ Modal de Administración abierto con URL:', targetUrl);
         };
 
         window.__openSTBEditor = function(customUrl) {
@@ -1758,7 +1784,6 @@ const GUIComponent = props => {
             const isKeyE = event.code === 'KeyE' || (event.key && event.key.toLowerCase() === 'e') || event.key === '€';
             if (!event.ctrlKey || !event.altKey || !isKeyE) return;
 
-            console.log('[DEBUG-STB] ✅ ¡Combinación Ctrl+Alt+E detectada correctamente!');
             event.preventDefault();
             event.stopPropagation();
             openEditor('atajo-teclado-gui');
@@ -1766,11 +1791,9 @@ const GUIComponent = props => {
 
         var handleMessage = async function (event) {
             if (event.data && event.data.type === 'stblock-open-world-editor') {
-                console.log('[DEBUG-STB] Mensaje postMessage stblock-open-world-editor recibido');
                 openEditor('postMessage-world-editor', 'static/gears/editor/index.html');
             }
             if (event.data && event.data.type === 'stblock-open-robot-editor') {
-                console.log('[DEBUG-STB] Mensaje postMessage stblock-open-robot-editor recibido');
                 var robotEditorUrl = event.data.editorPath || 'static/gears/editor/index.html?mode=robots';
                 openEditor('postMessage-robot-editor', robotEditorUrl);
             }
@@ -1885,13 +1908,66 @@ const GUIComponent = props => {
         setPythonPanelLocked(false);
     }, [vm, currentTargetId]);
 
-    // La IA generó código Arduino C++: se fuerza locked y se setea el contenido
-    // del editor. El reducer sincroniza manualCode cuando locked está activo,
-    // así editor/simulador/upload usan el código generado por la IA.
-    const handleAiArduinoCodeGenerated = useCallback(code => {
-        if (onSetCodeLocked) onSetCodeLocked(true);
-        if (onSetCodeViewContent) onSetCodeViewContent(code);
-    }, [onSetCodeLocked, onSetCodeViewContent]);
+    // La IA generó código Arduino C++: se setea el contenido del editor.
+    // - Por defecto se fuerza locked: el reducer sincroniza manualCode y
+    //   editor/simulador/upload usan el código generado por la IA.
+    // - Si options.unlock es true (la IA pidió código libre), se desbloquea el
+    //   editor para que el usuario pueda editar el código a mano.
+    const handleAiArduinoCodeGenerated = useCallback((code, options) => {
+        const unlock = Boolean(options && options.unlock);
+        if (unlock) {
+            if (onSetCodeViewContent) onSetCodeViewContent(code);
+            if (onSetManualCode) onSetManualCode(code);
+            if (onSetCodeLocked) onSetCodeLocked(false);
+        } else {
+            if (onSetCodeLocked) onSetCodeLocked(true);
+            if (onSetCodeViewContent) onSetCodeViewContent(code);
+        }
+    }, [onSetCodeLocked, onSetCodeViewContent, onSetManualCode]);
+
+    // La IA generó/editió un circuito 3D (Electronics Lab). Se extrae el
+    // documento universal y se aplica al simulador; el estado también se
+    // guarda en Redux para el guardado .flynt y como contexto posterior.
+    const handleAiCircuitGenerated = useCallback((circuitDoc) => {
+        const circuit = circuitDoc && circuitDoc.circuit && Array.isArray(circuitDoc.circuit.components) ?
+            circuitDoc.circuit : null;
+        if (!circuit || circuit.components.length === 0) {
+            return {ok: false, error: 'El circuito no tiene componentes.'};
+        }
+        const state = {
+            data: {
+                components: circuit.components,
+                wires: Array.isArray(circuit.wires) ? circuit.wires : []
+            },
+            name: (circuitDoc.metadata && circuitDoc.metadata.name) || 'Circuito IA'
+        };
+        onSetCircuit3dData(state);
+        if (electronicsLabRef.current && electronicsLabRef.current.loadCircuitState) {
+            electronicsLabRef.current.loadCircuitState(state);
+        }
+        return {ok: true, count: circuit.components.length};
+    }, [onSetCircuit3dData]);
+
+    // Lee las formas 3D existentes en el editor de SketchForge para dárselas
+    // como contexto a la IA. Resuelve con un resumen en texto o '' si no está listo.
+    const handleRequestSketchforgeShapes = useCallback(() => {
+        const iframe = sketchforgeFrameRef.current;
+        if (!iframe || !iframe.contentWindow || !sketchforgeEditorReadyRef.current) {
+            return Promise.resolve('');
+        }
+        const requestId = `shapes-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        return new Promise(resolve => {
+            const timeout = window.setTimeout(() => {
+                sketchforgeShapesResolversRef.current.delete(requestId);
+                resolve('');
+            }, 8000);
+            sketchforgeShapesResolversRef.current.set(requestId, text => {
+                window.clearTimeout(timeout);
+                resolve(text || '');
+            });
+            iframe.contentWindow.postMessage({type: 'SKETCHFORGE_GET_SHAPES', requestId}, '*');
+        });
+    }, []);
 
     // Handle activating a device extension (register blocks, update toolbox)
     const handleActivateExtension = useCallback((extension) => {
@@ -1925,21 +2001,21 @@ const GUIComponent = props => {
             try {
                 const projectData = vm.toJSON();
                 const hasBlocks = hasBlocksInWorkspace();
+                const currentEffectiveCode = deviceModeCodeLocked ? deviceModeCode : (deviceModeManualCode || deviceModeCode);
 
-                onSaveDeviceProject(deviceModeDevice.deviceId, projectData, hasBlocks);
+                onSaveDeviceProject(deviceModeDevice.deviceId, projectData, hasBlocks, currentEffectiveCode);
                 window.dispatchEvent(new CustomEvent('stblock-project-changed'));
             } catch (e) {
                 console.warn('[GUI] Error saving device project:', e);
             }
         }
-    }, [vm, deviceModeDevice, hasBlocksInWorkspace, onSaveDeviceProject]);
+    }, [vm, deviceModeDevice, hasBlocksInWorkspace, onSaveDeviceProject, deviceModeCodeLocked, deviceModeCode, deviceModeManualCode]);
 
     const captureProgrammingProject = useCallback(() => {
         try {
             programmingProjectRef.current = vm.toJSON();
             programmingProjectArchiveRef.current = vm.saveProjectSb3();
             window.dispatchEvent(new CustomEvent('stblock-project-changed'));
-            console.info('[WorkspaceMode] Programación guardada'); // eslint-disable-line no-console
         } catch (e) {
             console.warn('[WorkspaceMode] No se pudo guardar Programación:', e);
         }
@@ -1973,11 +2049,6 @@ const GUIComponent = props => {
             }
         }
 
-        console.info('[Flynt] Workspaces capturados', { // eslint-disable-line no-console
-            programming: Boolean(programmingProject),
-            electronics: Object.keys(deviceProjects).length,
-            programmingArchive: Boolean(resolvedArchive)
-        });
         return {
             programmingProject: programmingProject || vm.toJSON(),
             programmingProjectArchive: resolvedArchive,
@@ -2000,7 +2071,6 @@ const GUIComponent = props => {
                 // en Programación, pero el hardware queda inactivo fuera de Electrónica.
                 vm.setDeviceProfile(profile, profile ? profile.defaultProgramMode : null);
                 vm.requestCodeUpdate();
-                console.info('[WorkspaceMode] Programación restaurada'); // eslint-disable-line no-console
             })
             .catch(e => {
                 console.warn('[WorkspaceMode] Error restaurando Programación:', e);
@@ -2009,6 +2079,46 @@ const GUIComponent = props => {
                 deviceSwitchInProgress.current = false;
             });
     }, [vm, deviceModeDevice]);
+
+    // Crea un proyecto nuevo real cargando el proyecto por defecto de la app
+    // (el mismo que se carga en el primer arranque). A diferencia de vm.clear(),
+    // loadProject pasa por deserializeProject → reinstala los targets y vacía el
+    // workspace de bloques; además los handlers de PROJECT_LOADED ya reinician el
+    // modo a Programación y los refs internos. Con vm.clear() los bloques viejos
+    // permanecían y el estado quedaba inconsistente (p. ej. ya no se podían crear
+    // fondos ni recursos).
+    const startNewProject = useCallback(() => {
+        // Descartar datos personalizados (Circuito 3D, Circuito, SketchForge) y
+        // códigos/llave de Python para que no se restauren sobre el proyecto nuevo.
+        if (onClearCircuit3dData) onClearCircuit3dData();
+        if (onClearCircuitData) onClearCircuitData();
+        if (onClearSketchforgeData) onClearSketchforgeData();
+        try {
+            localStorage.removeItem('stblock_python_project_codes');
+            localStorage.removeItem('stblock_python_project_key_lock');
+            localStorage.removeItem('ai_messages');
+        } catch (_) {}
+
+        // Cerrar overlays móviles y volver a la pestaña de código.
+        setMobileHubOpen(false);
+        setIsAiOpen(false);
+        setMobileActiveTab('code');
+        setDeviceTabId('code');
+
+        if (!vm) return Promise.resolve();
+
+        let newProjectJSON = null;
+        try {
+            const translator = intl && intl.formatMessage ? intl.formatMessage : undefined;
+            newProjectJSON = defaultProject(translator)[0].data;
+        } catch (e) {
+            console.warn('[GUI] No se pudo generar el proyecto por defecto:', e);
+        }
+        return Promise.resolve(vm.loadProject(newProjectJSON || EMPTY_DEVICE_PROJECT))
+            .catch(e => {
+                console.warn('[GUI] Error creando proyecto nuevo:', e);
+            });
+    }, [vm, intl, onClearCircuit3dData, onClearCircuitData, onClearSketchforgeData]);
 
     // Actually perform the device switch
     const performDeviceSwitch = useCallback((device) => {
@@ -2139,8 +2249,9 @@ const GUIComponent = props => {
             return;
         }
 
-        // If selecting the same device already active, do nothing
-        if (deviceModeDevice && deviceModeDevice.deviceId === profile.deviceId) {
+        // If selecting the same device already active and already in device mode, do nothing
+        if (deviceMode === 'device' && deviceModeDevice && deviceModeDevice.deviceId === profile.deviceId) {
+            onRequestCloseDeviceLibrary();
             return;
         }
 
@@ -2152,18 +2263,18 @@ const GUIComponent = props => {
         }
 
         // Check if there are blocks in the current workspace
-        if (hasBlocksInWorkspace() && deviceModeDevice) {
+        if (hasBlocksInWorkspace() && deviceModeDevice && deviceMode === 'device') {
             // Save current project and show confirmation
             saveCurrentDeviceProject();
             // Close the device selector first so the confirmation modal is visible
             onRequestCloseDeviceLibrary();
             onOpenDeviceChangeConfirm(device);
         } else {
-            // No blocks, just switch
+            // No blocks, or switching from programming mode: just switch
             saveCurrentDeviceProject();
             performDeviceSwitch(device);
         }
-    }, [deviceModeDevice, hasBlocksInWorkspace, saveCurrentDeviceProject, performDeviceSwitch,
+    }, [deviceMode, deviceModeDevice, hasBlocksInWorkspace, saveCurrentDeviceProject, performDeviceSwitch,
         onOpenDeviceChangeConfirm, onRequestCloseDeviceLibrary]);
 
     // Handle device change confirmation
@@ -2201,10 +2312,6 @@ const GUIComponent = props => {
                 .then(() => {
                     vm.setDeviceProfile(profile, profile ? profile.defaultProgramMode : null);
                     vm.requestCodeUpdate();
-                    console.info('[WorkspaceMode] Electrónica restaurada', { // eslint-disable-line no-console
-                        deviceId: profile && profile.deviceId,
-                        restored: Boolean(savedProject && savedProject.projectData)
-                    });
                 })
                 .catch(e => {
                     console.warn('[WorkspaceMode] Error restaurando Electrónica:', e);
@@ -2241,8 +2348,22 @@ const GUIComponent = props => {
     }, [vm, onSelectDeviceModeDevice, onSetDeviceMode]);
 
     useEffect(() => {
-        vm.setHardwareModeActive(deviceMode === 'device');
-    }, [vm, deviceMode]);
+        try {
+            if (vm && typeof vm.setHardwareModeActive === 'function') {
+                vm.setHardwareModeActive(deviceMode === 'device');
+            }
+            if (deviceMode !== 'device') {
+                if (vm && typeof vm.setProgramMode === 'function') {
+                    vm.setProgramMode('realtime');
+                }
+                if (typeof onSetProgramMode === 'function') {
+                    onSetProgramMode('realtime');
+                }
+            }
+        } catch (e) {
+            console.warn('Error setting hardware mode active:', e);
+        }
+    }, [vm, deviceMode, onSetProgramMode]);
 
     // Trigger code generation when entering device mode or when workspace is ready
     useEffect(() => {
@@ -2320,29 +2441,15 @@ const GUIComponent = props => {
                 vm.setPeripheralBoardType(extId, deviceModeDevice.deviceId || deviceModeDevice.id);
             }
 
-            // Synchronize baud rate — prefer the board config baudRate for Firmata,
-            // fall back to terminal settings for monitor mode
-            const targetBaud = deviceModeTerminalSettings?.baudRate;
-            if (deviceModeDevice && targetBaud) {
-                if (lastSyncedRef.current.peripheralName !== connectionPeripheralName ||
-                    !lastSyncedRef.current.connected ||
-                    lastSyncedRef.current.baudRate !== targetBaud) {
-
-                    lastSyncedRef.current = {
-                        peripheralName: connectionPeripheralName,
-                        connected: true,
-                        baudRate: targetBaud
-                    };
-
-                    if (vm.setPeripheralBaudrate) {
-                        vm.setPeripheralBaudrate(extId, targetBaud);
-                    }
-                }
-            }
+            lastSyncedRef.current = {
+                peripheralName: connectionPeripheralName,
+                connected: true,
+                baudRate: 57600
+            };
         } else {
             lastSyncedRef.current.connected = false;
         }
-    }, [connectionPeripheralName, deviceModeConnected, deviceModeDevice, deviceModeTerminalSettings?.baudRate, onSetDevicePort]);
+    }, [connectionPeripheralName, deviceModeConnected, deviceModeDevice, onSetDevicePort, vm]);
 
     // Auto-reconnect to last peripheral when entering device mode
     useEffect(() => {
@@ -2513,32 +2620,10 @@ const GUIComponent = props => {
     }, []);
 
 
-    // Restaurar o limpiar Circuito 3D cuando circuit3dData cambia (despues de cargar .flynt o nuevo proyecto)
-    useEffect(() => {
-        if (!circuit3dData) {
-            try {
-                if (electronicsLabRef.current && electronicsLabRef.current.loadCircuitState) {
-                    electronicsLabRef.current.loadCircuitState({clear: true});
-                }
-            } catch (e) {
-                console.warn('[GUI] Error clearing Circuito 3D state:', e);
-            }
-            return;
-        }
-
-        const restore3D = async () => {
-            try {
-                if (electronicsLabRef.current && electronicsLabRef.current.loadCircuitState) {
-                    electronicsLabRef.current.loadCircuitState(circuit3dData);
-                }
-            } catch (e) {
-                console.warn('[GUI] Error restoring Circuito 3D state:', e);
-            }
-        };
-
-        const timer = setTimeout(restore3D, 500);
-        return () => clearTimeout(timer);
-    }, [circuit3dData]);
+    // NOTA: la sincronización de circuit3dData hacia el iframe la hace ElectronicsLabPanel
+    // deduplicando por firma de contenido contra los estados que el propio simulador reportó.
+    // No re-aplicar aquí: al reaccionar a CADA cambio (incluidos los que origina el propio
+    // simulador) se devolvía el estado al iframe y se reiniciaba el circuito tras cada acción.
 
     // Captura el estado de Circuito 3D (Electronics Lab) para incluirlo en el .flynt.
     const requestCircuit3DState = useCallback(async () => {
@@ -2670,12 +2755,57 @@ const GUIComponent = props => {
 
     // Listener de mensajes del iframe de SketchForge (shell + editor).
     useEffect(() => {
+        // Guarda una exportación de SketchForge con el diálogo nativo "Guardar
+        // como" de Tauri, para que el usuario elija la ubicación del archivo.
+        const saveSketchforgeFile = async (data, source) => {
+            const reply = payload => {
+                if (source && typeof source.postMessage === 'function') {
+                    source.postMessage({type: 'SKETCHFORGE_SAVE_FILE_RESULT', requestId: data.requestId, ...payload}, '*');
+                }
+            };
+            const isTauri = typeof window !== 'undefined' && ((window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') || (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function'));
+            if (!isTauri) {
+                reply({ok: false, unavailable: true});
+                return;
+            }
+            try {
+                const bytes = data.bytes instanceof ArrayBuffer
+                    ? new Uint8Array(data.bytes)
+                    : new Uint8Array(Array.isArray(data.bytes) ? data.bytes : []);
+                const extension = String(data.filename || '').split('.').pop()?.toLowerCase();
+                const filters = Array.isArray(data.filters) && data.filters.length > 0
+                    ? data.filters
+                    : (extension ? [{name: extension.toUpperCase(), extensions: [extension]}] : []);
+                const filePath = await save({
+                    defaultPath: data.filename || 'export',
+                    filters
+                });
+                if (!filePath) {
+                    reply({ok: false, canceled: true});
+                    return;
+                }
+                await invoke('save_file', {path: filePath, content: Array.from(bytes)});
+                reply({ok: true, path: filePath});
+            } catch (error) {
+                reply({ok: false, error: (error && error.message) || String(error)});
+            }
+        };
+
         const handleSketchforgeMessage = event => {
             const data = event.data;
             if (!data || typeof data !== 'object') return;
             const frame = sketchforgeFrameRef.current;
             if (!frame || event.source !== frame.contentWindow) return;
 
+            if (data.type === 'SKETCHFORGE_SAVE_FILE') {
+                // Confirmar soporte de inmediato: el iframe distinguirá este caso
+                // de un anfitrión sin guardado nativo y podrá caer al navegador.
+                if (event.source && typeof event.source.postMessage === 'function') {
+                    event.source.postMessage({type: 'SKETCHFORGE_SAVE_FILE_ACK', requestId: data.requestId}, '*');
+                }
+                saveSketchforgeFile(data, event.source);
+                return;
+            }
             if (data.type === 'SKETCHFORGE_READY') {
                 // Shell de SketchForge cargado (page.tsx). El editor puede tardar más.
                 sketchforgeReadyRef.current = true;
@@ -2729,6 +2859,15 @@ const GUIComponent = props => {
                         count: data.count || 0,
                         error: data.error || null
                     });
+                }
+                return;
+            }
+            if (data.type === 'SKETCHFORGE_GET_SHAPES_RESULT') {
+                // Respuesta con el resumen de las formas 3D actuales (para la IA).
+                const shapesResolver = sketchforgeShapesResolversRef.current.get(data.requestId);
+                if (shapesResolver) {
+                    sketchforgeShapesResolversRef.current.delete(data.requestId);
+                    shapesResolver(data.text || '');
                 }
                 return;
             }
@@ -3032,57 +3171,95 @@ const GUIComponent = props => {
 
         try {
             const extensionId = deviceModeDevice.generator === 'arduino' ? 'arduino' : deviceModeDevice.id;
-            const peripheral = vm.runtime.peripheralExtensions[extensionId];
 
-            if (peripheral && typeof peripheral.uploadFirmware === 'function') {
-                const handleUploadStatus = statusData => {
-                    const { status, message } = statusData;
-                    if (status === 'uploading') {
-                        onSetUploadState({
-                            state: 'uploading',
-                            progress: 50,
-                            message: message
-                        });
-                        onAddUploadLog({
-                            type: 'info',
-                            message: message,
-                            timestamp: new Date().toLocaleTimeString()
-                        });
-                    } else if (status === 'success') {
-                        onSetUploadState({
-                            state: 'success',
-                            progress: 100,
-                            message: 'Firmware cargado correctamente! El dispositivo se reconectará en breve.'
-                        });
-                        onAddUploadLog({
-                            type: 'success',
-                            message: 'Flasheo completado con éxito!',
-                            timestamp: new Date().toLocaleTimeString()
-                        });
-                    } else if (status === 'error') {
-                        onSetUploadState({
-                            state: 'error',
-                            progress: 0,
-                            message: message
-                        });
-                        onAddUploadLog({
-                            type: 'error',
-                            message: message,
-                            timestamp: new Date().toLocaleTimeString()
-                        });
+            const handleUploadStatus = statusData => {
+                const { status, message } = statusData;
+                if (status === 'uploading') {
+                    onSetUploadState({
+                        state: 'uploading',
+                        progress: 50,
+                        message: message
+                    });
+                    onAddUploadLog({
+                        type: 'info',
+                        message: message,
+                        timestamp: new Date().toLocaleTimeString()
+                    });
+                } else if (status === 'success') {
+                    onSetUploadState({
+                        state: 'success',
+                        progress: 100,
+                        message: 'Firmware cargado correctamente! El dispositivo se reconectará en modo en vivo.'
+                    });
+                    onAddUploadLog({
+                        type: 'success',
+                        message: 'Flasheo completado con éxito! Modo interactivo activado.',
+                        timestamp: new Date().toLocaleTimeString()
+                    });
+
+                    // Conmutar automáticamente a modo en vivo (realtime)
+                    if (typeof onSetProgramMode === 'function') {
+                        onSetProgramMode('realtime');
                     }
-                };
+                    if (vm && typeof vm.setProgramMode === 'function') {
+                        vm.setProgramMode('realtime');
+                    }
 
-                // Listen to status updates from peripheral
-                vm.on('PERIPHERAL_UPLOAD_STATUS', handleUploadStatus);
+                    // Cerrar modal automáticamente después de 1.8s
+                    setTimeout(() => {
+                        onSetUploadState({
+                            isVisible: false,
+                            state: 'idle',
+                            progress: 0,
+                            message: '',
+                            logs: []
+                        });
+                    }, 1800);
+                } else if (status === 'error') {
+                    onSetUploadState({
+                        state: 'error',
+                        progress: 0,
+                        message: message
+                    });
+                    onAddUploadLog({
+                        type: 'error',
+                        message: message,
+                        timestamp: new Date().toLocaleTimeString()
+                    });
 
-                // Run the firmware upload
-                const success = await peripheral.uploadFirmware();
+                    // Cerrar modal después de mostrar el error
+                    setTimeout(() => {
+                        onSetUploadState({
+                            isVisible: false,
+                            state: 'idle',
+                            progress: 0,
+                            message: '',
+                            logs: []
+                        });
+                    }, 4000);
+                }
+            };
 
+            // Listen to status updates from peripheral
+            vm.on('PERIPHERAL_UPLOAD_STATUS', handleUploadStatus);
+
+            // Run the firmware upload with active or selected port
+            const targetPort = deviceModePort || connectionPeripheralName;
+            try {
+                if (typeof vm.uploadFirmwareToPeripheral === 'function') {
+                    await vm.uploadFirmwareToPeripheral(extensionId, targetPort);
+                } else {
+                    const peripheral = vm.runtime && vm.runtime.peripheralExtensions ?
+                        vm.runtime.peripheralExtensions[extensionId] : null;
+                    if (peripheral && typeof peripheral.uploadFirmware === 'function') {
+                        await peripheral.uploadFirmware(targetPort);
+                    } else {
+                        throw new Error('La carga de firmware en vivo no está soportada para este dispositivo.');
+                    }
+                }
+            } finally {
                 // Remove status listener
                 vm.removeListener('PERIPHERAL_UPLOAD_STATUS', handleUploadStatus);
-            } else {
-                throw new Error('La carga de firmware en vivo no está soportada para este dispositivo.');
             }
 
         } catch (error) {
@@ -3095,8 +3272,48 @@ const GUIComponent = props => {
                 message: `Error: ${error.message}`,
                 timestamp: new Date().toLocaleTimeString()
             });
+
+            setTimeout(() => {
+                onSetUploadState({
+                    isVisible: false,
+                    state: 'idle',
+                    progress: 0,
+                    message: '',
+                    logs: []
+                });
+            }, 4000);
         }
-    }, [deviceModeDevice, vm, onSetUploadState, onAddUploadLog]);
+    }, [deviceModeDevice, vm, onSetUploadState, onAddUploadLog, onSetProgramMode]);
+
+    // Listen for firmata not loaded notification from runtime
+    useEffect(() => {
+        if (!vm || !vm.runtime) return;
+
+        let lastPrompt = 0;
+        const handleFirmataNotLoaded = data => {
+            const now = Date.now();
+            if (now - lastPrompt < 30000) return; // Avisar como máximo cada 30s
+            lastPrompt = now;
+
+            const board = (deviceModeDevice && (deviceModeDevice.name || deviceModeDevice.deviceId)) || data?.deviceName || 'Arduino';
+            const port = data?.port || '';
+
+            // Aviso NO bloqueante. Un window.confirm() aquí congela el
+            // renderer de la app, y flashear automáticamente reemplazaba el
+            // firmware de la tarjeta sin que el usuario lo pidiera. La carga
+            // queda a cargo de Ajustes > "Cargar firmware tiempo real".
+            console.warn(
+                `[STBlock] La tarjeta ${board}${port ? ` (${port})` : ''} no responde al protocolo Firmata. ` +
+                'Para controlarla en vivo, carga el firmware desde Ajustes > ' +
+                '"Cargar firmware tiempo real (Firmata)".'
+            );
+        };
+
+        vm.runtime.on('FIRMATA_NOT_LOADED', handleFirmataNotLoaded);
+        return () => {
+            vm.runtime.removeListener('FIRMATA_NOT_LOADED', handleFirmataNotLoaded);
+        };
+    }, [vm, deviceModeDevice]);
 
     // Handler for closing upload modal
     const handleCloseUploadModal = useCallback(() => {
@@ -3261,11 +3478,34 @@ const GUIComponent = props => {
 
     useEffect(() => {
         if (typeof document === 'undefined') return;
+        const isMobile = isMobileDevice();
+        if (isMobile) {
+            document.documentElement.classList.add('is-mobile-app');
+            document.body.classList.add('is-mobile-app');
+            document.body.classList.remove('is-desktop-app');
+        } else {
+            document.documentElement.classList.remove('is-mobile-app');
+            document.body.classList.remove('is-mobile-app');
+            document.body.classList.add('is-desktop-app');
+        }
+    }, []);
+
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
         document.body.classList.toggle('reduced-motion', reducedMotion);
         return () => document.body.classList.remove('reduced-motion');
     }, [reducedMotion]);
 
     const stageSize = resolveStageSize(stageSizeMode, isFullSize);
+
+    const currentActiveTarget = useMemo(() => {
+        if (!editingTarget) return null;
+        if (targetIsStage) return stage || null;
+        return (sprites && sprites[editingTarget]) ? sprites[editingTarget] : null;
+    }, [editingTarget, targetIsStage, stage, sprites]);
+
+    const currentTargetName = currentActiveTarget ? (currentActiveTarget.name || (targetIsStage ? 'Escenario' : 'Personaje')) : '';
+    const currentTargetIcon = currentActiveTarget ? (currentActiveTarget.costume && currentActiveTarget.costume.asset ? currentActiveTarget.costume.asset.encodeDataURI() : (currentActiveTarget.costumes && currentActiveTarget.costumes[0] && currentActiveTarget.costumes[0].asset ? currentActiveTarget.costumes[0].asset.encodeDataURI() : null)) : null;
 
     if (isRendererSupported === null) {
         isRendererSupported = Renderer.isSupported();
@@ -3333,10 +3573,17 @@ const GUIComponent = props => {
             onPythonCodeGenerated={handleAiPythonCodeGenerated}
             onArduinoCodeGenerated={handleAiArduinoCodeGenerated}
             onShapes3DGenerated={handleAiShapes3DGenerated}
+            onCircuitGenerated={handleAiCircuitGenerated}
+            onRequestSketchforgeShapes={handleRequestSketchforgeShapes}
+            deviceId={deviceModeDevice ? deviceModeDevice.deviceId : null}
+            deviceCode={deviceModeCodeLocked ? deviceModeCode : (deviceModeManualCode || deviceModeCode)}
+            deviceCodeLocked={deviceModeCodeLocked}
+            circuit3dData={circuit3dData}
         />
     ), [vm, pendingExplain, projectKey, onClearExplain, handleMentorGuidance, onActivateTab,
         reanalyzeTick, aiActiveMode, handleAiPythonCodeGenerated, handleAiArduinoCodeGenerated,
-        handleAiShapes3DGenerated]);
+        handleAiShapes3DGenerated, handleAiCircuitGenerated, handleRequestSketchforgeShapes,
+        deviceModeDevice, deviceModeCode, deviceModeCodeLocked, circuit3dData]);
 
     const panels = useMemo(() => [codePanel, costumePanel, soundPanel],
         [codePanel, costumePanel, soundPanel]);
@@ -3360,6 +3607,10 @@ const GUIComponent = props => {
         onSetSecondaryTab(null);
     }, [onSetSecondaryTab]);
 
+    const isCodeTabActive = isMobileDevice() ?
+        (mobileActiveTab === 'code') :
+        (activeTabIndex === 0 || (showSplit && (activeTabIndex === 0 || partnerIndex === 0)));
+
     const handleSwap = useCallback(() => {
         onSwapTabs();
     }, [onSwapTabs]);
@@ -3377,12 +3628,157 @@ const GUIComponent = props => {
         onReorderTabs(newOrder);
     }, [onReorderTabs]);
 
+    // En móviles: al soltar un bloque en el lienzo de trabajo, plegar el flyout de bloques automáticamente
+    useEffect(() => {
+        if (!vm || !isMobileDevice()) return;
+        const handleBlockDragEnd = () => {
+            try {
+                if (window.Blockly && window.Blockly.getMainWorkspace()) {
+                    const ws = window.Blockly.getMainWorkspace();
+                    const flyout = ws.getFlyout();
+                    if (flyout && flyout.hide) {
+                        flyout.hide();
+                    }
+                }
+            } catch (err) {
+                // Silently ignore if Blockly workspace not initialized
+            }
+        };
+        vm.addListener('BLOCK_DRAG_END', handleBlockDragEnd);
+        return () => {
+            vm.removeListener('BLOCK_DRAG_END', handleBlockDragEnd);
+        };
+    }, [vm]);
+
+    useEffect(() => {
+        if (!isMobileDevice()) return;
+        if (mobileStageMode === 'hidden') return;
+
+        const triggerRedraw = () => {
+            if (vm && vm.renderer) {
+                const canvas = vm.renderer.canvas;
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    const w = Math.round(rect.width > 0 ? rect.width : (mobileStageMode === 'pip' ? 200 : 480));
+                    const h = Math.round(w * 0.75);
+                    if (w > 0 && h > 0) {
+                        vm.renderer.resize(w, h);
+                    }
+                }
+                vm.renderer.draw();
+                if (vm.runtime) {
+                    vm.runtime.requestRedraw();
+                }
+            }
+            window.dispatchEvent(new Event('resize'));
+        };
+
+        triggerRedraw();
+        const t1 = setTimeout(triggerRedraw, 60);
+        const t2 = setTimeout(triggerRedraw, 180);
+        const t3 = setTimeout(triggerRedraw, 350);
+
+        return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+            clearTimeout(t3);
+        };
+    }, [mobileStageMode, vm]);
+
+    useEffect(() => {
+        if (isMobileDevice() && deviceMode === 'game' && !mobileHubOpen && mobileActiveTab === 'code') {
+            setMobileStageMode('pip');
+        }
+    }, [deviceMode, mobileHubOpen]);
+
+    const isMobilePipActive = isMobileDevice() &&
+        mobileStageMode === 'pip' &&
+        deviceMode === 'game' &&
+        !mobileHubOpen &&
+        mobileActiveTab === 'code';
+
+    const isMobileFullscreenActive = isMobileDevice() &&
+        mobileStageMode === 'fullscreen' &&
+        deviceMode === 'game' &&
+        !mobileHubOpen;
+
+    // Permite arrastrar la mini vista previa (PiP) por la pantalla. Se ignora si el
+    // gesto empieza sobre un control interactivo (bandera, parar, cerrar, etc.).
+    const handleMobilePipPointerDown = useCallback(event => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        const target = event.target;
+        if (target && target.closest && target.closest('button, a, input, select, textarea, [role="button"]')) return;
+        const el = event.currentTarget;
+        const rect = el.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        const offsetX = event.clientX - rect.left;
+        const offsetY = event.clientY - rect.top;
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const pointerId = event.pointerId;
+        let dragging = false;
+        const clamp = (value, max) => Math.min(Math.max(value, 0), Math.max(0, max));
+        const onMove = moveEvent => {
+            if (moveEvent.pointerId !== pointerId) return;
+            const dx = moveEvent.clientX - startX;
+            const dy = moveEvent.clientY - startY;
+            if (!dragging && (dx * dx + dy * dy) < 36) return; // umbral para no interferir con toques
+            dragging = true;
+            if (moveEvent.cancelable) moveEvent.preventDefault();
+            setMobilePipPos({
+                x: clamp(moveEvent.clientX - offsetX, window.innerWidth - width),
+                y: clamp(moveEvent.clientY - offsetY, window.innerHeight - height)
+            });
+        };
+        const onEnd = () => {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onEnd);
+            window.removeEventListener('pointercancel', onEnd);
+        };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onEnd);
+        window.addEventListener('pointercancel', onEnd);
+    }, []);
+
     const renderEditor = () => (
         <Box className={styles.bodyWrapper}>
             <Box className={styles.flexWrapper}>
-                <Box className={classNames(styles.stageAndTargetWrapper, {
-                    [styles['stage-large']]: stageSize === STAGE_DISPLAY_SIZES.large
-                })}>
+                <Box
+                    className={classNames(styles.stageAndTargetWrapper, {
+                        [styles['stage-large']]: stageSize === STAGE_DISPLAY_SIZES.large,
+                        [styles.mobileStageHidden]: isMobileDevice() && !isMobilePipActive && !isMobileFullscreenActive,
+                        [styles.mobileStageFullscreen]: isMobileFullscreenActive,
+                        [styles.mobileStagePip]: isMobilePipActive
+                    })}
+                    style={isMobilePipActive && mobilePipPos ? {
+                        '--stb-pip-left': `${mobilePipPos.x}px`,
+                        '--stb-pip-top': `${mobilePipPos.y}px`,
+                        '--stb-pip-right': 'auto'
+                    } : undefined}
+                    onPointerDown={isMobilePipActive ? handleMobilePipPointerDown : undefined}
+                >
+                    {isMobileFullscreenActive && (
+                        <div className={styles.mobileFullscreenHeader}>
+                            <button
+                                type="button"
+                                className={styles['mobile-fullscreen-back-btn'] || styles.mobileFullscreenBackBtn}
+                                onClick={() => setMobileStageMode('hidden')}
+                            >
+                                ← Volver al Código
+                            </button>
+                        </div>
+                    )}
+                    {isMobilePipActive && (
+                        <button
+                            type="button"
+                            className={styles.mobilePipCloseBtn}
+                            onClick={() => setMobileStageMode('hidden')}
+                            title="Cerrar vista previa"
+                        >
+                            ✕
+                        </button>
+                    )}
                     <StageWrapper
                         isFullScreen={isFullScreen}
                         isRendererSupported={isRendererSupported}
@@ -3391,54 +3787,100 @@ const GUIComponent = props => {
                         onSyncPythonToBlocks={handleSyncToBlocks}
                         pythonExecutor={pythonExecutor}
                         pythonCode={pythonCode}
-                        stageSize={stageSize}
+                        stageSize={isMobilePipActive ? STAGE_DISPLAY_SIZES.small : STAGE_DISPLAY_SIZES.large}
                         vm={vm}
                     />
-                    <Box className={styles.targetWrapper}>
-                        <TargetPane
-                            stageSize={stageSize}
-                            vm={vm}
-                            onDeleteTargetPythonCode={removePythonCodeForTarget}
-                            onRestoreTargetPythonCode={restorePythonCodeForTarget}
-                            classroomCanAddSprite={classroomCanAdd}
-                            classroomCanDeleteSprite={classroomCanDelete}
-                            classroomCanRenameSprite={classroomCanRename}
-                            classroomCanEditCurrent={classroomCanEditCurrent}
-                            classroomCanEditTargetId={classroomCanEditTargetId}
-                            classroomStateActive={classroomState.active}
-                            classroomAssignments={classroomAssignments}
-                            classroomRoster={classroomState.roster || []}
-                            classroomMyId={classroomMyId}
-                        />
-                    </Box>
+                    {!isMobileDevice() && (
+                        <Box className={styles.targetWrapper}>
+                            <TargetPane
+                                stageSize={stageSize}
+                                vm={vm}
+                                onDeleteTargetPythonCode={removePythonCodeForTarget}
+                                onRestoreTargetPythonCode={restorePythonCodeForTarget}
+                                classroomCanAddSprite={classroomCanAdd}
+                                classroomCanDeleteSprite={classroomCanDelete}
+                                classroomCanRenameSprite={classroomCanRename}
+                                classroomCanEditCurrent={classroomCanEditCurrent}
+                                classroomCanEditTargetId={classroomCanEditTargetId}
+                                classroomStateActive={classroomState.active}
+                                classroomAssignments={classroomAssignments}
+                                classroomRoster={classroomState.roster || []}
+                                classroomMyId={classroomMyId}
+                            />
+                        </Box>
+                    )}
                 </Box>
                 <Box className={styles.editorWrapper}>
-                    <TabBar
-                        tabs={tabsConfig}
-                        tabOrder={tabOrder}
-                        activeTabIndex={activeTabIndex}
-                        secondaryTabIndex={secondaryTabIndex}
-                        splitPrimaryIndex={splitPrimaryIndex}
-                        splitMode={splitMode}
-                        onTabClick={handleTabClick}
-                        onTabReorder={handleTabReorder}
-                        onSetSecondaryTab={onSetSecondaryTab}
-                        onActivateTab={onActivateTab}
-                        onDragToSplitPanel={handleDragToSplitPanel}
-                        rtl={isRtl}
-                    />
-                    <div className={styles.tabsBody} data-tabs-body>
-                        <SplitContainer
-                            panels={panels}
-                            primaryIndex={activeTabIndex}
-                            secondaryIndex={partnerIndex}
-                            splitMode={showSplit}
-                            splitRatio={splitRatio}
-                            splitDirection="horizontal"
-                            onRatioChange={handleRatioChange}
-                            onCloseSecondary={handleCloseSecondary}
-                            onSwap={handleSwap}
+                    {isMobileDevice() ? (
+                        <MobileTabsBar
+                            activeTab={mobileActiveTab}
+                            onSelectTab={tabId => {
+                                setMobileActiveTab(tabId);
+                                if (tabId === 'code') {
+                                    onActivateTab(0);
+                                    setMobileStageMode('pip');
+                                }
+                                else if (tabId === 'costumes') onActivateTab(1);
+                                else if (tabId === 'sounds') onActivateTab(2);
+                            }}
+                            targetName={currentTargetName}
+                            targetIcon={currentTargetIcon}
+                            isStage={targetIsStage}
                         />
+                    ) : (
+                        <TabBar
+                            tabs={tabsConfig}
+                            tabOrder={tabOrder}
+                            activeTabIndex={activeTabIndex}
+                            secondaryTabIndex={secondaryTabIndex}
+                            splitPrimaryIndex={splitPrimaryIndex}
+                            splitMode={splitMode}
+                            onTabClick={handleTabClick}
+                            onTabReorder={handleTabReorder}
+                            onSetSecondaryTab={onSetSecondaryTab}
+                            onActivateTab={onActivateTab}
+                            onDragToSplitPanel={handleDragToSplitPanel}
+                            rtl={isRtl}
+                        />
+                    )}
+                    <div
+                        className={classNames(styles.tabsBody, {
+                            [styles.mobileHideToolbox]: isMobileDevice() && mobileActiveTab !== 'code',
+                            [styles.mobilePythonActive]: isMobileDevice() && effectivePanelOpen && isCodeTabActive
+                        })}
+                        data-tabs-body
+                    >
+                        {isMobileDevice() && mobileActiveTab === 'objects' ? (
+                            <div className={styles.mobileTargetPaneWrapper}>
+                                <TargetPane
+                                    stageSize={stageSize}
+                                    vm={vm}
+                                    onDeleteTargetPythonCode={removePythonCodeForTarget}
+                                    onRestoreTargetPythonCode={restorePythonCodeForTarget}
+                                    classroomCanAddSprite={classroomCanAdd}
+                                    classroomCanDeleteSprite={classroomCanDelete}
+                                    classroomCanRenameSprite={classroomCanRename}
+                                    classroomCanEditCurrent={classroomCanEditCurrent}
+                                    classroomCanEditTargetId={classroomCanEditTargetId}
+                                    classroomStateActive={classroomState.active}
+                                    classroomAssignments={classroomAssignments}
+                                    classroomRoster={classroomState.roster || []}
+                                    classroomMyId={classroomMyId}
+                                />
+                            </div>
+                        ) : (
+                            <SplitContainer
+                                panels={panels}
+                                primaryIndex={activeTabIndex}
+                                secondaryIndex={partnerIndex}
+                                splitMode={showSplit}
+                                splitRatio={splitRatio}
+                                splitDirection="horizontal"
+                                onRatioChange={handleRatioChange}
+                                onCloseSecondary={handleCloseSecondary}
+                                onSwap={handleSwap}
+                            />
+                        )}
                         {isDragToSplit && !showSplit && dragZone && (
                             <div className={classNames(styles.dropIndicator, dragZone === 'left' ? styles.dropLeft : styles.dropRight)}>
                                 <span>Soltar aquí para pantalla dividida</span>
@@ -3467,25 +3909,62 @@ const GUIComponent = props => {
                         {activeTabIndex === 0 && (
                             <MentorGuide message={mentorGuidanceMsg} onReanalyze={handleReanalyze} />
                         )}
-                        {/* Python Panel - only visible in Programacion mode (deviceMode === 'game') */}
-                        <PythonPanel
-                            isOpen={effectivePanelOpen}
-                            pythonCode={pythonCode}
-                            isLocked={effectivePanelLocked}
-                            isKeyLocked={isPythonKeyLocked}
-                            onToggleOpen={() => setPythonPanelOpen(!pythonPanelOpen)}
-                            onToggleLock={() => setPythonPanelLocked(!pythonPanelLocked)}
-                            onRequestKeyLock={handleRequestKeyLock}
-                            onRequestKeyUnlock={handleRequestKeyUnlock}
-                            onCodeChange={setPythonCode}
-                            onCopyCode={() => {}}
-                            onSyncToBlocks={handleSyncToBlocks}
-                            isProgrammingMode={deviceMode !== 'device'}
-                            targetId={currentTargetId}
-                            targetName={vm.editingTarget?.getName() || 'Sprite'}
-                            isStage={vm.editingTarget?.isStage || false}
-                            vm={vm}
-                        />
+                        {isMobileDevice() && mobileActiveTab === 'code' && !effectivePanelOpen && (
+                            <button
+                                id="stblock-mobile-trashcan"
+                                type="button"
+                                className={styles['mobile-trash-can'] || styles.mobileTrashCan}
+                                onClick={() => {
+                                    try {
+                                        if (window.Blockly && window.Blockly.getMainWorkspace()) {
+                                            const ws = window.Blockly.getMainWorkspace();
+                                            const sel = window.Blockly.selected;
+                                            if (sel && sel.dispose) {
+                                                sel.dispose(true, true);
+                                            } else {
+                                                const topBlocks = ws.getTopBlocks(true);
+                                                if (topBlocks.length > 0) {
+                                                    const count = topBlocks.length;
+                                                    if (window.confirm(`¿Deseas eliminar todos los bloques (${count})?`)) {
+                                                        ws.clear();
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (err) {
+                                        console.warn('[TrashCan] Error:', err);
+                                    }
+                                }}
+                                title="Papelera: arrastra bloques aquí o toca para eliminar el bloque seleccionado"
+                            >
+                                🗑️
+                            </button>
+                        )}
+                        {/* Python Panel - only visible in Programacion mode when Code tab is active */}
+                        <div
+                            style={{
+                                display: isCodeTabActive ? 'contents' : 'none'
+                            }}
+                        >
+                            <PythonPanel
+                                isOpen={effectivePanelOpen && isCodeTabActive}
+                                pythonCode={pythonCode}
+                                isLocked={effectivePanelLocked}
+                                isKeyLocked={isPythonKeyLocked}
+                                onToggleOpen={() => setPythonPanelOpen(!pythonPanelOpen)}
+                                onToggleLock={() => setPythonPanelLocked(!pythonPanelLocked)}
+                                onRequestKeyLock={handleRequestKeyLock}
+                                onRequestKeyUnlock={handleRequestKeyUnlock}
+                                onCodeChange={setPythonCode}
+                                onCopyCode={() => {}}
+                                onSyncToBlocks={handleSyncToBlocks}
+                                isProgrammingMode={deviceMode !== 'device'}
+                                targetId={currentTargetId}
+                                targetName={vm.editingTarget?.getName() || 'Sprite'}
+                                isStage={vm.editingTarget?.isStage || false}
+                                vm={vm}
+                            />
+                        </div>
                     </div>
                 </Box>
             </Box>
@@ -3496,6 +3975,7 @@ const GUIComponent = props => {
         <DeviceModeGUI
             vm={vm}
             code={deviceModeCode}
+            deviceProjects={deviceModeProjects}
             terminalOutput={deviceModeTerminal}
             terminalSettings={deviceModeTerminalSettings}
             device={deviceModeDevice}
@@ -3531,6 +4011,9 @@ const GUIComponent = props => {
             onSimulatorSerialOutput={handleSimulatorSerialOutput}
             circuit3dData={circuit3dData}
             onCircuit3DStateChange={onSetCircuit3dData}
+            onTabChange={setDeviceTabId}
+            mobileSerialOpen={mobileSerialOpen}
+            onCloseMobileSerial={() => setMobileSerialOpen(false)}
         />
     );
 
@@ -3597,7 +4080,8 @@ const GUIComponent = props => {
     ) : (
         <Box
             className={classNames(styles.pageWrapper, {
-                [styles.pythonEditMode]: isPythonEditMode
+                [styles.pythonEditMode]: isPythonEditMode,
+                'is-mobile-app': isMobileDevice()
             })}
             dir={isRtl ? 'rtl' : 'ltr'}
             {...componentProps}
@@ -3669,6 +4153,12 @@ const GUIComponent = props => {
                     onRequestClose={onRequestCloseBackdropLibrary}
                 />
             ) : null}
+            {spriteLibraryVisible ? (
+                <SpriteLibrary
+                    vm={vm}
+                    onRequestClose={onRequestCloseSpriteLibrary}
+                />
+            ) : null}
             <DeviceSelector
                 deviceData={deviceData}
                 onRequestClose={onRequestCloseDeviceLibrary}
@@ -3727,42 +4217,299 @@ const GUIComponent = props => {
                 onOpenSimulator={handleOpenClassroomSimulator}
                 onLeave={() => classroomController.leave()}
             />
-            <MenuBar
-                authorId={authorId}
-                authorThumbnailUrl={authorThumbnailUrl}
-                authorUsername={authorUsername}
-                canChangeLanguage={canChangeLanguage}
-                canChangeTheme={canChangeTheme}
-                canCreateCopy={canCreateCopy}
-                canCreateNew={canCreateNew}
-                canEditTitle={canEditTitle}
-                canManageFiles={canManageFiles && classroomCanSave}
-                canRemix={canRemix}
-                canSave={canSave && classroomCanSave}
-                canShare={canShare}
-                className={styles.menuBarPosition}
-                enableCommunity={enableCommunity}
-                isShared={isShared}
-                isTotallyNormal={isTotallyNormal}
-                modeToggleDisabled={isPythonKeyLocked || classroomForcePython || classroomForceBlocks}
-                lockedModes={classroomLockedModes}
-                classroomActive={classroomState.active}
-                onOpenClassroom={handleOpenClassroom}
-                showComingSoon={showComingSoon}
-                onClickAbout={onClickAbout}
-                onProjectTelemetryEvent={onProjectTelemetryEvent}
-                onSeeCommunity={onSeeCommunity}
-                onShare={onShare}
-                onStartSelectingFileUpload={onStartSelectingFileUpload}
-                onRequestOpenDeviceLibrary={onRequestOpenDeviceLibrary}
-                selectedDevice={selectedDevice}
-                onUploadFirmware={handleDeviceUploadFirmware}
-                deviceModeConnected={deviceModeConnected}
-                onRequestCircuitState={requestCircuitState}
-                onRequestCircuit3DState={requestCircuit3DState}
-                onRequestSketchforgeSkf={requestSketchforgeSkf}
-                onRequestWorkspaceState={requestWorkspaceState}
-            />
+            {isMobileDevice() ? (
+                <MobileMenuBar
+                    deviceMode={deviceMode}
+                    selectedDevice={selectedDevice}
+                    onRequestOpenDeviceLibrary={onRequestOpenDeviceLibrary}
+                    mobileSerialOpen={mobileSerialOpen}
+                    onToggleMobileSerial={() => setMobileSerialOpen(v => !v)}
+                    onModeChange={(mode) => {
+                        setMobileHubOpen(false);
+                        setIsAiOpen(false);
+                        if (mode === 'game') {
+                            setMobileActiveTab('code');
+                            setPythonPanelOpen(false);
+                            setMobileStageMode('pip');
+                            if (deviceMode !== 'game') {
+                                onSetDeviceMode('game');
+                            }
+                        } else if (mode === 'device') {
+                            if (onRequestOpenDeviceLibrary) {
+                                onRequestOpenDeviceLibrary();
+                            } else if (deviceMode !== 'device') {
+                                onSetDeviceMode('device');
+                            }
+                        } else if (mode === 'diseno') {
+                            if (deviceMode !== 'diseno') {
+                                onSetDeviceMode('diseno');
+                            }
+                        } else if (mode === 'evaluacion') {
+                            if (deviceMode !== 'evaluacion') {
+                                onSetDeviceMode('evaluacion');
+                            }
+                        }
+                    }}
+                    onClickNew={() => {
+                        const confirmMsg = '¿Deseas iniciar un nuevo proyecto? Se perderán los cambios que no hayas guardado.';
+                        const proceed = typeof window !== 'undefined' && typeof window.confirm === 'function' ?
+                            window.confirm(confirmMsg) : true;
+                        if (proceed) startNewProject();
+                    }}
+                    onClickSave={async () => {
+                        try {
+                            let blob = null;
+                            if (vm && typeof vm.saveProjectFlynt === 'function') {
+                                let workspaceState = null;
+                                if (typeof requestWorkspaceState === 'function') {
+                                    try { workspaceState = await requestWorkspaceState(); } catch (_) {}
+                                }
+                                let circuitData = null;
+                                if (typeof requestCircuitState === 'function') {
+                                    try { circuitData = await requestCircuitState(); } catch (_) {}
+                                }
+                                let circuit3dData = null;
+                                if (typeof requestCircuit3DState === 'function') {
+                                    try { circuit3dData = await requestCircuit3DState(); } catch (_) {}
+                                }
+                                let sketchforgeData = null;
+                                if (typeof requestSketchforgeSkf === 'function') {
+                                    try { sketchforgeData = await requestSketchforgeSkf(); } catch (_) {}
+                                }
+
+                                const aiData = {};
+                                try {
+                                    const trainingRaw = localStorage.getItem('ai_training_data');
+                                    if (trainingRaw) aiData.training = JSON.parse(trainingRaw);
+                                    const sessionRaw = localStorage.getItem('ai_session');
+                                    if (sessionRaw) aiData.session = JSON.parse(sessionRaw);
+                                    const prov = localStorage.getItem('ai_provider') || '';
+                                    aiData.settings = {
+                                        provider: prov,
+                                        model: localStorage.getItem(prov + '_model') || '',
+                                        trainingEnabled: localStorage.getItem('ai_training_enabled')
+                                    };
+                                    const conversationRaw = localStorage.getItem('ai_conversation');
+                                    if (conversationRaw) aiData.conversation = JSON.parse(conversationRaw);
+                                } catch (_) {}
+
+                                const deviceData = {};
+                                try {
+                                    const projectsToSave = workspaceState && workspaceState.deviceProjects ?
+                                        workspaceState.deviceProjects : deviceProjects;
+                                    if (projectsToSave && Object.keys(projectsToSave).length > 0) {
+                                        deviceData.deviceProjects = projectsToSave;
+                                    }
+                                } catch (_) {}
+
+                                blob = await vm.saveProjectFlynt(
+                                    aiData,
+                                    deviceData,
+                                    circuitData,
+                                    sketchforgeData,
+                                    workspaceState && workspaceState.programmingProject,
+                                    workspaceState && workspaceState.programmingProjectArchive,
+                                    workspaceState && {
+                                        pythonCodes: workspaceState.pythonCodes,
+                                        pythonKeyLock: workspaceState.pythonKeyLock || null
+                                    },
+                                    circuit3dData
+                                );
+                            } else if (vm && typeof vm.saveProjectSb3 === 'function') {
+                                blob = await vm.saveProjectSb3();
+                            }
+
+                            if (blob) {
+                                const rawTitle = (typeof projectTitle === 'string' && projectTitle.trim()) ||
+                                    (typeof reduxProjectTitle === 'string' && reduxProjectTitle.trim()) ||
+                                    'Proyecto_STBlock';
+                                const safeTitle = rawTitle.replace(/[\\/:*?"<>|]/g, '_');
+                                const ext = (vm && typeof vm.saveProjectFlynt === 'function') ? '.flynt' : '.sb3';
+                                const filename = `${safeTitle}${ext}`;
+
+                                // 1. En Android nativo con AndroidBridge:
+                                if (typeof window !== 'undefined' && window.AndroidBridge && typeof window.AndroidBridge.saveWithDialog === 'function') {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                        try {
+                                            const base64 = (reader.result || '').split(',')[1];
+                                            if (base64) {
+                                                window.AndroidBridge.saveWithDialog(filename, base64);
+                                            } else {
+                                                throw new Error('No se pudo convertir el proyecto a Base64');
+                                            }
+                                        } catch (bridgeErr) {
+                                            console.error('[AndroidSave] Bridge error:', bridgeErr);
+                                            alert('Error al transferir proyecto al sistema Android: ' + (bridgeErr.message || bridgeErr));
+                                        }
+                                    };
+                                    reader.readAsDataURL(blob);
+                                    return;
+                                }
+
+                                // 2. En Tauri Desktop (PC):
+                                if (typeof window !== 'undefined' && ((window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') || (window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function'))) {
+                                    try {
+                                        const { save: tauriSave } = await import('@tauri-apps/plugin-dialog');
+                                        const invoke = (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) || window.__TAURI__.core.invoke;
+                                        const filePath = await tauriSave({
+                                            defaultPath: filename,
+                                            filters: [{ name: 'Flynt Project', extensions: ['flynt'] }]
+                                        });
+                                        if (filePath) {
+                                            const arrayBuffer = await blob.arrayBuffer();
+                                            await invoke('save_file', { path: filePath, content: Array.from(new Uint8Array(arrayBuffer)) });
+                                            return;
+                                        }
+                                    } catch (tauriErr) {
+                                        console.warn('[TauriSave] Dialog save error:', tauriErr);
+                                    }
+                                }
+
+                                // 3. Fallback de navegador web convencional
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.style.display = 'none';
+                                a.href = url;
+                                a.download = filename;
+                                document.body.appendChild(a);
+                                a.click();
+                                setTimeout(() => {
+                                    if (document.body.contains(a)) document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                }, 15000);
+                            }
+                        } catch (err) {
+                            console.warn('[MobileSave] Error guardando proyecto:', err);
+                            alert('No se pudo guardar el proyecto: ' + (err.message || err));
+                        }
+                    }}
+                    onStartSelectingFileUpload={onStartSelectingFileUpload}
+                    onGreenFlag={() => {
+                        if (electronicsLabRef.current && typeof electronicsLabRef.current.startSimulation === 'function') {
+                            electronicsLabRef.current.startSimulation();
+                        }
+                        if (vm) {
+                            if (!vm.runtime.isRunning) vm.start();
+                            vm.greenFlag();
+                            vm.runtime.emit('PROJECT_START');
+                        }
+                    }}
+                    onStopAll={() => {
+                        if (electronicsLabRef.current && typeof electronicsLabRef.current.stopSimulation === 'function') {
+                            electronicsLabRef.current.stopSimulation();
+                        }
+                        if (vm) {
+                            vm.stopAll();
+                            vm.runtime.emit('PROJECT_STOP_ALL');
+                        }
+                    }}
+                    onOpenSettings={() => {}}
+                    onOpenAbout={onClickAbout}
+                    onOpenHome={() => setMobileHubOpen(true)}
+                    isHomeOpen={mobileHubOpen}
+                    canSave={canSave && classroomCanSave}
+                    mobileStageMode={isMobilePipActive ? 'pip' : isMobileFullscreenActive ? 'fullscreen' : 'hidden'}
+                    mobileStageVisible={isMobileFullscreenActive}
+                    onToggleMobileStage={() => {
+                        setMobileStageMode(mode => (mode === 'fullscreen' ? 'hidden' : 'fullscreen'));
+                    }}
+                    onToggleMobilePip={() => {
+                        setMobileStageMode(mode => (mode === 'pip' ? 'hidden' : 'pip'));
+                        if (mobileActiveTab !== 'code') {
+                            setMobileActiveTab('code');
+                            onActivateTab(0);
+                        }
+                    }}
+                    mobilePythonOpen={effectivePanelOpen && (mobileActiveTab === 'code')}
+                    onToggleMobilePython={() => {
+                        setPythonPanelOpen(v => {
+                            const next = !v;
+                            if (next) {
+                                setMobileActiveTab('code');
+                                onActivateTab(0);
+                            }
+                            return next;
+                        });
+                    }}
+                    onAddSprite={onRequestOpenSpriteLibrary}
+                    onAddBackdrop={onRequestOpenBackdropLibrary}
+                    isAiOpen={isAiOpen}
+                    onToggleAi={() => {
+                        setIsAiOpen(v => !v);
+                        setIsAiMinimized(false);
+                    }}
+                />
+            ) : (
+                <MenuBar
+                    authorId={authorId}
+                    authorThumbnailUrl={authorThumbnailUrl}
+                    authorUsername={authorUsername}
+                    canChangeLanguage={canChangeLanguage}
+                    canChangeTheme={canChangeTheme}
+                    canCreateCopy={canCreateCopy}
+                    canCreateNew={canCreateNew}
+                    canEditTitle={canEditTitle}
+                    canManageFiles={canManageFiles && classroomCanSave}
+                    canRemix={canRemix}
+                    canSave={canSave && classroomCanSave}
+                    canShare={canShare}
+                    className={styles.menuBarPosition}
+                    enableCommunity={enableCommunity}
+                    isShared={isShared}
+                    isTotallyNormal={isTotallyNormal}
+                    modeToggleDisabled={isPythonKeyLocked || classroomForcePython || classroomForceBlocks}
+                    lockedModes={classroomLockedModes}
+                    classroomActive={classroomState.active}
+                    onOpenClassroom={handleOpenClassroom}
+                    showComingSoon={showComingSoon}
+                    onClickAbout={onClickAbout}
+                    onProjectTelemetryEvent={onProjectTelemetryEvent}
+                    onSeeCommunity={onSeeCommunity}
+                    onShare={onShare}
+                    onStartSelectingFileUpload={onStartSelectingFileUpload}
+                    onRequestOpenDeviceLibrary={onRequestOpenDeviceLibrary}
+                    selectedDevice={selectedDevice}
+                    onUploadFirmware={handleDeviceUploadFirmware}
+                    deviceModeConnected={deviceModeConnected}
+                    onRequestCircuitState={requestCircuitState}
+                    onRequestCircuit3DState={requestCircuit3DState}
+                    onRequestSketchforgeSkf={requestSketchforgeSkf}
+                    onRequestWorkspaceState={requestWorkspaceState}
+                />
+            )}
+            {isMobileDevice() && mobileHubOpen && (
+                <HomeHub
+                    onSelectMode={(mode) => {
+                        setMobileHubOpen(false);
+                        if (mode === 'device') {
+                            if (onRequestOpenDeviceLibrary) {
+                                onRequestOpenDeviceLibrary();
+                            } else if (deviceMode !== 'device') {
+                                onSetDeviceMode('device');
+                            }
+                        } else {
+                            if (deviceMode !== mode) {
+                                onSetDeviceMode(mode);
+                            }
+                            if (mode === 'game') {
+                                setMobileActiveTab('code');
+                                setMobileStageMode('pip');
+                            }
+                        }
+                    }}
+                    onNewProject={() => {
+                        startNewProject();
+                    }}
+                    onOpenProject={onStartSelectingFileUpload}
+                    onClose={() => {
+                        setMobileHubOpen(false);
+                        if (deviceMode === 'game') {
+                            setMobileStageMode('pip');
+                        }
+                    }}
+                />
+            )}
             {deviceMode === 'device' ? renderDeviceMode() : deviceMode === 'diseno' ? renderDiseno3DMode() : deviceMode === 'evaluacion' ? renderEvaluacionMode() : renderEditor()}
             {!isFullScreen && <DragLayer />}
             {!isFullScreen && isAiOpen && (
@@ -3788,7 +4535,7 @@ const GUIComponent = props => {
                     )}
                 </div>
             )}
-            {!isFullScreen && !isAiOpen && (
+            {!isFullScreen && !isAiOpen && !isMobileDevice() && (
                 <button
                     className={styles.aiFloatingBtn}
                     style={aiBtnPos ? {left: aiBtnPos.x, top: aiBtnPos.y} : null}
@@ -4104,7 +4851,7 @@ const mapDispatchToProps = dispatch => ({
     onAddUploadLog: log => dispatch(addUploadLog(log)),
     onCloseUploadModal: () => dispatch(closeUploadModal()),
     onSelectDeviceModeDevice: device => dispatch(setSelectedDevice(device)),
-    onSaveDeviceProject: (deviceId, projectData, hasBlocks) => dispatch(saveDeviceProject(deviceId, projectData, hasBlocks)),
+    onSaveDeviceProject: (deviceId, projectData, hasBlocks, code) => dispatch(saveDeviceProject(deviceId, projectData, hasBlocks, code)),
     onOpenDeviceChangeConfirm: device => dispatch(openDeviceChangeConfirm(device)),
     onCloseDeviceChangeConfirm: () => dispatch(closeDeviceChangeConfirm()),
     onSetDeviceMode: mode => dispatch(setDeviceMode(mode)),
@@ -4121,7 +4868,8 @@ const mapDispatchToProps = dispatch => ({
     onClearCircuitData: () => dispatch(clearCircuitData()),
     onSetCircuit3dData: data => dispatch(setCircuit3dData(data)),
     onClearCircuit3dData: () => dispatch(clearCircuit3dData()),
-    onClearSketchforgeData: () => dispatch(clearSketchforgeData())
+    onClearSketchforgeData: () => dispatch(clearSketchforgeData()),
+    onSetProgramMode: mode => dispatch(setProgramMode(mode))
 });
 
 export default injectIntl(connect(

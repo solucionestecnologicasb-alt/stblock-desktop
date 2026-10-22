@@ -1,7 +1,7 @@
 {
     "name":  "stblock",
     "description":  "STBlock - Programacion visual, electronica, robotica y creacion de juegos.",
-    "version":  "0.1.38",
+    "version":  "0.1.47",
     "workspaces":  [
                        "scratch-gui",
                        "scratch-vm"
@@ -25,7 +25,10 @@
                     "deploy:mandatory":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Level mandatory",
                     "deploy:test":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Bump none -SkipInstallerBuild -SkipGitCommit -SkipGitPush -SkipReleasePublish",
                     "deploy:web":  "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-all.ps1 -Bump none -SkipInstallerBuild -SkipGitCommit -SkipGitPush -SkipReleasePublish",
-                    "build:chromebook":  "bash ./scripts/build-chromebook.sh"
+                    "build:chromebook":  "bash ./scripts/build-chromebook.sh",
+                    "build:android":  "tauri android build --debug --target aarch64 --apk",
+                    "build:android:emulator":  "tauri android build --debug --target x86_64 --apk",
+                    "build:android:aab":  "tauri android build --target aarch64 --aab"
                 },
     "devDependencies":  {
                             "@tauri-apps/api":  "^2.11.1",

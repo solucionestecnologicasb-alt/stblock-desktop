@@ -21,7 +21,8 @@ param(
 
     [string] $ReleaseRepo = 'solucionestecnologicasb-alt/stblock-releases',
 
-    [string] $PluginPath = 'C:\Users\bello\Local Sites\stbacademy\app\public\wp-content\plugins\bolt-page-plugin',
+    [string] $PluginPath = 'C:\Users\bello\Local Sites\stbacademylocal\app\public\wp-content\plugins\stb-academy-core',
+
 
     [string] $Notes = '',
 
@@ -362,19 +363,53 @@ if (-not $SkipPluginCopy) {
     $pluginX64Msi = Join-Path $PluginAssetsDir 'STBlock-Desktop-Installer-x64.msi'
 
     if ($x64ExeInstaller) {
+        if (Test-Path -LiteralPath $pluginX64Exe) {
+            Remove-Item -LiteralPath $pluginX64Exe -Force
+            Write-Host "Instalador anterior eliminado en plugin: $pluginX64Exe"
+        }
         Copy-Item -LiteralPath $x64ExeInstaller.FullName -Destination $pluginX64Exe -Force
-        Write-OK "Instalador x64 copiado exactamente a $pluginX64Exe"
+        Write-OK "Instalador x64 copiado y reemplazado exactamente a $pluginX64Exe"
     } else {
         Fail "No se encontro instalador EXE x64. Ejecuta build con NSIS antes del deploy."
     }
 
     if ($x64MsiInstaller) {
+        if (Test-Path -LiteralPath $pluginX64Msi) {
+            Remove-Item -LiteralPath $pluginX64Msi -Force
+        }
         Copy-Item -LiteralPath $x64MsiInstaller.FullName -Destination $pluginX64Msi -Force
         Write-OK "Instalador MSI x64 copiado al plugin para referencia/update"
     } else {
         Write-Warn "No se encontro instalador MSI x64"
     }
+
+    # Android APK: Preservado intacto para Google Play Store sin cambiar firmas ni claves
+    $pluginApk = Join-Path $PluginAssetsDir 'STBlock.apk'
+    if (Test-Path -LiteralPath $pluginApk) {
+        Write-OK "Instalador Android APK preservado intacto (firmado para Google Play): $pluginApk"
+    } else {
+        Write-Warn "No existe STBlock.apk en el plugin; se preserva sin compilar."
+    }
+
+    # Paquete Linux .deb (Debian / Ubuntu / Chromebook)
+    $debInstaller = Get-ChildItem -Path (Join-Path $RootDir 'src-tauri\target\release\bundle\deb'), (Join-Path $RootDir 'dist-linux') -Filter '*.deb' -Recurse -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    $pluginDeb = Join-Path $PluginAssetsDir 'STBlock-Linux.deb'
+    if ($debInstaller) {
+        if (Test-Path -LiteralPath $pluginDeb) {
+            Remove-Item -LiteralPath $pluginDeb -Force
+            Write-Host "Paquete Linux anterior eliminado en plugin: $pluginDeb"
+        }
+        Copy-Item -LiteralPath $debInstaller.FullName -Destination $pluginDeb -Force
+        Write-OK "Instalador Linux copiado y reemplazado exactamente a $pluginDeb ($($debInstaller.Name))"
+    } else {
+        Write-Warn "No se encontro paquete Linux .deb local. La compilacion en la nube se ejecuta automaticamente en GitHub Actions con el tag."
+    }
 }
+
+
 
 $latestJson = Get-ChildItem -LiteralPath $releaseAssetDir -File -Filter 'latest.json' -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $latestJson) {

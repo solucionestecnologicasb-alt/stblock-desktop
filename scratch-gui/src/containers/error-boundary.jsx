@@ -62,6 +62,9 @@ class ErrorBoundary extends React.Component {
             if (recommendedBrowser()) {
                 return (
                     <CrashMessageComponent
+                        action={this.props.action}
+                        error={this.state.error}
+                        errorInfo={this.state.errorInfo}
                         onReload={this.handleReload}
                     />
                 );

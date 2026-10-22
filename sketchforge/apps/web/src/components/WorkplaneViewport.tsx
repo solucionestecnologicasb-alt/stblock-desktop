@@ -26,9 +26,9 @@ import { parseMeasurementInput } from "@/lib/measurementUnits";
 import { materializeSketchEntities } from "@/lib/capGeometry";
 import { direct2dProfileFromGesture, type Direct2DDrawTool, type Direct2DPoint } from "@/lib/direct2dDrawing";
 import { basisFromPlane } from "@/lib/planeBasis";
-import { DEFAULT_SNAP_GRID, DEFAULT_WORKPLANE_WORKSPACE, normalizeSnapGrid, normalizeWorkspaceSettings, workplaneSettingsFingerprint, workspaceHydrationSyncDecision } from "@/lib/workplaneSettings";
+import { DEFAULT_SNAP_GRID, DEFAULT_WORKPLANE_WORKSPACE, normalizeSnapGrid, normalizeWorkspaceSettings, snapGridStep, workplaneSettingsFingerprint, workspaceHydrationSyncDecision } from "@/lib/workplaneSettings";
 import { interiorWorkplaneGridCoordinates, workplaneThemePalette, WORKPLANE_LINE_ELEVATION, WORKPLANE_MAJOR_GRID_INTERVAL } from "@/lib/workplaneGrid";
-import { cleanNearZero, cleanRotationDegrees, fallbackSolidColor, mirroredAxisCount, mirrorSign, preservesEdgeTreatmentSize, proportionalResizeScale, resizedImportedCoordinates, resizedImportedMeshPositions, resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
+import { applyPlacementToHeight, cleanNearZero, cleanRotationDegrees, fallbackSolidColor, mirroredAxisCount, mirrorSign, preservesEdgeTreatmentSize, proportionalResizeScale, resizedImportedCoordinates, resizedImportedMeshPositions, resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { excludeEdgesFromShapes, pickSnapCandidate, SNAP_PIXEL_TOLERANCE, type SnapEdgeSource, type SnapProjection } from "@/lib/geometrySnap";
 import { sphereTessellation } from "@/lib/sphereTessellation";
 import type { SketchForgeMcpViewFace } from "@/lib/sketchforgeMcpProtocol";
@@ -47,7 +47,7 @@ import {
   type TransformHandleKind,
   type TransformOverlayState,
 } from "@/components/workplane/TransformOverlay";
-import type { AlignAxis, AlignHandleStatus, AlignTarget, GridSize, MeasurementAccuracy, ShapeAsset, SketchProfile, WorkplanePlane, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
+import type { AlignAxis, AlignHandleStatus, AlignTarget, GridSize, MeasurementAccuracy, ShapeAsset, ShapePlacement, SketchProfile, WorkplanePlane, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
 import type { CadModifierEdge, CadTopologyEdge, CadTopologyFace, CadTopologyPick, CadTopologyVertex } from "@/lib/cadModifierTypes";
 import { alignTargetValue, nearestPointOnSegments } from "@/lib/meshTopologyEdit";
 import { interactionViewportPixelRatio, preferredViewportPixelRatio } from "@/lib/viewportPerformance";
@@ -62,8 +62,8 @@ const CAMERA_HOME = new THREE.Vector3(118, 96, 118);
 const CAMERA_TARGET = new THREE.Vector3(0, 0, 0);
 const MIN_SHAPE_SIZE = 0.01;
 const CUT_PREVIEW_PADDING = 0.01;
-const MIN_ELEVATION = -180;
-const MAX_ELEVATION = 220;
+export const MIN_ELEVATION = -180;
+export const MAX_ELEVATION = 220;
 const CAMERA_MIN_TARGET_Y = -70;
 const CAMERA_MAX_TARGET_Y = 120;
 const ROTATION_PROTRACTOR_OUTER_RADIUS = 94;
@@ -178,9 +178,9 @@ type WorkplaneViewportProps = {
   initialWorkspace?: WorkplaneWorkspaceSettings;
   workspaceSettingsKey?: string | null;
   placementPreview?: WorkplaneShape | null;
-  onPlacementConfirm?: (point: { x: number; z: number; elevation?: number }) => void;
+  onPlacementConfirm?: (point: ShapePlacement) => void;
   onPlacementCancel?: () => void;
-  onAddShape: (shape: ShapeAsset, point?: { x: number; z: number; elevation?: number }) => void;
+  onAddShape: (shape: ShapeAsset, point?: ShapePlacement) => void;
   onAlignAnchorChange: (id: string) => void;
   onAlignPreview: (axis: AlignAxis, target: AlignTarget) => void;
   onAlignPreviewClear: () => void;
@@ -545,13 +545,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function snapStep(size: GridSize) {
-  if (size === "Desactivado") {
-    return 0;
-  }
-  if (size === "Ladrillo") {
-    return 8;
-  }
-  return Number.parseFloat(size) || 1;
+  return snapGridStep(size);
 }
 
 function snapValue(value: number, step: number) {
@@ -2730,11 +2724,16 @@ export function WorkplaneViewport({
   // vez por `requestAnimationFrame`, en vez de en cada evento `pointermove`.
   const pendingTransformMoveRef = useRef<{ clientX: number; clientY: number; shiftKey: boolean; altKey: boolean } | null>(null);
   const transformMoveRafRef = useRef(0);
+  // Punteros táctiles activos: con dos o más dedos la cámara tiene prioridad
+  // (pinch zoom + desplazamiento) y se cancela cualquier gesto de selección.
+  const touchPointersRef = useRef<Map<number, { x: number; y: number; pageX: number; pageY: number }>>(new Map());
+  const pendingTouchTapRef = useRef<{ pointerId: number; x: number; y: number; at: number } | null>(null);
   const lastResizeAnchorRef = useRef<ResizeAnchorMemory | null>(null);
   const suppressNextLiftEditRef = useRef(false);
   const snapRef = useRef(snap);
   const workspaceRef = useRef(workspace);
   const workspaceSettingsKeyRef = useRef(workspaceSettingsKey ?? null);
+  const hydratedWorkspaceKeyRef = useRef<string | null | undefined>(undefined);
   const lastWorkspaceSettingsSyncRef = useRef("");
   const pendingWorkspaceHydrationFingerprintRef = useRef<string | null>(null);
   const viewCubeRef = useRef<HTMLDivElement | null>(null);
@@ -2853,11 +2852,16 @@ export function WorkplaneViewport({
 
   useLayoutEffect(() => {
     const nextKey = workspaceSettingsKey ?? null;
-    if (workspaceSettingsKeyRef.current !== nextKey) {
+    // Solo se hidrata al entrar en un espacio de trabajo (o al montar). Si se
+    // releyera en cada eco de initialSnap/initialWorkspace, un valor guardado
+    // como predeterminado revertiría la rejilla elegida por el usuario.
+    const enteringWorkspace = hydratedWorkspaceKeyRef.current !== nextKey;
+    if (enteringWorkspace) {
+      hydratedWorkspaceKeyRef.current = nextKey;
       workspaceSettingsKeyRef.current = nextKey;
       lastWorkspaceSettingsSyncRef.current = "";
     }
-    const shouldUseSavedDefault = nextKey === "local-workplane" || (initialSnap === undefined && initialWorkspace === undefined);
+    const shouldUseSavedDefault = enteringWorkspace && (nextKey === "local-workplane" || (initialSnap === undefined && initialWorkspace === undefined));
     const savedDefault = shouldUseSavedDefault ? readSavedWorkspaceDefault(nextKey) : null;
     const nextSnap = savedDefault?.snap ?? normalizeSnapGrid(initialSnap, DEFAULT_SNAP_GRID);
     const nextWorkspace = savedDefault?.workspace ?? normalizeWorkspaceSettings(initialWorkspace);
@@ -3363,7 +3367,7 @@ export function WorkplaneViewport({
     };
   }, [geometryDrawPlane, toRawPlanePoint]);
 
-  const toPlanePointAtY = useCallback((clientX: number, clientY: number, planeY = 0) => {
+  const toPlanePointAtY = useCallback((clientX: number, clientY: number, planeY = 0, clampToWorkspace = true) => {
     const state = threeRef.current;
     const hit = toRawPlanePoint(clientX, clientY, planeY === 0 ? state?.dragPlane ?? new THREE.Plane(new THREE.Vector3(0, 1, 0), 0) : new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY));
     if (!state || !hit) {
@@ -3371,13 +3375,71 @@ export function WorkplaneViewport({
     }
 
     const step = snapStep(snapRef.current);
+    const x = snapValue(hit.x, step);
+    const z = snapValue(hit.z, step);
+    if (!clampToWorkspace) {
+      return { x, z };
+    }
     const bounds = workspaceRef.current;
     return {
-      x: clamp(snapValue(hit.x, step), -bounds.width / 2 + 6, bounds.width / 2 - 6),
-      z: clamp(snapValue(hit.z, step), -bounds.depth / 2 + 6, bounds.depth / 2 - 6),
+      x: clamp(x, -bounds.width / 2 + 6, bounds.width / 2 - 6),
+      z: clamp(z, -bounds.depth / 2 + 6, bounds.depth / 2 - 6),
     };
   }, [toRawPlanePoint]);
   const toPlanePoint = useCallback((clientX: number, clientY: number) => toPlanePointAtY(clientX, clientY, 0), [toPlanePointAtY]);
+
+  // Resuelve el destino de una pieza bajo el cursor. Si el rayo toca una pieza
+  // visible, la nueva pieza apoya su base sobre esa cara (con la normal
+  // alineada al eje dominante). Si no hay superficie, cae en el plano
+  // horizontal de trabajo a la elevación indicada.
+  const resolvePlacement = useCallback((clientX: number, clientY: number, fallbackElevation = 0): ShapePlacement | null => {
+    const state = threeRef.current;
+    if (!state) return null;
+
+    const rect = state.renderer.domElement.getBoundingClientRect();
+    state.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    state.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    state.raycaster.setFromCamera(state.pointer, state.camera);
+    state.raycaster.layers.set(RENDER_LAYER_SHAPES);
+
+    const intersections = state.raycaster.intersectObjects(state.shapeLayer.children, true);
+    const hit = intersections.find((entry) => typeof entry.object.userData.shapeId === "string" && Boolean(entry.face));
+    if (hit?.face) {
+      const normal = hit.face.normal.clone()
+        .applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld))
+        .normalize();
+      if (normal.dot(state.raycaster.ray.direction) > 0) normal.negate();
+      const components = [Math.abs(normal.x), Math.abs(normal.y), Math.abs(normal.z)];
+      const axis = components[0] >= components[1] && components[0] >= components[2] ? 0 : components[1] >= components[2] ? 1 : 2;
+      const snapped = new THREE.Vector3();
+      snapped.setComponent(axis, normal.getComponent(axis) < 0 ? -1 : 1);
+
+      const step = snapStep(snapRef.current);
+      const contact = hit.point.clone();
+      if (axis !== 0) contact.x = snapValue(contact.x, step);
+      if (axis !== 1) contact.y = snapValue(contact.y, step);
+      if (axis !== 2) contact.z = snapValue(contact.z, step);
+
+      // La base local (-Y) se apoya en la cara: +Y local debe apuntar en la
+      // dirección de la normal. Solo se admiten orientaciones por eje. En las
+      // caras laterales (±X) la rotación combinada mantiene el ancho de la
+      // pieza en horizontal.
+      const rotationX = snapped.y === 1 ? 0 : snapped.y === -1 ? 180 : snapped.z === 1 ? 90 : snapped.z === -1 ? -90 : 90;
+      const rotationZ = snapped.x === 1 ? -90 : snapped.x === -1 ? 90 : 0;
+      return {
+        x: contact.x,
+        z: contact.z,
+        elevation: contact.y,
+        rotation: 0,
+        rotationX,
+        rotationZ,
+        surface: { contact: [contact.x, contact.y, contact.z], normal: [snapped.x, snapped.y, snapped.z] },
+      };
+    }
+
+    const point = toPlanePointAtY(clientX, clientY, fallbackElevation, false);
+    return point ? { ...point, elevation: fallbackElevation } : null;
+  }, [toPlanePointAtY]);
 
   useEffect(() => {
     const state = threeRef.current, host = hostRef.current;
@@ -3387,14 +3449,15 @@ export function WorkplaneViewport({
     setObjectRenderLayer(preview, RENDER_LAYER_PREVIEWS);
     state.scene.add(preview); state.controls.enabled = false;
     const previousHelpers = state.helperLayer.visible; state.helperLayer.visible = false;
-    let point: { x: number; z: number } | null = null, frame = 0;
+    let point: ShapePlacement | null = null, frame = 0;
     let cursor: { x: number; y: number } | null = null;
     const elevation = placementPreview.elevation ?? placementElevationRef.current;
     const update = () => {
       frame = 0; if (!cursor) return;
-      point = toPlanePointAtY(cursor.x, cursor.y, elevation);
+      const target = resolvePlacement(cursor.x, cursor.y, elevation);
+      point = target ? applyPlacementToHeight(target, placementPreview.height) : null;
       preview.visible = !!point;
-      if (point) { updateShapeObjectTransform(preview, { ...placementPreview, ...point, elevation }); preview.name = "PlacementPreview"; }
+      if (point) { updateShapeObjectTransform(preview, { ...placementPreview, ...point }); preview.name = "PlacementPreview"; }
       state.requestRender();
     };
     const move = (event: PointerEvent) => {
@@ -3406,7 +3469,10 @@ export function WorkplaneViewport({
       if (event.button === 2) { onPlacementCancel?.(); return; }
       if (event.button !== 0) return;
       cursor = { x: event.clientX, y: event.clientY }; if (frame) cancelAnimationFrame(frame); update();
-      if (point) onPlacementConfirm?.({ ...point, elevation });
+      if (point) onPlacementConfirm?.({
+        x: point.x, z: point.z, elevation: point.elevation,
+        rotation: point.rotation, rotationX: point.rotationX, rotationZ: point.rotationZ,
+      });
     };
     const leave = () => { cursor = null; point = null; preview.visible = false; state.requestRender(); };
     const keyboard = (event: KeyboardEvent) => {
@@ -3422,7 +3488,7 @@ export function WorkplaneViewport({
       state.scene.remove(preview); disposeObject(preview); state.helperLayer.visible = previousHelpers;
       state.controls.enabled = true; state.requestRender();
     };
-  }, [placementPreview, onPlacementCancel, onPlacementConfirm, toPlanePointAtY]);
+  }, [placementPreview, onPlacementCancel, onPlacementConfirm, resolvePlacement]);
 
   const storeRulerModel = useCallback((next: RulerModel) => {
     rulerModelRef.current = next;
@@ -4174,8 +4240,8 @@ export function WorkplaneViewport({
         const patch: Partial<WorkplaneShape> = rotationPatchFromQuaternion(nextQuaternion);
         if (transform.items.length > 1) {
           const nextCenter = pivot.clone().add(item.startCenter.clone().sub(pivot).applyQuaternion(rotationDelta));
-          patch.x = snapPositionValue(nextCenter.x, step, -workspaceRef.current.width / 2 + 6, workspaceRef.current.width / 2 - 6);
-          patch.z = snapPositionValue(nextCenter.z, step, -workspaceRef.current.depth / 2 + 6, workspaceRef.current.depth / 2 - 6);
+          patch.x = snapValue(nextCenter.x, step);
+          patch.z = snapValue(nextCenter.z, step);
           patch.elevation = snapPositionValue(nextCenter.y - item.startShape.height / 2, step, MIN_ELEVATION, MAX_ELEVATION);
         }
         onUpdateShape(item.id, patch);
@@ -4748,10 +4814,158 @@ export function WorkplaneViewport({
     [onInteractionActiveChange, setMarqueeFromState],
   );
 
+  // Cancela el gesto táctil en curso sin confirmarlo. Se usa cuando aparece un
+  // segundo dedo: a partir de ese momento manda la cámara (OrbitControls).
+  const abortTouchInteraction = useCallback(() => {
+    pendingTouchTapRef.current = null;
+    const state = threeRef.current;
+
+    const drag = dragRef.current;
+    dragRef.current = null;
+    marqueeRef.current = null;
+    setMarqueeFromState(null);
+
+    const topologyDrag = vertexDragRef.current || edgeDragRef.current || faceMoveDragRef.current || pushPullDragRef.current;
+    vertexDragRef.current = null;
+    edgeDragRef.current = null;
+    faceMoveDragRef.current = null;
+    pushPullDragRef.current = null;
+    if (topologyDrag) {
+      setPushPullReadout(null);
+    }
+
+    if (geometryDrawDraftRef.current) {
+      geometryDrawDraftRef.current = null;
+      setGeometryDrawDraft(null);
+    }
+
+    if (transformRef.current) {
+      transformRef.current = null;
+      if (transformMoveRafRef.current) {
+        window.cancelAnimationFrame(transformMoveRafRef.current);
+        transformMoveRafRef.current = 0;
+      }
+      pendingTransformMoveRef.current = null;
+      setActiveRotationWheel(false);
+      setActiveTransformKind(null);
+      setPinnedRotationWheelView(null);
+      setRotationReadout(null);
+    }
+
+    const host = hostRef.current;
+    if (host) {
+      touchPointersRef.current.forEach((_position, pointerId) => {
+        if (host.hasPointerCapture(pointerId)) {
+          host.releasePointerCapture(pointerId);
+        }
+      });
+    }
+
+    if (state) {
+      if (drag) {
+        drag.items.forEach((item) => {
+          item.nextX = item.startX;
+          item.nextZ = item.startZ;
+          applyDragItemPreview(state, item);
+        });
+        updateSelectedGroundFootprintPreviews(state, drag);
+        syncCutPreviewOverlays(state, shapesRef.current);
+        syncTransformOverlay(
+          state,
+          shapesRef.current,
+          selectedIdsRef.current,
+          transformOverlayRef,
+          setTransformOverlay,
+          workspaceRef.current.accuracy,
+        );
+      }
+      if (topologyDrag) {
+        rebuildTopologyOverlay(
+          state,
+          selectionModeRef.current,
+          topologyFacesRef.current,
+          topologyVerticesRef.current,
+          topologyEdgesRef.current,
+          hoverTopologyTarget,
+          topologyEditPreviewMeshRef.current,
+          null,
+          null,
+          topologySelectionRef.current,
+        );
+      }
+      setViewportInteractionQuality(state, false);
+      setSelectionHelpersVisible(state, true);
+      state.controls.enabled = true;
+      state.requestRender();
+    }
+    onInteractionActiveChange?.(false);
+  }, [hoverTopologyTarget, onInteractionActiveChange, setMarqueeFromState]);
+
+  // Se ejecuta en fase de captura, antes de que OrbitControls vea el evento:
+  // con dos dedos reactivamos los controles para que registre el segundo
+  // puntero y pueda hacer pinch zoom / desplazamiento.
+  const handlePointerDownCapture = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.pointerType !== "touch") {
+        return;
+      }
+      touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY, pageX: event.pageX, pageY: event.pageY });
+      if (touchPointersRef.current.size < 2) {
+        pendingTouchTapRef.current = null;
+        return;
+      }
+      const state = threeRef.current;
+      if (state) {
+        state.controls.enabled = true;
+        // OrbitControls calcula el pinch con la última posición registrada de
+        // cada dedo; sin refrescarla, el primer movimiento daría un salto.
+        const tracker = state.controls as unknown as {
+          _trackPointer?: (pointer: { pointerId: number; pageX: number; pageY: number }) => void;
+        };
+        if (typeof tracker._trackPointer === "function") {
+          touchPointersRef.current.forEach((position, pointerId) => {
+            if (pointerId !== event.pointerId) {
+              tracker._trackPointer?.({ pointerId, pageX: position.pageX, pageY: position.pageY });
+            }
+          });
+        }
+      }
+      abortTouchInteraction();
+    },
+    [abortTouchInteraction],
+  );
+
+  // Limpieza global: algunos overlays detienen la propagación del pointerup,
+  // así que el mapa de dedos se actualiza escuchando en la ventana.
+  useEffect(() => {
+    const releaseTouch = (event: PointerEvent) => {
+      if (event.pointerType === "touch") {
+        touchPointersRef.current.delete(event.pointerId);
+      }
+    };
+    const clearTouches = () => {
+      touchPointersRef.current.clear();
+      pendingTouchTapRef.current = null;
+    };
+    window.addEventListener("pointerup", releaseTouch, true);
+    window.addEventListener("pointercancel", releaseTouch, true);
+    window.addEventListener("blur", clearTouches);
+    return () => {
+      window.removeEventListener("pointerup", releaseTouch, true);
+      window.removeEventListener("pointercancel", releaseTouch, true);
+      window.removeEventListener("blur", clearTouches);
+    };
+  }, []);
+
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const state = threeRef.current;
       if (!state) {
+        return;
+      }
+      const isTouch = event.pointerType === "touch";
+      // Con dos dedos el gesto es de cámara (pinch/pan): no iniciar selección.
+      if (isTouch && touchPointersRef.current.size > 1) {
         return;
       }
       if (event.button !== 0 || event.ctrlKey || event.metaKey) {
@@ -4801,6 +5015,11 @@ export function WorkplaneViewport({
             onTopologyAddVertex?.(edgePoint);
             return;
           }
+          if (isTouch) {
+            // Un dedo sobre el vacío orbita la cámara; el toque sin arrastre deselecciona.
+            pendingTouchTapRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now() };
+            return;
+          }
           if (additive) {
             startTopologyMarquee(event, true);
           } else {
@@ -4815,6 +5034,10 @@ export function WorkplaneViewport({
               return;
             }
             startEdgeDrag(event, target.id);
+            return;
+          }
+          if (isTouch) {
+            pendingTouchTapRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now() };
             return;
           }
           if (additive) {
@@ -4835,6 +5058,8 @@ export function WorkplaneViewport({
             } else {
               startPushPullDrag(event, target.id);
             }
+          } else if (isTouch) {
+            pendingTouchTapRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now() };
           } else if (!additive) {
             onTopologyPick?.(null);
           }
@@ -4996,6 +5221,10 @@ export function WorkplaneViewport({
       const id = pickShape(event.clientX, event.clientY);
       const additive = event.shiftKey;
       if (!id) {
+        if (isTouch) {
+          pendingTouchTapRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now() };
+          return;
+        }
         const startX = event.clientX - rect.left;
         const startY = event.clientY - rect.top;
         event.preventDefault();
@@ -5023,7 +5252,7 @@ export function WorkplaneViewport({
         return;
       }
       const dragPlaneY = shape ? shape.elevation ?? 0 : 0;
-      const point = toPlanePointAtY(event.clientX, event.clientY, dragPlaneY);
+      const point = toPlanePointAtY(event.clientX, event.clientY, dragPlaneY, false);
       if (!point || !shape) {
         return;
       }
@@ -5114,6 +5343,12 @@ export function WorkplaneViewport({
 
   const handlePointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.pointerType === "touch") {
+        touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY, pageX: event.pageX, pageY: event.pageY });
+      }
+      if (event.pointerType === "touch" && touchPointersRef.current.size > 1) {
+        return;
+      }
       const geometryDraft = geometryDrawDraftRef.current;
       if (geometryDraft) {
         const point = toGeometryPlanePoint(event.clientX, event.clientY, geometryDraft.plane, geometryDrawTool !== "pencil");
@@ -5140,6 +5375,10 @@ export function WorkplaneViewport({
       }
       if (pushPullDragRef.current) {
         updatePushPullDrag(event.clientX, event.clientY);
+        return;
+      }
+      if (event.pointerType === "touch" && !transformRef.current && !marqueeRef.current && !dragRef.current) {
+        // Sin hover táctil: evita raycasts en cada movimiento mientras se orbita.
         return;
       }
       if (modifierActiveRef.current) {
@@ -5183,19 +5422,19 @@ export function WorkplaneViewport({
         return;
       }
 
-      const point = toPlanePointAtY(event.clientX, event.clientY, drag.planeY);
+      const point = toPlanePointAtY(event.clientX, event.clientY, drag.planeY, false);
       if (!point) {
         return;
       }
 
-      const primaryNextX = clamp(point.x + drag.offsetX, -workspaceRef.current.width / 2 + 6, workspaceRef.current.width / 2 - 6);
-      const primaryNextZ = clamp(point.z + drag.offsetZ, -workspaceRef.current.depth / 2 + 6, workspaceRef.current.depth / 2 - 6);
+      const primaryNextX = point.x + drag.offsetX;
+      const primaryNextZ = point.z + drag.offsetZ;
       const deltaX = primaryNextX - drag.primaryStartX;
       const deltaZ = primaryNextZ - drag.primaryStartZ;
 
       drag.items.forEach((item) => {
-        item.nextX = clamp(item.startX + deltaX, -workspaceRef.current.width / 2 + 6, workspaceRef.current.width / 2 - 6);
-        item.nextZ = clamp(item.startZ + deltaZ, -workspaceRef.current.depth / 2 + 6, workspaceRef.current.depth / 2 - 6);
+        item.nextX = item.startX + deltaX;
+        item.nextZ = item.startZ + deltaZ;
         if (threeRef.current) applyDragItemPreview(threeRef.current, item);
       });
       if (threeRef.current) {
@@ -5226,6 +5465,22 @@ export function WorkplaneViewport({
   const finishDrag = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const state = threeRef.current;
+      if (event.pointerType === "touch") {
+        touchPointersRef.current.delete(event.pointerId);
+        const tap = pendingTouchTapRef.current;
+        if (tap && tap.pointerId === event.pointerId) {
+          pendingTouchTapRef.current = null;
+          const moved = Math.hypot(event.clientX - tap.x, event.clientY - tap.y);
+          if (event.type !== "pointercancel" && moved <= 8 && performance.now() - tap.at <= 500) {
+            if (selectionModeRef.current !== "shape") {
+              onTopologyPick?.(null);
+            } else {
+              onSelectShape(null);
+            }
+            state?.requestRender();
+          }
+        }
+      }
       const geometryDraft = geometryDrawDraftRef.current;
       if (geometryDraft) {
         if (event.currentTarget.hasPointerCapture(geometryDraft.pointerId)) {
@@ -5472,13 +5727,13 @@ export function WorkplaneViewport({
       if (!asset) {
         return;
       }
-      const point = toPlanePointAtY(event.clientX, event.clientY, placementElevationRef.current);
+      const point = resolvePlacement(event.clientX, event.clientY, placementElevationRef.current);
       if (!point) return;
-      void Promise.resolve(onAddShape(asset, point ? { ...point, elevation: placementElevationRef.current } : { x: 0, z: 0, elevation: placementElevationRef.current })).catch((error) => {
+      void Promise.resolve(onAddShape(asset, point)).catch((error) => {
         console.error("[ShapeLibrary] No se pudo agregar el modelo arrastrado", error);
       });
     },
-    [onAddShape, toPlanePointAtY],
+    [onAddShape, resolvePlacement],
   );
 
   const resetView = useCallback(() => {
@@ -5793,6 +6048,7 @@ export function WorkplaneViewport({
               event.dataTransfer.dropEffect = "copy";
             }}
             onDrop={handleDrop}
+            onPointerDownCapture={handlePointerDownCapture}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={finishDrag}
@@ -5926,6 +6182,12 @@ function createThreeScene(host: HTMLDivElement): ThreeState {
     LEFT: null,
     MIDDLE: THREE.MOUSE.PAN,
     RIGHT: THREE.MOUSE.ROTATE,
+  };
+  // Táctil: un dedo orbita y dos dedos hacen pinch zoom + desplazamiento.
+  // La selección táctil se resuelve con toques y arrastres sobre piezas/manijas.
+  controls.touches = {
+    ONE: THREE.TOUCH.ROTATE,
+    TWO: THREE.TOUCH.DOLLY_PAN,
   };
   controls.minDistance = 18;
   controls.maxDistance = 4200;

@@ -276,3 +276,91 @@
     cursor: not-allowed;
     box-shadow: none;
 }
+
+@media (max-width: 768px) {
+    .modal-content {
+        width: 95% !important;
+        max-width: 95vw !important;
+        max-height: 90vh !important;
+        border-radius: 16px !important;
+        margin: 8px !important;
+    }
+
+    .modal-header {
+        padding: 14px 16px 10px !important;
+    }
+
+    .modal-title {
+        font-size: 1.15rem !important;
+        margin-bottom: 4px !important;
+    }
+
+    .modal-subtitle {
+        font-size: 0.8rem !important;
+    }
+
+    .device-categories {
+        padding: 10px 14px !important;
+    }
+
+    .category-section {
+        margin-bottom: 14px !important;
+    }
+
+    .category-title {
+        font-size: 0.9rem !important;
+        margin: 0 0 8px 0 !important;
+        gap: 6px !important;
+    }
+
+    .stboard-title {
+        font-size: 0.95rem !important;
+        padding: 6px 10px !important;
+        margin-bottom: 10px !important;
+    }
+
+    .device-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+    }
+
+    .device-card {
+        padding: 10px 6px !important;
+        border-radius: 12px !important;
+    }
+
+    .device-icon-wrapper {
+        width: 42px !important;
+        height: 42px !important;
+        margin-bottom: 6px !important;
+    }
+
+    .device-name {
+        font-size: 0.82rem !important;
+        line-height: 1.2 !important;
+    }
+
+    .device-description {
+        font-size: 0.68rem !important;
+        display: -webkit-box !important;
+        -webkit-line-clamp: 2 !important;
+        -webkit-box-orient: vertical !important;
+        overflow: hidden !important;
+        margin-top: 2px !important;
+    }
+
+    .modal-footer {
+        padding: 10px 14px !important;
+        gap: 8px !important;
+    }
+
+    .cancel-button {
+        padding: 8px 16px !important;
+        font-size: 0.85rem !important;
+    }
+
+    .confirm-button {
+        padding: 8px 20px !important;
+        font-size: 0.85rem !important;
+    }
+}

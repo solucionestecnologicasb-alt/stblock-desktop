@@ -1,10 +1,10 @@
 import { makeShapeFromAsset, toolbarShapeAssets, type ToolbarShapeAsset } from "@/lib/shapeCatalog";
 import { importedShapeFromStl } from "@/lib/stlImport";
 import { createLocalId } from "@/lib/localIds";
-import { canonicalizeShape } from "@/lib/workplaneShapes";
+import { applyPlacementToHeight, canonicalizeShape } from "@/lib/workplaneShapes";
 import { getLibraryModelBuffer } from "@/lib/libraryModelCache";
 import { libraryComponentAssets, type GeneratedComponentAsset } from "@/lib/libraryComponentCatalog.generated";
-import type { ShapeAsset, WorkplaneShape } from "@/types/sketchforge";
+import type { ShapeAsset, ShapePlacement, WorkplaneShape } from "@/types/sketchforge";
 
 const COMPONENT_FALLBACK_ICON = "assets/sketchforge/library-icons/component-real.svg";
 
@@ -95,14 +95,25 @@ export function findLibraryAsset(id: string): LibraryAsset | null {
   return null;
 }
 
-export async function buildLibraryShape(asset: ShapeAsset, point?: { x: number; z: number; elevation?: number }): Promise<WorkplaneShape> {
+export async function buildLibraryShape(asset: ShapeAsset, point?: ShapePlacement): Promise<WorkplaneShape> {
   const libraryAsset = asset as LibraryAsset;
   if (!libraryAsset.modelUrl && !libraryAsset.modelPath) return makeShapeFromAsset(asset, point);
 
   const imported = await parsedLibraryTemplate(libraryAsset);
-  return canonicalizeShape({
+  const shape = canonicalizeShape({
     ...imported, id: createLocalId(asset.id), name: asset.name, color: asset.color,
-    x: point?.x ?? 0, z: point?.z ?? 0, elevation: point?.elevation ?? 0,
+    x: 0, z: 0, elevation: 0,
     rotation: 0, rotationX: 0, rotationZ: 0, locked: false, hidden: false,
+  });
+  if (!point) return shape;
+  const placed = applyPlacementToHeight(point, shape.height);
+  return canonicalizeShape({
+    ...shape,
+    x: placed.x,
+    z: placed.z,
+    elevation: placed.elevation ?? 0,
+    rotation: placed.rotation ?? 0,
+    rotationX: placed.rotationX ?? 0,
+    rotationZ: placed.rotationZ ?? 0,
   });
 }

@@ -266,6 +266,17 @@ $fade-out-distance: 15px;
     transition: height 0.2s, transform 0.2s, opacity 0.2s;
 }
 
+:global(.is-mobile-app) .ai-floating-window {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(58px + max(env(safe-area-inset-bottom, 0px), 8px)) !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 65vh !important;
+    border-radius: 20px 20px 0 0 !important;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25) !important;
+}
+
 .ai-floating-window.minimized {
     height: 48px;
 }
@@ -414,4 +425,669 @@ $fade-out-distance: 15px;
 .classroomReadOnlyBannerText strong {
     font-weight: 600;
 }
+
+/* =========================================================================
+   ESTILOS EXCLUSIVOS PARA STBLOCK MOBILE (ANDROID / CELULAR)
+   Aislados completamente bajo la clase .is-mobile-app para no alterar PC/Linux
+   ========================================================================= */
+
+:global(.is-mobile-app) {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+    background-color: #f8fafc !important;
+}
+
+:global(.is-mobile-app) .page-wrapper {
+    overflow: hidden !important;
+    max-width: 100vw !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+:global(.is-mobile-app) .body-wrapper {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    max-width: 100vw !important;
+    width: 100vw !important;
+    overflow: hidden !important;
+    background-color: #f8fafc !important;
+    display: flex !important;
+    flex-direction: column !important;
+    position: relative !important;
+    order: 2 !important;
+}
+
+:global(.is-mobile-app) .flex-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    position: relative !important;
+    max-width: 100vw !important;
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+}
+
+/* En móvil el escenario está siempre en PiP flotante, pantalla completa u oculto; no ocupa espacio de flex */
+:global(.is-mobile-app) .stage-and-target-wrapper:not(.mobile-stage-pip):not(.mobile-stage-fullscreen) {
+    display: none !important;
+}
+
+:global(.is-mobile-app) .editor-wrapper {
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1 1 0% !important;
+    flex-basis: 0 !important;
+    flex-grow: 1 !important;
+    flex-shrink: 0 !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+:global(.is-mobile-app) .tabsBody {
+    position: relative !important;
+    flex: 1 1 0% !important;
+    flex-grow: 1 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+/* Agrandar elementos táctiles en la barra de extensiones y controles */
+:global(.is-mobile-app) .extension-button {
+    width: 3.5rem;
+    height: 3.5rem;
+    touch-action: manipulation;
+}
+
+:global(.is-mobile-app) :global(.blocklyFlyout) {
+    touch-action: pan-x;
+}
+
+/* Ocultamiento del escenario en móvil cuando está en modo oculto */
+:global(.is-mobile-app) .mobile-stage-hidden {
+    display: none !important;
+}
+
+/* Escenario móvil en pantalla completa (Modo Juego Fullscreen: solo escenario en grande y controles centrado) */
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-fullscreen {
+    position: fixed !important;
+    top: calc(54px + max(env(safe-area-inset-top, 0px), 24px)) !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(58px + max(env(safe-area-inset-bottom, 0px), 8px)) !important;
+    width: 100vw !important;
+    height: auto !important;
+    z-index: 450 !important;
+    background: #f8fafc !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    box-shadow: none !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-fullscreen :global(.stage-wrapper-root) {
+    width: 100% !important;
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: #f8fafc !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-fullscreen :global(.stage-menu-wrapper-root) {
+    padding: 6px 14px !important;
+    height: auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    background: #ffffff !important;
+    border-bottom: 1.5px solid #e2e8f0 !important;
+    flex-shrink: 0 !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-fullscreen :global(.stage-canvas-wrapper-root) {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    background: #f8fafc !important;
+    padding: 12px !important;
+    box-sizing: border-box !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-fullscreen :global(.stage-inner-wrapper) {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    position: relative !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-fullscreen :global(.stage-box-element) {
+    width: min(94vw, 560px) !important;
+    max-height: calc(100vh - 200px) !important;
+    aspect-ratio: 4 / 3 !important;
+    height: auto !important;
+    border-radius: 12px !important;
+    border: 2px solid #cbd5e1 !important;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1) !important;
+    background: #ffffff !important;
+    overflow: hidden !important;
+    position: relative !important;
+    display: block !important;
+    margin: 0 auto !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-fullscreen :global(.stage-box-element) > div:first-child,
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip :global(.stage-box-element) > div:first-child {
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+    position: relative !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-fullscreen :global(.stage-box-element) canvas,
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip :global(.stage-box-element) canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+    object-fit: contain !important;
+}
+
+:global(.is-mobile-app) :global(.stage-box-element) :global(.monitor-wrapper),
+:global(.is-mobile-app) :global(.stage-box-element) :global(.frame-wrapper) {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    pointer-events: none !important;
+}
+
+:global(.is-mobile-app) :global(.stage-overlays) {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    pointer-events: none !important;
+}
+
+/* En modo pantalla completa (el ojo), ocultar personajes y fondos */
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-fullscreen .target-wrapper,
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-fullscreen .mobile-fullscreen-target-wrapper {
+    display: none !important;
+}
+
+/* Ocultar en toda la versión móvil el botón de expandir / cambiar tamaño nativo de Scratch */
+:global(.is-mobile-app) :global(.stage-size-row),
+:global(.is-mobile-app) :global(.stage-size-toggle-group),
+:global(.is-mobile-app) :global([class*="stage-header_stage-button"]),
+:global(.is-mobile-app) :global(.stage-button) {
+    display: none !important;
+}
+
+/* Mini Vista Previa flotante (PiP / Modal flotante limpio: SOLO juego en pequeño y controles) */
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip {
+    position: fixed !important;
+    top: var(--stb-pip-top, calc(105px + max(env(safe-area-inset-top, 0px), 24px))) !important;
+    right: var(--stb-pip-right, 12px) !important;
+    left: var(--stb-pip-left, auto) !important;
+    bottom: auto !important;
+    width: 216px !important;
+    height: auto !important;
+    z-index: 600 !important;
+    background: #ffffff !important;
+    border-radius: 12px !important;
+    border: 2px solid #cbd5e1 !important;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22) !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    pointer-events: auto !important;
+    touch-action: none !important;
+    cursor: grab !important;
+    animation: fadeIn 0.18s ease-out !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip:active {
+    cursor: grabbing !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip :global(.stage-wrapper-root) {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex-shrink: 0 !important;
+    background: #ffffff !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip :global(.stage-menu-wrapper-root) {
+    padding: 4px 36px 4px 8px !important;
+    height: auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    background: #f8fafc !important;
+    border-bottom: 1.5px solid #e2e8f0 !important;
+    flex-shrink: 0 !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip :global(.stage-canvas-wrapper-root) {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    background: #f1f5f9 !important;
+    padding: 6px 8px !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip :global(.stage-inner-wrapper) {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip :global(.stage-box-element) {
+    width: 200px !important;
+    height: 150px !important;
+    aspect-ratio: 4 / 3 !important;
+    border-radius: 6px !important;
+    border: 1.5px solid #e2e8f0 !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+    background: #ffffff !important;
+    overflow: hidden !important;
+    position: relative !important;
+    display: block !important;
+    margin: 0 auto !important;
+}
+
+/* Ocultar sección de personajes en el panel flotante de preview */
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip .target-wrapper,
+:global(.is-mobile-app) .stage-and-target-wrapper.mobile-stage-pip .mobile-pip-target-wrapper {
+    display: none !important;
+}
+
+/* Botón cerrar en la esquina superior derecha del PiP preview */
+.mobile-pip-close-btn {
+    position: absolute;
+    top: 5px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 20;
+    touch-action: manipulation;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.mobile-pip-close-btn:active {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+/* Barra superior ligera para volver al código en modo pantalla completa */
+.mobile-fullscreen-header {
+    height: 42px;
+    padding-left: 14px;
+    padding-right: 14px;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    border-bottom: 1.5px solid #e2e8f0;
+    z-index: 10;
+    flex-shrink: 0;
+}
+
+.mobile-fullscreen-back-btn {
+    background: #f1f5f9;
+    border: 1.5px solid #cbd5e1;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 5px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    touch-action: manipulation;
+}
+
+.mobile-fullscreen-back-btn:active {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+/* Papelera flotante, justo por encima de los controles de zoom (+/⟲/−).
+   Los zoom-controls móviles miden ~112px de alto (3 botones de 34px + gaps,
+   padding y bordes), por eso se suma ese alto más un margen al bottom base. */
+.mobile-trash-can {
+    position: absolute !important;
+    bottom: calc(clamp(38px, 5.2vh, 46px) + clamp(8px, 1.5vh, 12px) + 120px) !important;
+    right: clamp(16px, 14vw, 15px) !important;
+    width: clamp(38px, 8.5vw, 44px) !important;
+    height: clamp(38px, 8.5vw, 44px) !important;
+    border-radius: 50% !important;
+    background-color: #ffffff !important;
+    border: 2px solid #e2e8f0 !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: clamp(18px, 4vw, 22px) !important;
+    color: #64748b !important;
+    z-index: 75 !important;
+    cursor: pointer !important;
+    touch-action: manipulation !important;
+    user-select: none !important;
+    transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease !important;
+}
+
+.mobile-trash-can:active {
+    transform: scale(0.92);
+    background-color: #fee2e2;
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+:global(.is-mobile-app) .zoom-controls {
+    bottom: calc(clamp(38px, 5.2vh, 46px) + clamp(8px, 1.5vh, 12px)) !important;
+    right: clamp(56px, 14vw, 68px) !important;
+}
+
+/* Mejoras táctiles para Blockly en dispositivos móviles */
+:global(.is-mobile-app) :global(.blocklyToolboxDiv) {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y;
+}
+
+:global(.is-mobile-app) :global(.blocklyTreeRow) {
+    height: 38px !important;
+    line-height: 38px !important;
+    padding-right: 12px !important;
+}
+
+:global(.is-mobile-app) :global(.blocklyTreeLabel) {
+    font-size: 13px !important;
+}
+
+:global(.is-mobile-app) :global(.blocklyScrollbarHandle) {
+    opacity: 0.8 !important;
+}
+
+/* Optimización móvil para Modo Diseño 3D (Fase 5) */
+:global(.is-mobile-app) .diseno3d-wrapper {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    overflow: hidden !important;
+    touch-action: none;
+    position: relative !important;
+    box-sizing: border-box !important;
+    order: 2 !important;
+}
+
+:global(.is-mobile-app) .diseno3d-frame {
+    width: 100% !important;
+    height: 100% !important;
+    border: none;
+    display: block;
+    touch-action: none;
+}
+
+@media (max-width: 768px), (orientation: landscape) and (max-height: 550px) {
+    .diseno3d-wrapper {
+        flex: 1 1 0% !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        overflow: hidden !important;
+        touch-action: none;
+        position: relative !important;
+        box-sizing: border-box !important;
+        order: 2 !important;
+    }
+}
+
+/* Panel de Personajes y Fondos en pantalla completa para Móviles */
+:global(.is-mobile-app) .mobile-target-pane-wrapper {
+    width: 100% !important;
+    height: 100% !important;
+    overflow-y: auto !important;
+    background-color: #f8fafc;
+    display: flex;
+    flex-direction: column;
+}
+
+:global(.is-mobile-app) .mobile-target-pane-wrapper :global(.target-pane) {
+    width: 100% !important;
+    height: 100% !important;
+    flex-grow: 1;
+}
+
+/* Blockly: Mover el toolbox de categorías a la parte inferior horizontal en móviles */
+:global(.is-mobile-app) :global(.blocklyToolboxWrapper) {
+    position: absolute !important;
+    bottom: 0 !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: clamp(38px, 5.2vh, 46px) !important;
+    z-index: 70 !important;
+    pointer-events: auto !important;
+}
+
+:global(.is-mobile-app) :global(.blocklyToolboxHeader) {
+    display: none !important;
+}
+
+:global(.is-mobile-app) :global(.blocklyZoom) {
+    display: none !important;
+}
+
+:global(.is-mobile-app) :global(.blocklyToolboxDiv) {
+    position: absolute !important;
+    bottom: 0 !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: clamp(38px, 5.2vh, 46px) !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    display: flex !important;
+    flex-direction: row !important;
+    background-color: #ffffff !important;
+    border-top: 1.5px solid #e2e8f0 !important;
+    border-right: none !important;
+    border-left: none !important;
+    border-bottom: none !important;
+    z-index: 70 !important;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05) !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-x !important;
+}
+
+:global(.is-mobile-app) :global(.scratchCategoryMenu),
+:global(.is-mobile-app) :global(.scratchCategoryMenuHorizontal) {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    width: max-content !important;
+    min-width: 100% !important;
+    height: clamp(38px, 5.2vh, 46px) !important;
+    overflow-x: visible !important;
+    align-items: center !important;
+    padding: 0 clamp(4px, 1vw, 8px) !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+    touch-action: pan-x !important;
+}
+
+:global(.is-mobile-app) :global(.scratchCategoryMenuRow) {
+    display: inline-flex !important;
+    flex-shrink: 0 !important;
+    height: clamp(28px, 4.2vh, 34px) !important;
+    align-items: center !important;
+    margin: 0 clamp(2px, 0.8vw, 4px) !important;
+    float: none !important;
+}
+
+:global(.is-mobile-app) :global(.scratchCategoryMenuItem) {
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: clamp(4px, 1vw, 6px) !important;
+    padding: 3px clamp(6px, 1.8vw, 12px) !important;
+    border-radius: 18px !important;
+    height: clamp(26px, 3.8vh, 32px) !important;
+    background: #f1f5f9 !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    box-sizing: border-box !important;
+    touch-action: pan-x manipulation !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+:global(.is-mobile-app) :global(.scratchCategoryMenuItem.categorySelected) {
+    background: #e2e8f0 !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12) !important;
+}
+
+:global(.is-mobile-app) :global(.scratchCategoryItemBubble),
+:global(.is-mobile-app) :global(.scratchCategoryItemIcon) {
+    margin: 0 !important;
+    width: clamp(12px, 3vw, 16px) !important;
+    height: clamp(12px, 3vw, 16px) !important;
+    min-width: clamp(12px, 3vw, 16px) !important;
+    min-height: clamp(12px, 3vw, 16px) !important;
+    border-radius: 50% !important;
+}
+
+:global(.is-mobile-app) :global(.scratchCategoryMenuItemLabel) {
+    font-size: clamp(10px, 2.2vw, 12px) !important;
+    font-weight: 650 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    color: #334155 !important;
+}
+
+/* El flyout de bloques emerge desde la parte inferior horizontalmente por encima de las categorías */
+:global(.is-mobile-app) :global(.blocklyFlyout),
+:global(.is-mobile-app) :global(.blocks .blocklyFlyout) {
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 100% !important;
+    z-index: 75 !important;
+    border-right: none !important;
+}
+
+:global(.is-mobile-app) :global(.blocklyFlyoutBackground) {
+    fill: #f8fafc !important;
+    fill-opacity: 0.98 !important;
+}
+
+:global(.is-mobile-app) :global(.blocklyScrollbarHorizontal.blocklyFlyoutScrollbar) {
+    opacity: 0.8 !important;
+}
+
+/* Ocultar toolbox de bloques y panel Python cuando NO se esté en la pestaña Código en móvil */
+:global(.is-mobile-app) .mobile-hide-toolbox :global(.blocklyToolboxWrapper),
+:global(.is-mobile-app) .mobile-hide-toolbox :global(.blocklyToolboxDiv),
+:global(.is-mobile-app) .mobile-hide-toolbox :global(.blocklyFlyout),
+:global(.is-mobile-app) .mobile-hide-toolbox :global([data-stblock-python-panel="true"]),
+:global(.is-mobile-app) .mobile-hide-toolbox :global(.python-panel) {
+    display: none !important;
+}
+
+/* Ocultar bloques y categorías cuando el modo Python está activo en móvil */
+:global(.is-mobile-app) .mobile-python-active :global(.blocklyToolboxWrapper),
+:global(.is-mobile-app) .mobile-python-active :global(.blocklyToolboxDiv),
+:global(.is-mobile-app) .mobile-python-active :global(.blocklyFlyout) {
+    display: none !important;
+}
+
+/* Responsive Paint Editor (scratch-paint) en móvil */
+:global(.is-mobile-app) :global([class*="paint-editor_editor-container"]),
+:global(.is-mobile-app) :global([class*="paint-editor_top-align-row"]) {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+:global(.is-mobile-app) :global([class*="paint-editor_top-align-row"]) {
+    flex-wrap: wrap !important;
+    padding-top: 4px !important;
+    gap: 4px !important;
+}
+
+:global(.is-mobile-app) :global([class*="paint-editor_controls-container"]) {
+    min-width: 0 !important;
+    width: 100% !important;
+    flex: 1 1 200px !important;
+    margin: 0 !important;
+}
+
+:global(.is-mobile-app) :global([class*="paint-editor_canvas-container"]) {
+    min-width: 0 !important;
+    width: 100% !important;
+    height: clamp(180px, 40vh, 320px) !important;
+    min-height: 180px !important;
+    box-sizing: border-box !important;
+}
+
+:global(.is-mobile-app) :global([class*="paint-editor_mode-selector"]) {
+    max-width: 4rem !important;
+    flex-direction: column !important;
+    gap: 2px !important;
+}
+
+:global(.is-mobile-app) :global([class*="paint-editor_zoom-controls"]) {
+    margin-top: 4px !important;
+}
+
+:global(.is-mobile-app) :global([class*="paint-editor_row"]) {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+}
+
+
+
 

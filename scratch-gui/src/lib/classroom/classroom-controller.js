@@ -22,31 +22,8 @@ const DEFAULT_PORT = 8870;
 
 // Diagnóstico: traza por consola (visible en DevTools del webview).
 // Se trunca para no volcar el JSON completo de los snapshots en cada sync.
-const MAX_LOG = 800;
-const logDiag = (msg) => {
-    try {
-        const s = String(msg || '');
-        const text = s.length > MAX_LOG ?
-            `${s.slice(0, MAX_LOG)}… (${s.length} chars)` :
-            s;
-        console.log(`[Classroom] ${text}`);
-    } catch (e) {
-        // ignorar
-    }
-};
-
-// Traza con etiqueta de rol para distinguir el flujo del servidor (host) y del cliente.
-const trace = (role, ...args) => {
-    try {
-        const parts = args.map(a => {
-            const s = typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch (e) { return String(a); } })();
-            return s.length > MAX_LOG ? `${s.slice(0, MAX_LOG)}… (${s.length} chars)` : s;
-        });
-        console.log(`[Classroom][${role}]`, ...parts);
-    } catch (e) {
-        // ignorar
-    }
-};
+const logDiag = () => {};
+const trace = () => {};
 
 class ClassroomController {
     constructor () {

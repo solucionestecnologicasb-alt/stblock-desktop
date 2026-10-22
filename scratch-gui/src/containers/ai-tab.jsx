@@ -10,6 +10,7 @@ import {autoCorrect} from '../lib/ai-block-autocorrect.js';
 import {verifyBlocks} from '../lib/ai-block-verifier.js';
 import {validate} from '../lib/ai-block-validator.js';
 import {getDetailedBlockInfo} from '../lib/ai-block-library';
+import {buildDeviceBoardContext} from '../lib/ai-device-context';
 import {TrainingEngine, extractOpcodes, categorizeOpcodes, descriptorToStructure, compressExamples} from '../lib/ai-training-engine';
 import {getSharedMessages, setSharedMessages, clearSharedMessages} from '../lib/ai-shared-state';
 
@@ -116,6 +117,124 @@ function extractClearExisting(content) {
     var json = extractJson(content);
     if (json && typeof json.clearExisting === 'boolean') return json.clearExisting;
     return undefined;
+}
+
+// ¿La IA pidió desbloquear el editor de código (modo device)?
+function extractFreeCode(content) {
+    var json = extractJson(content);
+    if (json && typeof json.freeCode === 'boolean') return json.freeCode;
+    return false;
+}
+
+// Extrae el documento de circuito (modo circuit) del campo "circuitDoc" o de un
+// bloque ```json con estructura de circuito Electronics Lab.
+function extractCircuitDoc(content) {
+    var json = extractJson(content);
+    if (json && json.circuitDoc && typeof json.circuitDoc === 'object') return json.circuitDoc;
+    if (json && json.circuit && Array.isArray(json.circuit.components)) return json;
+    if (json && Array.isArray(json.components)) {
+        return {schema: 'electronics-lab.universal.v1', circuit: {components: json.components, wires: json.wires || []}};
+    }
+    return null;
+}
+
+// Reduce un documento de circuito a un resumen compacto (sin pines ni
+// mediciones) para inyectarlo como contexto sin agotar la ventana del modelo.
+function compactCircuitDoc(doc) {
+    var circuit = (doc && doc.circuit) ? doc.circuit : {};
+    var rawComponents = Array.isArray(circuit.components) ? circuit.components : [];
+    var rawWires = Array.isArray(circuit.wires) ? circuit.wires : [];
+    var components = [];
+    for (var i = 0; i < rawComponents.length && i < 80; i++) {
+        var c = rawComponents[i];
+        var comp = {id: c.id, typeId: c.typeId};
+        if (c.name) comp.name = c.name;
+        if (c.position) comp.position = c.position;
+        var params = {};
+        var p = c.parameters || {};
+        for (var k in p) {
+            if (!Object.prototype.hasOwnProperty.call(p, k)) continue;
+            if (/measured/i.test(k)) continue;
+            params[k] = p[k];
+        }
+        if (Object.keys(params).length > 0) comp.parameters = params;
+        components.push(comp);
+    }
+    var wires = [];
+    for (var j = 0; j < rawWires.length && j < 120; j++) {
+        var w = rawWires[j];
+        wires.push({
+            id: w.id,
+            from: w.from,
+            to: w.to,
+            color: w.color
+        });
+    }
+    return {
+        schema: 'electronics-lab.universal.v1',
+        metadata: (doc && doc.metadata) || {name: 'Circuito actual'},
+        circuit: {components: components, wires: wires}
+    };
+}
+
+// Reconstruye, a partir del estado guardado en Redux (circuit3dData), un
+// documento universal. Puede venir como {data:{components,wires}, name} o ya
+// como documento universal completo.
+function circuitDataToDoc(state) {
+    if (!state) return null;
+    if (state.data && Array.isArray(state.data.components)) {
+        return {
+            schema: 'electronics-lab.universal.v1',
+            metadata: {name: state.name || 'Circuito actual'},
+            circuit: {components: state.data.components, wires: state.data.wires || []}
+        };
+    }
+    if (state.circuit && Array.isArray(state.circuit.components)) return state;
+    if (Array.isArray(state.components)) {
+        return {
+            schema: 'electronics-lab.universal.v1',
+            metadata: {name: 'Circuito actual'},
+            circuit: {components: state.components, wires: state.wires || []}
+        };
+    }
+    return null;
+}
+
+// Construye el contexto dependiente del modo que se adjunta al mensaje del
+// usuario (lectura: código actual, circuito actual, formas 3D actuales).
+// Devuelve un string, o una Promise<string> cuando hay que consultar un iframe.
+function buildModeContext(activeMode, props) {
+    if (activeMode === 'device') {
+        var parts = [];
+        var code = props.deviceCode || '';
+        if (code.trim()) {
+            parts.push('CÓDIGO ARDUINO ACTUAL EN EL EDITOR' +
+                (props.deviceCodeLocked ? ' (bloqueado, generado a partir de bloques)' : ' (editado por el usuario)') + ':');
+            parts.push('```cpp');
+            parts.push(code);
+            parts.push('```');
+        } else {
+            parts.push('CÓDIGO ARDUINO ACTUAL: (vacío).');
+        }
+        return parts.join('\n') + '\n---\n';
+    }
+    if (activeMode === 'circuit') {
+        var doc = circuitDataToDoc(props.circuit3dData);
+        if (doc) {
+            var compact = compactCircuitDoc(doc);
+            return 'CIRCUITO 3D ACTUAL (JSON editable; partí de acá si hay que modificar):\n```json\n' +
+                JSON.stringify(compact) + '\n```\n---\n';
+        }
+        return 'CIRCUITO 3D ACTUAL: (vacío).\n---\n';
+    }
+    if (activeMode === '3d') {
+        if (typeof props.onRequestSketchforgeShapes !== 'function') return '';
+        return Promise.resolve(props.onRequestSketchforgeShapes()).then(function (txt) {
+            if (txt && txt.trim()) return 'FORMAS 3D ACTUALES EN DISEÑO 3D:\n' + txt + '\n---\n';
+            return '';
+        }).catch(function () { return ''; });
+    }
+    return '';
 }
 
 var AiTab = function (props) {
@@ -325,14 +444,8 @@ var AiTab = function (props) {
 
         var sessionSum = compressSession(sessionRef.current);
         var activeMode = props.activeMode || 'blocks';
-        // Inject current workspace state for AI context (los bloques Scratch no
-        // aportan contexto útil en modo 3D, así que se omiten)
-        var workspaceContext = '';
-        if (activeMode !== '3d') {
-            try {
-                workspaceContext = readWorkspace(props.vm);
-            } catch (_e) {}
-        }
+        // Contexto de placa (nombre + bloques disponibles) para el modo Electrónica.
+        var boardContext = activeMode === 'device' ? buildDeviceBoardContext(props.deviceId) : '';
         // Handle DETALLE:opcode — expand to full block info
         var detailMatch = text.match(/DETALLE:(\w+)/);
         var detailInfo = '';
@@ -345,8 +458,21 @@ var AiTab = function (props) {
         var mentorMode = typeof window !== 'undefined' ? localStorage.getItem('ai_mentor_mode') === 'true' : false;
         var modeTag = mentorMode ? '[MODO MENTOR]' : '[MODO NORMAL]';
         var activeTag = '[MODO ACTIVO: ' + activeMode + ']';
-        var enhancedText = activeTag + '\n' + modeTag + '\n' + (workspaceContext ? workspaceContext + '\n---\n' : '') + detailInfo + text;
-        var askPromise = service.ask(enhancedText, sessionSum, mentorMode, activeMode);
+
+        var askPromise = Promise.resolve(buildModeContext(activeMode, props)).then(function (modeContext) {
+            // Inject current workspace state for AI context (los bloques Scratch no
+            // aportan contexto útil en modo 3D/circuito, así que se omiten)
+            var workspaceContext = '';
+            if (activeMode !== '3d' && activeMode !== 'circuit') {
+                try {
+                    workspaceContext = readWorkspace(props.vm);
+                } catch (_e) {}
+            }
+            var enhancedText = activeTag + '\n' + modeTag + '\n' +
+                (workspaceContext ? workspaceContext + '\n---\n' : '') +
+                (modeContext || '') + detailInfo + text;
+            return service.ask(enhancedText, sessionSum, mentorMode, activeMode, boardContext);
+        });
         askPromise.then(function (response) {
             var assIdx = msgIdx + 1;
             var cleanResponse = (response || '').trim();
@@ -422,12 +548,55 @@ var AiTab = function (props) {
                 }
                 setCreatingIndex(assIdx);
                 setCreateStatus({type: 'loading', message: 'Generando código Arduino...'});
+                var freeCode = extractFreeCode(cleanResponse);
                 if (props.onArduinoCodeGenerated) {
-                    props.onArduinoCodeGenerated(arduinoCode);
+                    props.onArduinoCodeGenerated(arduinoCode, {unlock: freeCode});
                 }
-                setCreateStatus({type: 'success', message: 'Código Arduino generado en el editor.'});
+                setCreateStatus({
+                    type: 'success',
+                    message: freeCode ?
+                        'Código Arduino generado y editor desbloqueado para editar.' :
+                        'Código Arduino generado en el editor.'
+                });
                 setCreatingIndex(null);
                 setTimeout(function () { setCreateStatus(null); }, 5000);
+                return;
+            }
+
+            if (activeMode === 'circuit') {
+                var circuitDoc = extractCircuitDoc(cleanResponse);
+                if (!circuitDoc) {
+                    setCreateStatus({type: 'error', message: 'La IA no devolvió un circuito válido. Reformulá la pregunta.'});
+                    setCreatingIndex(assIdx);
+                    setTimeout(function () { setCreateStatus(null); setCreatingIndex(null); }, 5000);
+                    return;
+                }
+                setCreatingIndex(assIdx);
+                setCreateStatus({type: 'loading', message: 'Aplicando circuito 3D...'});
+                var circuitResult = props.onCircuitGenerated ? props.onCircuitGenerated(circuitDoc) : null;
+                if (circuitResult && typeof circuitResult.then === 'function') {
+                    circuitResult.then(function (res) {
+                        if (res && res.ok) {
+                            setCreateStatus({type: 'success', message: 'Circuito aplicado (' + (res.count || 0) + ' componentes).'});
+                        } else {
+                            setCreateStatus({type: 'error', message: (res && res.error) || 'No se pudo aplicar el circuito.'});
+                        }
+                        setCreatingIndex(null);
+                        setTimeout(function () { setCreateStatus(null); }, 5000);
+                    }).catch(function () {
+                        setCreateStatus({type: 'error', message: 'Error al aplicar el circuito.'});
+                        setCreatingIndex(null);
+                        setTimeout(function () { setCreateStatus(null); }, 5000);
+                    });
+                } else if (circuitResult && circuitResult.ok) {
+                    setCreateStatus({type: 'success', message: 'Circuito aplicado (' + (circuitResult.count || 0) + ' componentes).'});
+                    setCreatingIndex(null);
+                    setTimeout(function () { setCreateStatus(null); }, 5000);
+                } else {
+                    setCreateStatus({type: 'error', message: (circuitResult && circuitResult.error) || 'No se pudo aplicar el circuito.'});
+                    setCreatingIndex(null);
+                    setTimeout(function () { setCreateStatus(null); }, 5000);
+                }
                 return;
             }
 
@@ -493,7 +662,9 @@ var AiTab = function (props) {
             setSending(false);
         });
     }, [getService, messages.length, startTyping, stopTyping, props.activeMode,
-        props.onPythonCodeGenerated, props.onArduinoCodeGenerated, props.onShapes3DGenerated]); // eslint-disable-line react-hooks/exhaustive-deps
+        props.onPythonCodeGenerated, props.onArduinoCodeGenerated, props.onShapes3DGenerated,
+        props.deviceId, props.deviceCode, props.deviceCodeLocked, props.circuit3dData,
+        props.onCircuitGenerated, props.onRequestSketchforgeShapes]); // eslint-disable-line react-hooks/exhaustive-deps
 
     var handleVerify = useCallback(function (msgIndex) {
         var service = getService();
@@ -866,10 +1037,16 @@ AiTab.propTypes = {
     onMentorGuidance: PropTypes.func,
     onActivateTab: PropTypes.func,
     reanalyzeTick: PropTypes.number,
-    activeMode: PropTypes.oneOf(['blocks', 'python', 'device', '3d']),
+    activeMode: PropTypes.oneOf(['blocks', 'python', 'device', 'circuit', '3d']),
     onPythonCodeGenerated: PropTypes.func,
     onArduinoCodeGenerated: PropTypes.func,
-    onShapes3DGenerated: PropTypes.func
+    onShapes3DGenerated: PropTypes.func,
+    onCircuitGenerated: PropTypes.func,
+    onRequestSketchforgeShapes: PropTypes.func,
+    deviceId: PropTypes.string,
+    deviceCode: PropTypes.string,
+    deviceCodeLocked: PropTypes.bool,
+    circuit3dData: PropTypes.object
 };
 
 export default AiTab;

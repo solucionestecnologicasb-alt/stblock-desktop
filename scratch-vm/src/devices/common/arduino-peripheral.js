@@ -15,6 +15,13 @@ const log = require('../../util/log');
 const SCAN_TIMEOUT = 15000;
 
 /**
+ * Cooldown after a failed Firmata handshake (ms).
+ * Prevents repeating the 7s handshake on every block/mode change when the
+ * board does not have Firmata firmware loaded.
+ */
+const FIRMATA_RETRY_COOLDOWN = 10000;
+
+/**
  * Arduino board configurations
  */
 const BOARD_CONFIGS = {
@@ -27,6 +34,13 @@ const BOARD_CONFIGS = {
     },
     arduinoNano: {
         name: 'Arduino Nano',
+        digitalPins: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+        analogPins: ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'],
+        pwmPins: [3, 5, 6, 9, 10, 11],
+        baudRate: 57600
+    },
+    arduinoLGT8F328P: {
+        name: 'Arduino Nano LGT8F328P',
         digitalPins: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
         analogPins: ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'],
         pwmPins: [3, 5, 6, 9, 10, 11],
@@ -69,7 +83,13 @@ const BOARD_CONFIGS = {
  */
 const FIRMWARE_SUPPORT = {
     arduinoUno:        {configKey: 'arduinoUno',        hexFile: 'arduinoUno.hex',        fqbn: 'arduino:avr:uno'},
-    arduinoNano:       {configKey: 'arduinoNano',       hexFile: 'arduinoNano.hex',       fqbn: 'arduino:avr:nano'},
+    arduinoNano:       {configKey: 'arduinoNano',       hexFile: 'arduinoNano.hex',       fqbn: 'arduino:avr:nano:cpu=atmega328old'},
+    // LGT8F328P is a Logic Green clone that runs at 32 MHz. The stock AVR
+    // core/Firmata hex (compiled for 16 MHz) produces garbled serial and never
+    // answers Firmata, so it needs its own firmware build. The upload itself
+    // still uses the old Nano bootloader protocol at 57600, which these boards
+    // ship with.
+    arduinoLGT8F328P:  {configKey: 'arduinoLGT8F328P',  hexFile: 'arduinoLGT8F328P.hex',  fqbn: 'arduino:avr:nano:cpu=atmega328old'},
     arduinoMega:       {configKey: 'arduinoMega',       hexFile: 'arduinoMega2560.hex',  fqbn: 'arduino:avr:mega'},
     arduinoMega2560:   {configKey: 'arduinoMega',       hexFile: 'arduinoMega2560.hex',  fqbn: 'arduino:avr:mega'},
     stbBoardV2:        {configKey: 'stbBoardV2',        hexFile: 'arduinoMega2560.hex',  fqbn: 'arduino:avr:mega'},
@@ -107,6 +127,11 @@ class ArduinoPeripheral {
 
         this._serial = new WebSerial();
         this._firmata = null;
+        this._firmataConnecting = null;
+        // Generation token used to discard in-flight handshakes after a
+        // disconnect or program-mode change.
+        this._firmataAttemptId = 0;
+        this._lastFirmataFailureAt = 0;
         this._connectionState = ConnectionState.DISCONNECTED;
         this._programMode = (this._runtime && typeof this._runtime.getProgramMode === 'function') ?
             (this._runtime.getProgramMode() || ProgramModeType.UPLOAD) :
@@ -125,6 +150,7 @@ class ArduinoPeripheral {
         // Pin caches for fast access
         this._digitalCache = {};
         this._analogCache = {};
+        this._pinModes = {};
 
         // Register this peripheral extension with runtime
         this._runtime.registerPeripheralExtension(extensionId, this);
@@ -204,40 +230,129 @@ class ArduinoPeripheral {
      * @returns {string}
      */
     getProgramMode () {
+        // The runtime is the source of truth: setDeviceProfile() updates it
+        // without notifying peripherals, so a stale local flag must not win.
         if (this._runtime && typeof this._runtime.getProgramMode === 'function') {
-            return this._runtime.getProgramMode() || 'upload';
+            const rtMode = this._runtime.getProgramMode();
+            if (rtMode) return rtMode;
         }
-        return this._programMode || 'upload';
+        return this._programMode || ProgramModeType.UPLOAD;
     }
 
     setProgramMode (mode) {
         this._programMode = mode;
 
-        if (mode === ProgramModeType.REALTIME && this.isConnected() && !this._firmata) {
-            // Check if we are using Tauri port
-            if (this._serial && this._serial._isTauriPort) {
-                this._firmata = new Firmata(this._serial);
-                this._setupFirmataHandlers();
-                this._firmata.queryVersion();
-            } else {
-                this._firmata = new Firmata();
-                this._setupCallbacks();
-                this._firmata.connect(this._serial).then(success => {
-                    if (success) {
-                        this._enableReporting();
-                        log.info('Firmata connected dynamically on program mode switch');
-                    } else {
-                        log.error('Failed to connect Firmata on program mode switch');
-                    }
-                });
+        if (this._runtime && typeof this._runtime.setProgramMode === 'function') {
+            if (this._runtime.getProgramMode() !== mode) {
+                this._runtime.setProgramMode(mode);
             }
-        } else if (mode === ProgramModeType.UPLOAD && this._firmata) {
-            // Clean up Firmata
-            if (typeof this._firmata.disconnect === 'function') {
-                this._firmata.disconnect();
-            }
-            this._firmata = null;
         }
+
+        if (mode === ProgramModeType.REALTIME && this.isConnected() && !this._firmata) {
+            this.ensureFirmata();
+        } else if (mode === ProgramModeType.UPLOAD) {
+            // A new upload session should be allowed to retry the handshake.
+            this._lastFirmataFailureAt = 0;
+            if (this._firmata) {
+                this._firmataAttemptId++;
+                if (typeof this._firmata.disconnect === 'function') {
+                    this._firmata.disconnect();
+                }
+                this._firmata = null;
+            }
+        }
+    }
+
+    /**
+     * Ensure Firmata connection is initialized and active
+     * @returns {Promise<boolean>}
+     */
+    async ensureFirmata () {
+        if (this._firmata && this._firmata.isConnected()) {
+            return true;
+        }
+        if (!this.isConnected() || !this._serial) {
+            return false;
+        }
+
+        // Firmata is only used in realtime mode. In upload/device mode the
+        // serial link is raw, so blocks must never start a Firmata handshake.
+        if (this.getProgramMode() !== ProgramModeType.REALTIME) {
+            return false;
+        }
+
+        if (this._firmataConnecting) {
+            return this._firmataConnecting;
+        }
+
+        // Do not hammer the board with 7s handshakes when it has no firmware.
+        if (this._lastFirmataFailureAt &&
+            (Date.now() - this._lastFirmataFailureAt) < FIRMATA_RETRY_COOLDOWN) {
+            return false;
+        }
+
+        const attemptId = ++this._firmataAttemptId;
+
+        this._firmataConnecting = (async () => {
+            let firmata = null;
+            try {
+                log.info('[ArduinoPeripheral] Initializing Firmata connection...');
+                const targetBaud = (this._boardConfig && this._boardConfig.baudRate) || 57600;
+                if (this._serial._baudRate !== targetBaud && typeof this._serial.setBaudRate === 'function') {
+                    await this._serial.setBaudRate(targetBaud);
+                }
+
+                firmata = new Firmata();
+                this._firmata = firmata;
+                this._setupCallbacks();
+                const connected = await firmata.connect(this._serial);
+
+                // The port was closed or the attempt superseded while
+                // handshaking: discard the result without touching state.
+                if (attemptId !== this._firmataAttemptId) {
+                    firmata.disconnect();
+                    return false;
+                }
+
+                if (connected) {
+                    this._programMode = ProgramModeType.REALTIME;
+                    this._lastFirmataFailureAt = 0;
+                    await this._enableReporting();
+                    log.info('[ArduinoPeripheral] Firmata connected successfully');
+                    return true;
+                }
+
+                if (this._firmata === firmata) {
+                    this._firmata = null;
+                }
+                firmata.disconnect();
+
+                this._lastFirmataFailureAt = Date.now();
+                log.warn('[ArduinoPeripheral] Firmata handshake did not respond');
+                this._runtime.emit('FIRMATA_NOT_LOADED', {
+                    port: this._connectedPeripheralId,
+                    deviceName: this._connectedPeripheralName
+                });
+                return false;
+            } catch (err) {
+                if (this._firmata === firmata) {
+                    this._firmata = null;
+                }
+                if (firmata) {
+                    firmata.disconnect();
+                }
+                if (attemptId !== this._firmataAttemptId) {
+                    return false;
+                }
+                this._lastFirmataFailureAt = Date.now();
+                log.error('[ArduinoPeripheral] Error ensuring Firmata:', err);
+                return false;
+            } finally {
+                this._firmataConnecting = null;
+            }
+        })();
+
+        return this._firmataConnecting;
     }
 
     /**
@@ -465,7 +580,8 @@ class ArduinoPeripheral {
                 return;
             }
 
-            if (this.getProgramMode() !== ProgramModeType.REALTIME) {
+            const isRealtime = this.getProgramMode() === ProgramModeType.REALTIME;
+            if (!isRealtime) {
                 // Success! (No Firmata needed for upload mode)
                 this._connectionState = ConnectionState.CONNECTED;
                 this._connectedPeripheralId = peripheralId;
@@ -476,28 +592,32 @@ class ArduinoPeripheral {
                 return;
             }
 
-            // Initialize Firmata
-            this._firmata = new Firmata(this._serial);
+            // Initialize Firmata for realtime mode
+            this._firmata = new Firmata();
+            this._setupCallbacks();
+
+            const firmataConnected = await this._firmata.connect(this._serial);
+
+            if (!firmataConnected) {
+                await this._serial.disconnect();
+                this._connectionState = ConnectionState.ERROR;
+                this._runtime.emit(this._runtime.constructor.PERIPHERAL_REQUEST_ERROR, {
+                    message: 'Error al conectar con Firmata. Asegúrate de que el firmware Firmata esté cargado.',
+                    extensionId: this._extensionId
+                });
+                return;
+            }
+
+            this._connectionState = ConnectionState.CONNECTED;
             this._connectedPeripheralId = peripheralId;
             this._connectedPeripheralName = name;
 
-            // Set up Firmata event handlers
-            this._setupFirmataHandlers();
+            // Enable digital and analog reporting
+            await this._enableReporting();
 
-            // Query firmware version to confirm connection
-            this._firmata.queryVersion();
-
-            // Set timeout for Firmata response
-            this._connectTimeout = setTimeout(() => {
-                if (this._connectionState === ConnectionState.CONNECTING) {
-                    this._connectionState = ConnectionState.ERROR;
-                    this._runtime.emit(this._runtime.constructor.PERIPHERAL_REQUEST_ERROR, {
-                        message: 'Timeout esperando respuesta de Firmata. Asegúrate de que el firmware Firmata esté cargado.',
-                        extensionId: this._extensionId
-                    });
-                    this.disconnect();
-                }
-            }, FIRMATA_TIMEOUT);
+            // Emit connected event
+            this._runtime.emit(this._runtime.constructor.PERIPHERAL_CONNECTED);
+            log.info(`Connected to ${name} in realtime mode with Firmata (Tauri)`);
 
         } catch (error) {
             this._connectionState = ConnectionState.ERROR;
@@ -588,6 +708,13 @@ class ArduinoPeripheral {
      * @returns {Promise}
      */
     async disconnect () {
+        const wasConnected = this._connectionState !== ConnectionState.DISCONNECTED ||
+            (this._serial && this._serial.isConnected());
+
+        // Invalidate any in-flight handshake before closing the port.
+        this._firmataAttemptId++;
+        this._connectionState = ConnectionState.DISCONNECTED;
+
         if (this._firmata) {
             this._firmata.disconnect();
             this._firmata = null;
@@ -596,31 +723,34 @@ class ArduinoPeripheral {
         if (this._serial) {
             await this._serial.disconnect();
         }
-        this._connectionState = ConnectionState.DISCONNECTED;
+
         this._connectedPeripheralId = null;
         this._connectedPeripheralName = null;
         this._digitalCache = {};
         this._analogCache = {};
+        this._pinModes = {};
+        this._lastFirmataFailureAt = 0;
 
-        this._runtime.emit(this._runtime.constructor.PERIPHERAL_DISCONNECTED);
+        if (wasConnected) {
+            this._runtime.emit(this._runtime.constructor.PERIPHERAL_DISCONNECTED);
+        }
     }
 
     /**
      * Upload standard Firmata firmware to the board
      * @returns {Promise<boolean>}
      */
-    async uploadFirmware () {
+    async uploadFirmware (customPort = null) {
         log.info(`[ArduinoPeripheral] Starting firmware upload for ${this._boardType}...`);
 
-        if (!this._connectedPeripheralId) {
-            log.warn('Cannot upload firmware: no device connected');
+        let portName = customPort || this._connectedPeripheralId;
+        if (!portName) {
+            log.warn('Cannot upload firmware: no device connected or port specified');
             return false;
         }
 
-        // Clean port name (strip prefix 'serial_' and extract from parentheses if needed)
-        let portName = this._connectedPeripheralId;
-        if (this._availablePeripherals[this._connectedPeripheralId] && this._availablePeripherals[this._connectedPeripheralId].portName) {
-            portName = this._availablePeripherals[this._connectedPeripheralId].portName;
+        if (this._availablePeripherals[portName] && this._availablePeripherals[portName].portName) {
+            portName = this._availablePeripherals[portName].portName;
         }
         if (portName && typeof portName === 'string') {
             portName = portName.replace(/^serial_/, '');
@@ -631,11 +761,14 @@ class ArduinoPeripheral {
         }
 
         const boardType = this._boardType;
-        const savedId = this._connectedPeripheralId;
+        const savedId = this._connectedPeripheralId || customPort;
         const savedName = this._connectedPeripheralName;
         const savedAvailable = {...this._availablePeripherals};
 
-        // Disconnect first to free the serial port
+        // Always stop the serial link before flashing. The connection state
+        // can be ERROR while the native handle and its read loop are still
+        // alive; leaving it open makes avrdude fail with "Port not found"
+        // and leaves a zombie poller hammering the released handle.
         await this.disconnect();
 
         // Wait for the CH340/serial driver to fully release the port on Windows
@@ -651,9 +784,15 @@ class ArduinoPeripheral {
             const fwInfo = FIRMWARE_SUPPORT[boardType];
             const hexFile = fwInfo ? fwInfo.hexFile : `${boardType}.hex`;
 
-            const response = await fetch(`static/firmwares/${hexFile}`);
+            let response;
+            try {
+                response = await fetch(`static/firmwares/${hexFile}`);
+                if (!response.ok) throw new Error('Not found');
+            } catch (e) {
+                response = await fetch(`/static/firmwares/${hexFile}`);
+            }
             if (!response.ok) {
-                throw new Error(`No se pudo obtener el firmware: ${response.statusText}`);
+                throw new Error(`No se pudo obtener el firmware ${hexFile}: ${response.statusText}`);
             }
 
             const buffer = await response.arrayBuffer();
@@ -678,11 +817,12 @@ class ArduinoPeripheral {
                         message: 'Firmware cargado con éxito!'
                     });
 
-                    // Wait 1.5s for board boot and reconnect automatically
+                    // Wait 2s for board boot and reconnect automatically in realtime mode
                     setTimeout(() => {
                         this._availablePeripherals = savedAvailable;
+                        this.setProgramMode(ProgramModeType.REALTIME);
                         this.connect(savedId);
-                    }, 1500);
+                    }, 2000);
 
                     return true;
                 } else {
@@ -727,12 +867,16 @@ class ArduinoPeripheral {
      * @param {string} mode - 'INPUT', 'OUTPUT', 'INPUT_PULLUP', 'PWM', 'SERVO'
      */
     async setPinMode (pin, mode) {
-        if (!this.isConnected() || !this._firmata) return;
+        if (!this.isConnected()) return;
+        if (!this._firmata) {
+            const ready = await this.ensureFirmata();
+            if (!ready || !this._firmata) return;
+        }
 
         const pinNum = this._parsePin(pin);
         let firmataMode;
 
-        switch (mode.toUpperCase()) {
+        switch (String(mode).toUpperCase()) {
         case 'INPUT':
             firmataMode = FIRMATA.PIN_MODE.INPUT;
             break;
@@ -752,6 +896,7 @@ class ArduinoPeripheral {
             firmataMode = FIRMATA.PIN_MODE.INPUT;
         }
 
+        this._pinModes[pinNum] = firmataMode;
         await this._firmata.setPinMode(pinNum, firmataMode);
     }
 
@@ -761,10 +906,20 @@ class ArduinoPeripheral {
      * @param {string|number} level - 'HIGH', 'LOW', 1, or 0
      */
     async digitalWrite (pin, level) {
-        if (!this.isConnected() || !this._firmata) return;
+        if (!this.isConnected()) return;
+        if (!this._firmata) {
+            const ready = await this.ensureFirmata();
+            if (!ready || !this._firmata) return;
+        }
 
         const pinNum = this._parsePin(pin);
         const value = this._parseLevel(level);
+
+        // Auto-configure pin as OUTPUT if not explicitly set
+        if (this._pinModes[pinNum] !== FIRMATA.PIN_MODE.OUTPUT) {
+            await this._firmata.setPinMode(pinNum, FIRMATA.PIN_MODE.OUTPUT);
+            this._pinModes[pinNum] = FIRMATA.PIN_MODE.OUTPUT;
+        }
 
         this._digitalCache[pinNum] = value;
         await this._firmata.digitalWrite(pinNum, value);
@@ -776,7 +931,10 @@ class ArduinoPeripheral {
      * @returns {number} 0 or 1
      */
     digitalRead (pin) {
-        if (!this._firmata) return 0;
+        if (!this._firmata) {
+            if (this.isConnected()) this.ensureFirmata();
+            return 0;
+        }
         const pinNum = this._parsePin(pin);
         return this._firmata.digitalRead(pinNum);
     }
@@ -787,11 +945,19 @@ class ArduinoPeripheral {
      * @param {number} value - 0-255
      */
     async analogWrite (pin, value) {
-        if (!this.isConnected() || !this._firmata) return;
+        if (!this.isConnected()) return;
+        if (!this._firmata) {
+            const ready = await this.ensureFirmata();
+            if (!ready || !this._firmata) return;
+        }
 
         const pinNum = this._parsePin(pin);
-        value = Math.max(0, Math.min(255, Math.round(value)));
+        if (this._pinModes[pinNum] !== FIRMATA.PIN_MODE.PWM) {
+            await this._firmata.setPinMode(pinNum, FIRMATA.PIN_MODE.PWM);
+            this._pinModes[pinNum] = FIRMATA.PIN_MODE.PWM;
+        }
 
+        value = Math.max(0, Math.min(255, Math.round(value)));
         await this._firmata.analogWrite(pinNum, value);
     }
 
@@ -801,7 +967,10 @@ class ArduinoPeripheral {
      * @returns {number} 0-1023
      */
     analogRead (pin) {
-        if (!this._firmata) return 0;
+        if (!this._firmata) {
+            if (this.isConnected()) this.ensureFirmata();
+            return 0;
+        }
         const pinNum = this._parseAnalogPin(pin);
         return this._firmata.analogRead(pinNum);
     }
@@ -812,11 +981,19 @@ class ArduinoPeripheral {
      * @param {number} angle - 0-180 degrees
      */
     async servoWrite (pin, angle) {
-        if (!this.isConnected() || !this._firmata) return;
+        if (!this.isConnected()) return;
+        if (!this._firmata) {
+            const ready = await this.ensureFirmata();
+            if (!ready || !this._firmata) return;
+        }
 
         const pinNum = this._parsePin(pin);
-        angle = Math.max(0, Math.min(180, Math.round(angle)));
+        if (this._pinModes[pinNum] !== FIRMATA.PIN_MODE.SERVO) {
+            await this._firmata.setPinMode(pinNum, FIRMATA.PIN_MODE.SERVO);
+            this._pinModes[pinNum] = FIRMATA.PIN_MODE.SERVO;
+        }
 
+        angle = Math.max(0, Math.min(180, Math.round(angle)));
         await this._firmata.servoWrite(pinNum, angle);
     }
 
@@ -882,9 +1059,21 @@ class ArduinoPeripheral {
             this._analogCache[pin] = value;
         });
 
+        if (typeof this._firmata.onString === 'function') {
+            this._firmata.onString(data => {
+                this._runtime.emit('SERIAL_DATA_RECEIVED', {
+                    extensionId: this._extensionId,
+                    data: data
+                });
+            });
+        }
+
         this._firmata.onDisconnect(() => {
-            this._connectionState = ConnectionState.DISCONNECTED;
-            this._runtime.emit(this._runtime.constructor.PERIPHERAL_DISCONNECTED);
+            // Disposing the Firmata client does not necessarily mean the
+            // physical port is gone (e.g. switching to upload mode or a
+            // failed handshake). Physical disconnects are reported by the
+            // serial port's onDisconnect handler below.
+            log.info('[ArduinoPeripheral] Firmata connection closed');
         });
 
         this._firmata.onError(error => {
@@ -901,6 +1090,10 @@ class ArduinoPeripheral {
     }
 
     setBaudrate (baudrate) {
+        if (this.getProgramMode() === ProgramModeType.REALTIME || (this._firmata && this._firmata.isConnected())) {
+            log.info(`[ArduinoPeripheral] Keeping 57600 baud for Firmata (ignoring change to ${baudrate})`);
+            return;
+        }
         log.info(`[ArduinoPeripheral] Changing baud rate to ${baudrate}`);
         if (this._serial) {
             this._serial.setBaudRate(baudrate);
@@ -930,60 +1123,10 @@ class ArduinoPeripheral {
     }
 
     /**
-     * Set up Firmata event handlers (for Tauri mode)
+     * Set up Firmata event handlers (delegates to unified _setupCallbacks)
      */
     _setupFirmataHandlers () {
-        if (!this._firmata) return;
-
-        this._firmata.on('ready', () => {
-            if (this._connectTimeout) {
-                clearTimeout(this._connectTimeout);
-                this._connectTimeout = null;
-            }
-            this._connectionState = ConnectionState.CONNECTED;
-            this._runtime.emit(this._runtime.constructor.PERIPHERAL_CONNECTED);
-            log.info('Firmata ready');
-        });
-
-        this._firmata.on('digital-read', data => {
-            if (data && typeof data.pin === 'number') {
-                this._digitalCache[data.pin] = data.value;
-            }
-        });
-
-        this._firmata.on('analog-read', data => {
-            if (data && typeof data.pin === 'number') {
-                this._analogCache[data.pin] = data.value;
-            }
-        });
-
-        this._firmata.on('string', data => {
-            // Serial data received from Arduino (via Serial.print)
-            this._runtime.emit('SERIAL_DATA_RECEIVED', {
-                extensionId: this._extensionId,
-                data: data
-            });
-        });
-
-        this._firmata.on('close', () => {
-            this._connectionState = ConnectionState.DISCONNECTED;
-            this._runtime.emit(this._runtime.constructor.PERIPHERAL_DISCONNECTED);
-        });
-
-        this._firmata.on('error', error => {
-            log.error('Firmata error:', error);
-        });
-
-        // Also listen for raw serial data
-        if (this._serial && this._serial.onData) {
-            this._serial.onData(data => {
-                // Emit raw data for terminal
-                this._runtime.emit('SERIAL_DATA_RECEIVED', {
-                    extensionId: this._extensionId,
-                    data: this._decodeSerialData(data)
-                });
-            });
-        }
+        this._setupCallbacks();
     }
 
     /**

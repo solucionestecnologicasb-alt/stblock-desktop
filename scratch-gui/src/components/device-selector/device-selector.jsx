@@ -56,6 +56,10 @@ const DeviceSelector = ({
     });
 
     const handleSelect = (device) => {
+        if (localSelectedDevice?.deviceId === device.deviceId) {
+            onDeviceSelected(device);
+            return;
+        }
         setLocalSelectedDevice(device);
     };
 
@@ -74,6 +78,7 @@ const DeviceSelector = ({
     const renderDeviceCard = (device) => (
         <button
             key={device.deviceId}
+            type="button"
             className={classNames(styles.deviceCard, {
                 [styles.selected]: localSelectedDevice?.deviceId === device.deviceId
             })}

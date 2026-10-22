@@ -78,8 +78,32 @@ $fade-out-distance: 100px;
     }
 }
 
+:global(.is-mobile-app) .wrapper,
+:global(body.is-mobile-app) .wrapper,
+@media only screen and (max-width: 768px) {
+    .wrapper {
+        width: 60px !important;
+        min-width: 60px !important;
+        max-width: 60px !important;
+    }
+
+    .list-item {
+        width: 44px !important;
+        height: 44px !important;
+        margin: 4px auto !important;
+    }
+
+    .new-buttons {
+        padding: 0.35rem 0 !important;
+    }
+
+    .new-buttons > button + button {
+        margin-top: 0.35rem !important;
+    }
+}
 
 .list-item.placeholder {
     background: white;
     filter: opacity(15%) brightness(0%);
 }
+

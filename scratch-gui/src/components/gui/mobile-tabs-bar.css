@@ -1,0 +1,128 @@
+.mobile-tabs-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: #ffffff;
+    border-bottom: 1.5px solid #e2e8f0;
+    padding: 2px clamp(6px, 1.8vw, 10px);
+    height: clamp(36px, 5.2vh, 44px);
+    min-height: clamp(36px, 5.2vh, 44px);
+    box-sizing: border-box;
+    width: 100%;
+    z-index: 100;
+    user-select: none;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: clamp(4px, 1vw, 8px);
+    flex-shrink: 0;
+    scrollbar-width: none;
+}
+
+.mobile-tabs-container::-webkit-scrollbar {
+    display: none;
+}
+
+.mobile-tabs-list {
+    display: flex;
+    align-items: center;
+    gap: clamp(3px, 1vw, 6px);
+    flex-shrink: 0;
+}
+
+.mobile-tab-button {
+    display: flex;
+    align-items: center;
+    gap: clamp(3px, 0.8vw, 6px);
+    padding: 3px clamp(6px, 1.8vw, 12px);
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #64748b;
+    font-size: clamp(0.78rem, 2.4vw, 0.9rem);
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    height: clamp(28px, 4.4vh, 36px);
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.mobile-tab-button:active {
+    background-color: #f1f5f9;
+}
+
+.mobile-tab-button.active {
+    background-color: #e0f2fe;
+    color: #0284c7;
+    border-color: #bae6fd;
+}
+
+.tab-icon {
+    font-size: clamp(0.95rem, 2.5vw, 1.12rem);
+    display: inline-flex;
+    align-items: center;
+}
+
+.tab-label {
+    letter-spacing: 0.15px;
+    font-weight: 700;
+}
+
+/* Marca translúcida de personaje o fondo activo en una esquina */
+.active-target-badge {
+    display: flex;
+    align-items: center;
+    gap: clamp(3px, 0.8vw, 6px);
+    padding: 2px clamp(5px, 1.2vw, 8px);
+    height: clamp(26px, 3.8vh, 32px);
+    background-color: rgba(241, 245, 249, 0.9);
+    border: 1px solid #cbd5e1;
+    border-radius: 20px;
+    font-size: clamp(0.68rem, 1.8vw, 0.78rem);
+    font-weight: 700;
+    color: #334155;
+    white-space: nowrap;
+    max-width: clamp(75px, 20vw, 130px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    backdrop-filter: blur(4px);
+    margin-left: auto;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+.active-target-thumb {
+    width: clamp(16px, 4vw, 22px);
+    height: clamp(16px, 4vw, 22px);
+    object-fit: contain;
+    border-radius: 4px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.active-target-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (orientation: landscape) and (max-height: 550px) {
+    .mobile-tabs-container {
+        height: clamp(32px, 8vh, 36px);
+        min-height: clamp(32px, 8vh, 36px);
+        padding: 2px 8px;
+    }
+
+    .mobile-tab-button {
+        height: clamp(26px, 7vh, 30px);
+        font-size: clamp(0.72rem, 2vw, 0.82rem);
+        padding: 2px clamp(6px, 1.5vw, 10px);
+    }
+
+    .active-target-badge {
+        height: clamp(24px, 6.5vh, 28px);
+        font-size: 0.68rem;
+    }
+}

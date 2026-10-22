@@ -40,6 +40,20 @@ nul
 
 # Local one-off scripts
 _replace_mega.js
+
+# Instaladores y salidas de compilacion (se publican en GitHub Releases, no en el repo)
+dist-android/
+dist-linux/
+dist-chromebook/
+scratch-gui/build-android/
+*.aab
+*.apk
+*.deb
+
+# Firmas/keystores locales (nunca versionar)
+keystore/
+*.keystore
+*.jks
 # Local Arduino/toolchain installs
 /tools/Arduino/
 /src-tauri/tools/Arduino/

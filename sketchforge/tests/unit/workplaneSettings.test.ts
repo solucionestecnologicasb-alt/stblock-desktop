@@ -1,13 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { WorkplaneWorkspaceSettings } from "@/types/sketchforge";
 import { formatMeasurementNumber, lengthDisplayUnit, millimetersToDisplay, normalizeScaleForUnits, parseMeasurementInput, scaleOptionsForUnits } from "@/lib/measurementUnits";
-import { DEFAULT_SNAP_GRID, DEFAULT_WORKPLANE_WORKSPACE, normalizeSnapGrid, normalizeWorkspaceSettings, workplaneSettingsFingerprint, workspaceHydrationSyncDecision } from "@/lib/workplaneSettings";
+import { DEFAULT_SNAP_GRID, DEFAULT_WORKPLANE_WORKSPACE, normalizeSnapGrid, normalizeWorkspaceSettings, snapGridStep, workplaneSettingsFingerprint, workspaceHydrationSyncDecision } from "@/lib/workplaneSettings";
 
 describe("workplane settings helpers", () => {
   it("accepts known snap grid values and falls back for unknown values", () => {
     expect(normalizeSnapGrid("0.5 mm")).toBe("0.5 mm");
     expect(normalizeSnapGrid("Huge")).toBe(DEFAULT_SNAP_GRID);
     expect(normalizeSnapGrid(null, "Desactivado")).toBe("Desactivado");
+  });
+
+  it("maps the snap grid to millimeters", () => {
+    expect(snapGridStep("1.0 mm")).toBe(1);
+    expect(snapGridStep("5.0 mm")).toBe(5);
+    expect(snapGridStep("0.25 mm")).toBe(0.25);
+    expect(snapGridStep("Ladrillo")).toBe(8);
+    expect(snapGridStep("Desactivado")).toBe(0);
   });
 
   it("normalizes workspace settings from partial or invalid data", () => {

@@ -47,14 +47,12 @@ var main = new function() {
 
       // Recibir código C++ de STBlock (actualización)
       if (event.data.type === 'stblock-update-code') {
-        console.log('[GearsBot] Código actualizado desde STBlock:', event.data.language);
         self.stblockCode = event.data.code;
 
         // Actualizar boardType si cambió
         var newBoardType = event.data.boardType;
         if (newBoardType && newBoardType !== self.stblockBoardType) {
           self.stblockBoardType = newBoardType;
-          console.log('[GearsBot] Tarjeta cambiada a:', newBoardType);
 
           // Actualizar robot.options.boardType para que simPanel lo use
           if (robot && robot.options) {
@@ -73,13 +71,11 @@ var main = new function() {
         // Guardar en filesManager para que simPanel lo use
         if (event.data.code) {
           filesManager.files['stblock.cpp'] = event.data.code;
-          console.log('[GearsBot] Código C++ guardado (' + event.data.code.length + ' chars)');
         }
       }
 
       // Ejecutar código desde STBlock (cuando se presiona play en STBlock)
       if (event.data.type === 'stblock-execute') {
-        console.log('[GearsBot] Comando EJECUTAR recibido de STBlock');
         self.stblockCode = event.data.code;
 
         // Actualizar boardType
@@ -93,7 +89,6 @@ var main = new function() {
 
         if (event.data.code) {
           filesManager.files['stblock.cpp'] = event.data.code;
-          console.log('[GearsBot] Código C++ guardado y ejecutando... (tarjeta: ' + self.stblockBoardType + ')');
 
           // Ejecutar simulación
           setTimeout(function() {
@@ -104,13 +99,11 @@ var main = new function() {
 
       // Detener simulación desde STBlock
       if (event.data.type === 'stblock-stop') {
-        console.log('[GearsBot] Comando DETENER recibido de STBlock');
         simPanel.stopSim();
       }
 
       // Resetear simulación desde STBlock
       if (event.data.type === 'stblock-reset') {
-        console.log('[GearsBot] Comando RESET recibido de STBlock');
         simPanel.resetSim();
       }
     });
@@ -118,10 +111,7 @@ var main = new function() {
     // Notificar a STBlock que GearsBot está listo
     if (window.parent !== window) {
       window.parent.postMessage({ type: 'gearbot-ready' }, '*');
-      console.log('[GearsBot] Notificado a STBlock que está listo');
     }
-
-    console.log('[GearsBot] STBlock listener inicializado');
   };
 
   // Update text already in html
@@ -480,7 +470,6 @@ var main = new function() {
         try {
           var backup = localStorage.getItem('stblock_active_robot_data') || localStorage.getItem('stblock_current_editing_robot');
           if (backup) {
-            console.log('[MAIN] Robot cargado exitosamente desde localStorage');
             self.loadRobot(backup);
             return;
           }
@@ -537,7 +526,6 @@ var main = new function() {
     let $dialog = dialog('About', $body, $buttons);
 
     $buttons.click(function(){
-      console.log('f')
       $dialog.close();
     });
   };
@@ -760,8 +748,6 @@ var main = new function() {
 
   // Open robot editor - opens in new window
   this.openRobotEditorWindow = function(editorPath) {
-    console.log('[STBLOCK] Solicitando abrir editor de robots:', editorPath);
-
     // Send message to parent (STBlock) to open the editor window using Tauri API
     if (window.parent !== window) {
       window.parent.postMessage({

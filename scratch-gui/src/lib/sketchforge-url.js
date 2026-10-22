@@ -1,17 +1,14 @@
 // URL de SketchForge 3D embebido en la pestaña "Diseño 3D" de STBlock.
-// En el exe nativo (Tauri) se sirve el static export empaquetado en /sketchforge/.
-// En dev se usa el Next dev server de SketchForge en :3000.
-// Sin `?editor=1`: aterriza en el home (dashboard). `?theme=light` fuerza tema claro.
-function isLocalDev() {
+// Por defecto carga el static export empaquetado en /sketchforge/ (mismo origen que STBlock).
+// Para desarrollo en caliente en el Next dev server (:3000), usar ?dev_sketchforge=1 o localStorage.setItem('stblock_use_dev_sketchforge', 'true').
+function shouldUseDevServer() {
   if (typeof window === 'undefined') return false;
-  // Si estamos en el puerto de desarrollo de scratch-gui (8601) o en el puerto del Next dev server (3000)
-  return (
-    window.location.hostname === 'localhost' || 
-    window.location.hostname === '127.0.0.1'
-  ) && (
-    window.location.port === '8601' || 
-    window.location.port === '3000'
-  );
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dev_sketchforge') === 'true' || params.get('dev_sketchforge') === '1') return true;
+    if (window.localStorage && window.localStorage.getItem('stblock_use_dev_sketchforge') === 'true') return true;
+  } catch (_) {}
+  return false;
 }
 
 function getEditorBaseUrl() {
@@ -23,9 +20,20 @@ function getEditorBaseUrl() {
       return src.substring(0, src.lastIndexOf('/') + 1);
     }
   }
-  return './';
+  return (typeof window !== 'undefined' && window.location.origin) ? (window.location.origin + '/') : './';
 }
 
-export const STBLOCK_SKETCHFORGE_URL = isLocalDev()
-  ? 'http://localhost:3000/?theme=light'
-  : getEditorBaseUrl() + 'sketchforge/?theme=light';
+import {isMobileDevice} from './device-detector';
+
+function getInitialSketchforgeUrl() {
+  let base = shouldUseDevServer()
+    ? 'http://localhost:3000/?theme=light'
+    : getEditorBaseUrl() + 'sketchforge/index.html?theme=light';
+  if (isMobileDevice()) {
+    base += (base.includes('?') ? '&' : '?') + 'mobile=1';
+  }
+  return base;
+}
+
+export const STBLOCK_SKETCHFORGE_URL = getInitialSketchforgeUrl();
+

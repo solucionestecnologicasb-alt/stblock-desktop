@@ -17,6 +17,35 @@ if (typeof window !== 'undefined') {
         return origGetContext.call(this, type, attrs);
     };
 
+    const originalLog = console.log;
+    console.log = function (...args) {
+        const msg = args.map(a => (a && a.toString ? a.toString() : String(a))).join(' ');
+        if (msg.includes('Download the React DevTools') ||
+            msg.includes('react-devtools') ||
+            msg.includes('[webpack-dev-server]') ||
+            msg.includes('[PythonEditor]') ||
+            msg.includes('[DEBUG-STB]') ||
+            msg.includes('[WorkspaceMode]') ||
+            msg.includes('[Flynt]')) {
+            return;
+        }
+        originalLog.apply(console, args);
+    };
+
+    const originalInfo = console.info;
+    console.info = function (...args) {
+        const msg = args.map(a => (a && a.toString ? a.toString() : String(a))).join(' ');
+        if (msg.includes('Download the React DevTools') ||
+            msg.includes('react-devtools') ||
+            msg.includes('[webpack-dev-server]') ||
+            msg.includes('[PythonEditor]') ||
+            msg.includes('[WorkspaceMode]') ||
+            msg.includes('[Flynt]')) {
+            return;
+        }
+        originalInfo.apply(console, args);
+    };
+
     const originalWarn = console.warn;
     console.warn = function (...args) {
         const msg = args.map(a => (a && a.toString ? a.toString() : String(a))).join(' ');
@@ -27,7 +56,10 @@ if (typeof window !== 'undefined') {
             msg.includes('getImageData') ||
             msg.includes('AudioContext') ||
             msg.includes('React Intl') ||
-            msg.includes('Missing message')) {
+            msg.includes('Missing message') ||
+            msg.includes('Ignoring non-existent input') ||
+            msg.includes('[PythonEditor]') ||
+            msg.includes('[webpack-dev-server]')) {
             return;
         }
         originalWarn.apply(console, args);
@@ -44,6 +76,20 @@ if (typeof window !== 'undefined') {
         }
         originalError.apply(console, args);
     };
+
+    // Interceptar fetch-worker en entornos locales / WebView para evitar que falle con 'Unexpected token <'
+    if (typeof window !== 'undefined' && typeof window.Worker === 'function') {
+        const NativeWorker = window.Worker;
+        window.Worker = function (scriptURL, options) {
+            const urlStr = String(scriptURL || '');
+            if (urlStr.includes('fetch-worker')) {
+                // scratch-storage maneja este error en try/catch y cambia a fetch() nativo en main thread
+                throw new Error('fetch-worker not supported in local offline WebView');
+            }
+            return new NativeWorker(scriptURL, options);
+        };
+        window.Worker.prototype = NativeWorker.prototype;
+    }
 
     // Prevenir que errores asíncronos de dialog.confirm bloqueen la UI en WebView2 / Tauri
     if (typeof window.confirm === 'function') {

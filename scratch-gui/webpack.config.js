@@ -1,6 +1,19 @@
 const path = require('path');
+const fs = require('fs');
 const https = require('https');
 const webpack = require('webpack');
+
+if (process.argv.includes('production') || process.argv.some(arg => typeof arg === 'string' && arg.includes('production'))) {
+    process.env.NODE_ENV = 'production';
+}
+
+let scratchStorageChunks = '';
+try {
+    scratchStorageChunks = path.join(
+        path.dirname(require.resolve('scratch-storage/package.json', { paths: [__dirname] })),
+        'dist/web/chunks'
+    );
+} catch (_) {}
 
 // Plugins
 const CopyWebpackPlugin = require('copy-webpack-plugin');
@@ -85,7 +98,12 @@ const baseConfig = new ScratchWebpackConfigBuilder(
                 context: 'node_modules/scratch-vm/dist/web',
                 from: 'extension-worker.{js,js.map}',
                 noErrorOnMissing: true
-            }
+            },
+            ...(scratchStorageChunks ? [{
+                from: scratchStorageChunks,
+                to: 'chunks',
+                noErrorOnMissing: true
+            }] : [])
         ]
     }))
 
@@ -133,7 +151,8 @@ const buildConfig = baseConfig.clone()
         // memoria todos los source maps del bundle (Scratch + Blockly),
         // lo que dispara el consumo del dev server a varios GB. 'eval-cheap-module-
         // source-map' conserva buen trazado de errores con mucha menos memoria.
-        ...(process.env.NODE_ENV !== 'production' ? {devtool: 'eval-cheap-module-source-map'} : {})
+        // En produccion se desactiva completamente para aligerar la memoria en dispositivos moviles.
+        ...(process.env.NODE_ENV === 'production' ? {devtool: false} : {devtool: 'eval-cheap-module-source-map'})
     })
     .addPlugin(new HtmlWebpackPlugin({
         ...commonHtmlWebpackPluginOptions,
@@ -180,7 +199,7 @@ const buildConfig = baseConfig.clone()
 // It roughly doubles build time and isn't needed for `scratch-gui` development
 // If you need non-production `dist/` for local dev, such as for `scratch-www` work, you can run something like:
 // `BUILD_MODE=dist npm run build`
-const buildDist = process.env.NODE_ENV === 'production' || process.env.BUILD_MODE === 'dist';
+const buildDist = process.env.BUILD_MODE === 'dist';
 
 var finalConfig = buildDist ?
     [buildConfig.get(), distConfig.get()] :
@@ -272,6 +291,14 @@ if (!buildDist && !Array.isArray(finalConfig)) {
         {
             directory: path.resolve(__dirname, 'static'),
             publicPath: '/static'
+        },
+        {
+            directory: path.resolve(__dirname, 'build/sketchforge'),
+            publicPath: '/sketchforge'
+        },
+        {
+            directory: path.resolve(__dirname, '../sketchforge/apps/web/.next-export'),
+            publicPath: '/sketchforge'
         }
     ];
 
@@ -309,6 +336,60 @@ if (!buildDist && !Array.isArray(finalConfig)) {
                 next();
             }
         };
+        var circuitStateMiddleware = {
+            name: 'circuit-state-mock',
+            middleware: function (req, res, next) {
+                if (req.url && req.url.indexOf('/api/circuit-state') === 0) {
+                    res.statusCode = 200;
+                    res.setHeader('content-type', 'application/json; charset=utf-8');
+                    res.end(JSON.stringify({status: 'ok', ok: true, circuit: null}));
+                    return;
+                }
+                if (req.url && req.url.indexOf('/api/compile') === 0) {
+                    res.statusCode = 200;
+                    res.setHeader('content-type', 'application/json; charset=utf-8');
+                    res.end(JSON.stringify({success: false, message: 'Compiler service not available'}));
+                    return;
+                }
+                next();
+            }
+        };
+        var staticElectronicsLabMiddleware = {
+            name: 'static-electronics-lab',
+            middleware: function (req, res, next) {
+                var parsedUrl = req.url ? req.url.split('?')[0] : '';
+                if (parsedUrl.indexOf('/static/electronics-lab') === 0) {
+                    var relPath = parsedUrl.replace('/static/electronics-lab', '') || '/index.html';
+                    if (relPath === '/' || relPath === '') relPath = '/index.html';
+                    var filePath = path.resolve(__dirname, 'static/electronics-lab', '.' + relPath);
+                    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+                        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                        res.setHeader('Pragma', 'no-cache');
+                        res.setHeader('Expires', '0');
+                        var ext = path.extname(filePath).toLowerCase();
+                        var mimeTypes = {
+                            '.html': 'text/html; charset=utf-8',
+                            '.js': 'application/javascript; charset=utf-8',
+                            '.css': 'text/css; charset=utf-8',
+                            '.json': 'application/json; charset=utf-8',
+                            '.png': 'image/png',
+                            '.jpg': 'image/jpeg',
+                            '.svg': 'image/svg+xml',
+                            '.wasm': 'application/wasm'
+                        };
+                        if (mimeTypes[ext]) {
+                            res.setHeader('Content-Type', mimeTypes[ext]);
+                        }
+                        fs.createReadStream(filePath).pipe(res);
+                        return;
+                    }
+                }
+                next();
+            }
+        };
+        middlewares.unshift(circuitStateMiddleware);
+        middlewares.unshift(staticElectronicsLabMiddleware);
+
         var proxyIndex = -1;
         for (var i = 0; i < middlewares.length; i++) {
             if (middlewares[i] && middlewares[i].name === 'http-proxy-middleware') {

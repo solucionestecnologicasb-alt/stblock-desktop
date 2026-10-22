@@ -25,6 +25,7 @@ import { displayStepFromMillimeters, displayToMillimeters, formatMeasurementNumb
 import { fallbackSolidColor, resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { normalizeSketchRevolveSettings } from "@/lib/sketchRevolve";
 import { normalizeSketchSweepSettings } from "@/lib/sketchSweep";
+import { snapGridStep } from "@/lib/workplaneSettings";
 import type { GearType, GridSize, MeasurementAccuracy, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
 
 const GRID_SIZES: GridSize[] = ["Desactivado", "0.1 mm", "0.25 mm", "0.5 mm", "1.0 mm", "2.0 mm", "5.0 mm", "Ladrillo"];
@@ -356,6 +357,7 @@ export function ShapeInspector({
 }) {
   const solidColor = shape.hole ? fallbackSolidColor(shape) : shape.color;
   const locked = Boolean(shape.locked);
+  const snapStepMillimeters = snapGridStep(snap);
   const properties = getShapeProperties(shape, onUpdate);
   const gearType = shape.kind === "gear" ? normalizeGearType(shape.gearType) : null;
   const primaryProperties = shape.kind === "gear"
@@ -521,7 +523,7 @@ export function ShapeInspector({
                 onChange={(gearType) => onUpdate({ gearType })}
               />
             ) : null}
-            <ShapePropertyRows properties={primaryProperties} workspace={workspace} disabled={locked} onInteractionActiveChange={onInteractionActiveChange} />
+            <ShapePropertyRows properties={primaryProperties} workspace={workspace} snapStep={snapStepMillimeters} disabled={locked} onInteractionActiveChange={onInteractionActiveChange} />
           </div>
         ) : null}
       </div>
@@ -539,7 +541,7 @@ export function ShapeInspector({
           </button>
           {gearTeethOpen ? (
             <div className="property-list" id={`gear-teeth-${shape.id}`}>
-              <ShapePropertyRows properties={gearTeethProperties} workspace={workspace} disabled={locked} onInteractionActiveChange={onInteractionActiveChange} />
+              <ShapePropertyRows properties={gearTeethProperties} workspace={workspace} snapStep={snapStepMillimeters} disabled={locked} onInteractionActiveChange={onInteractionActiveChange} />
             </div>
           ) : null}
         </div>
@@ -558,7 +560,7 @@ export function ShapeInspector({
           </button>
           {gearHelixOpen ? (
             <div className="property-list" id={`gear-helix-${shape.id}`}>
-              <ShapePropertyRows properties={gearHelixProperties} workspace={workspace} disabled={locked} onInteractionActiveChange={onInteractionActiveChange} />
+              <ShapePropertyRows properties={gearHelixProperties} workspace={workspace} snapStep={snapStepMillimeters} disabled={locked} onInteractionActiveChange={onInteractionActiveChange} />
             </div>
           ) : null}
         </div>
@@ -575,11 +577,13 @@ export function ShapeInspector({
 function ShapePropertyRows({
   properties,
   workspace,
+  snapStep,
   disabled,
   onInteractionActiveChange,
 }: {
   properties: ShapePropertyConfig[];
   workspace: WorkplaneWorkspaceSettings;
+  snapStep?: number;
   disabled?: boolean;
   onInteractionActiveChange?: (active: boolean) => void;
 }) {
@@ -590,7 +594,7 @@ function ShapePropertyRows({
     if (property.type === "select") {
       return <SelectProperty key={property.label} {...property} disabled={disabled} />;
     }
-    return <RangeProperty key={property.label} {...property} workspace={workspace} disabled={disabled} onInteractionActiveChange={onInteractionActiveChange} />;
+    return <RangeProperty key={property.label} {...property} workspace={workspace} snapStep={snapStep} disabled={disabled} onInteractionActiveChange={onInteractionActiveChange} />;
   });
 }
 
@@ -638,11 +642,12 @@ function RangeProperty({
   min,
   max,
   step = 0.01,
+  snapStep = 0,
   workspace,
   disabled,
   onChange,
   onInteractionActiveChange,
-}: RangePropertyConfig & { workspace: WorkplaneWorkspaceSettings; disabled?: boolean; onInteractionActiveChange?: (active: boolean) => void }) {
+}: RangePropertyConfig & { workspace: WorkplaneWorkspaceSettings; snapStep?: number; disabled?: boolean; onInteractionActiveChange?: (active: boolean) => void }) {
   const allowsAboveSliderMax = label === "Longitud" || label === "Ancho" || label === "Alto";
   const isLength = propertyUsesLengthUnit(label);
   const accuracy = workspace.accuracy;
@@ -651,6 +656,9 @@ function RangeProperty({
   const controlMin = isLength ? millimetersToDisplay(min, workspace) : min;
   const controlMax = isLength ? millimetersToDisplay(max, workspace) : max;
   const controlStep = isLength ? displayStepFromMillimeters(step, workspace) : step;
+  // Las medidas usan el paso de la rejilla de ajuste; el resto conserva su
+  // incremento propio (ángulos, lados, etc.).
+  const sliderStep = isLength && snapStep > 0 ? displayStepFromMillimeters(snapStep, workspace) : controlStep;
   const sliderValue = clamp(controlValue, controlMin, controlMax);
   const position = ((sliderValue - controlMin) / Math.max(Number.EPSILON, controlMax - controlMin)) * 100;
   const [editing, setEditing] = useState(false);
@@ -709,7 +717,7 @@ function RangeProperty({
           type="range"
           min={controlMin}
           max={controlMax}
-          step={controlStep}
+          step={sliderStep}
           value={sliderValue}
           disabled={disabled}
           onFocus={() => onInteractionActiveChange?.(true)}

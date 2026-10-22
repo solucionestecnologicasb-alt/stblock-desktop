@@ -9,6 +9,9 @@ const BlockSearch = ({workspace, ScratchBlocks, toolboxXML, onSearch, vm}) => {
     const inputRef = useRef(null);
     const debounceRef = useRef(null);
     const [revision, setRevision] = useState(0);
+    // Solo construir el índice de búsqueda cuando hay una consulta activa.
+    // Así no se reindexa el toolbox completo en cada cambio de workspace/bloques.
+    const [searchActive, setSearchActive] = useState(false);
     useEffect(() => {
         if (!workspace) return undefined;
         const changed = event => {
@@ -21,11 +24,11 @@ const BlockSearch = ({workspace, ScratchBlocks, toolboxXML, onSearch, vm}) => {
     }, [workspace]);
 
     const index = useMemo(() => {
-        if (!workspace || !ScratchBlocks) return null;
+        if (!searchActive || !workspace || !ScratchBlocks) return null;
         const runtime = vm && vm.runtime;
         const blockInfo = runtime ? (runtime._blockInfo || []).concat(runtime._deviceBlockInfo || []) : [];
         return buildSearchIndex(workspace, ScratchBlocks, toolboxXML, blockInfo);
-    }, [workspace, ScratchBlocks, toolboxXML, vm, revision]);
+    }, [searchActive, workspace, ScratchBlocks, toolboxXML, vm, revision]);
 
     useEffect(() => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -44,11 +47,14 @@ const BlockSearch = ({workspace, ScratchBlocks, toolboxXML, onSearch, vm}) => {
     }, [query, index, onSearch]);
 
     const handleInputChange = useCallback((e) => {
-        setQuery(e.target.value);
+        const value = e.target.value;
+        setQuery(value);
+        setSearchActive(value.trim().length >= 2);
     }, []);
 
     const handleClear = useCallback(() => {
         setQuery('');
+        setSearchActive(false);
         onSearch('', []);
         inputRef.current?.focus();
     }, [onSearch]);

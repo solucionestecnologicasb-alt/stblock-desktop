@@ -24,6 +24,7 @@ pub struct ArduinoCliInfo {
 pub struct CompileResult {
     pub success: bool,
     pub hex_path: Option<String>,
+    pub hex_content: Option<String>,
     pub output: String,
     pub error: Option<String>,
 }
@@ -56,7 +57,15 @@ fn get_arduino_cli_path(app_handle: &tauri::AppHandle) -> String {
         }
     }
 
-    // 2. Fallback to system PATH
+    // 2. Try bundled_arduino_tools_dir (dev fallback or relative tools/Arduino)
+    if let Some(tools_dir) = bundled_arduino_tools_dir(app_handle) {
+        let cli_path = tools_dir.join(cli_exe);
+        if cli_path.exists() {
+            return cli_path.to_string_lossy().to_string();
+        }
+    }
+
+    // 3. Fallback to system PATH
     which::which("arduino-cli")
         .or_else(|_| which::which("arduino-cli.exe"))
         .map(|p| p.to_string_lossy().to_string())
@@ -136,13 +145,7 @@ fn get_arduino_config_path(app_handle: &tauri::AppHandle) -> Option<String> {
 
     let config = format!(
         r#"board_manager:
-    additional_urls:
-        - https://espressif.github.io/arduino-esp32/package_esp32_index.json
-        - https://arduino.esp8266.com/stable/package_esp8266com_index.json
-        - https://raw.githubusercontent.com/sparkfun/Arduino_Boards/master/IDE_Board_Manager/package_sparkfun_index.json
-        - http://dl.sipeed.com/MAIX/Maixduino/package_Maixduino_k210_index.json
-        - https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-        - http://drazzy.com/package_drazzy.com_index.json
+    additional_urls: []
 build_cache:
     compilations_before_purge: 10
     ttl: 720h0m0s
@@ -411,9 +414,11 @@ pub fn compile_arduino_sketch(
                 })
         };
 
+        let hex_content = hex_path.as_ref().and_then(|p| fs::read_to_string(p).ok());
         Ok(CompileResult {
             success: true,
             hex_path,
+            hex_content,
             output: format!("{}\n{}", stdout, stderr),
             error: None,
         })
@@ -421,6 +426,7 @@ pub fn compile_arduino_sketch(
         Ok(CompileResult {
             success: false,
             hex_path: None,
+            hex_content: None,
             output: stdout,
             error: Some(stderr),
         })
@@ -435,6 +441,9 @@ pub fn upload_arduino_sketch(
     port: String,
     fqbn: String,
 ) -> Result<UploadResult, String> {
+    // Release port in Tauri before avrdude/cli touches it
+    crate::release_serial_port(&port);
+
     // Get the sketch directory from hex path
     let hex_file = PathBuf::from(&hex_path);
     let build_dir = hex_file.parent().ok_or("Invalid hex path")?;
@@ -479,102 +488,96 @@ pub fn upload_firmware(
     port: String,
     fqbn: String,
 ) -> Result<UploadResult, String> {
-    // Create a temporary folder for the upload
+    // 1. Release serial port handle in Tauri so avrdude doesn't get 'Acceso denegado'
+    crate::release_serial_port(&port);
+
+    // 2. Prepare structured temporary sketch folder
     let temp_dir = std::env::temp_dir().join("stblock_sketches");
-    fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+    let sketch_dir = temp_dir.join("firmware_upload");
+    let build_dir = sketch_dir.join("build");
+    let _ = fs::remove_dir_all(&sketch_dir);
+    fs::create_dir_all(&build_dir).map_err(|e| e.to_string())?;
 
-    let upload_dir = temp_dir.join("firmware_upload");
-    fs::create_dir_all(&upload_dir).map_err(|e| e.to_string())?;
-
-    // Write the .hex file with a sketch-compatible name (for --input-dir fallback)
-    let hex_file_path = upload_dir.join("firmware.ino.hex");
-    fs::write(&hex_file_path, &content).map_err(|e| e.to_string())?;
-
-    // Also write a minimal .ino sketch (required by --input-dir)
-    let sketch_file_path = upload_dir.join("firmware.ino");
+    // Minimal sketch file matching sketch directory name
+    let sketch_file_path = sketch_dir.join("firmware_upload.ino");
     fs::write(&sketch_file_path, "void setup(){}\nvoid loop(){}")
         .map_err(|e| e.to_string())?;
 
-    // Upload using arduino-cli
-    // Strategy: try --input-file first (direct .hex upload, cleaner).
-    // If that fails, fall back to --input-dir with the complete structure.
-    let mut cmd = build_arduino_cli_command(&app_handle);
-    let output = cmd
-        .args([
+    // Firmware hex in build directory
+    let hex_file_path = build_dir.join("firmware_upload.ino.hex");
+    fs::write(&hex_file_path, &content).map_err(|e| e.to_string())?;
+
+    // 3. Helper to run upload with a given FQBN
+    let run_upload = |target_fqbn: &str| -> Result<std::process::Output, String> {
+        let mut cmd = build_arduino_cli_command(&app_handle);
+        cmd.args([
             "upload",
-            "--fqbn", &fqbn,
+            "--fqbn", target_fqbn,
             "--port", &port,
-            "--input-file", hex_file_path.to_str().unwrap(),
+            "--input-dir", build_dir.to_str().unwrap(),
+            sketch_dir.to_str().unwrap(),
             "-v",
         ])
-        .output();
-
-    let output = match output {
-        Ok(out) => out,
-        Err(e) => {
-            let _ = fs::remove_dir_all(&upload_dir);
-            return Err(format!("Failed to execute arduino-cli: {}", e));
-        }
+        .output()
+        .map_err(|e| e.to_string())
     };
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    // If --input-file succeeded, we're done
-    if output.status.success() {
-        let _ = fs::remove_dir_all(&upload_dir);
-        return Ok(UploadResult {
-            success: true,
-            output: stdout,
-            error: None,
-        });
-    }
-
-    // --input-file failed. Try with --input-dir (older arduino-cli versions)
-    // Wait a moment before retry (board may need reset)
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    let mut cmd2 = build_arduino_cli_command(&app_handle);
-    let retry_output = cmd2
-        .args([
-            "upload",
-            "--fqbn", &fqbn,
-            "--port", &port,
-            "--input-dir", upload_dir.to_str().unwrap(),
-            "-v",
-        ])
-        .output();
-
-    let _ = fs::remove_dir_all(&upload_dir);
-
-    match retry_output {
+    // 4. Try primary upload
+    let primary_output = run_upload(&fqbn);
+    let primary_res = match primary_output {
         Ok(out) if out.status.success() => {
-            Ok(UploadResult {
+            let _ = fs::remove_dir_all(&sketch_dir);
+            return Ok(UploadResult {
                 success: true,
                 output: format!("{}\n{}",
                     String::from_utf8_lossy(&out.stdout),
                     String::from_utf8_lossy(&out.stderr)),
                 error: None,
-            })
+            });
         }
-        Ok(out) => {
-            // Both methods failed – report the original error (more relevant)
-            Ok(UploadResult {
-                success: false,
-                output: stdout,
-                error: Some(format!(
-                    "{}\n(Retry with --input-dir also failed: {})",
-                    stderr,
-                    String::from_utf8_lossy(&out.stderr)
-                )),
-            })
+        Ok(out) => Ok(out),
+        Err(e) => Err(e),
+    };
+
+    // 5. Automatic fallback for AVR boards (Nano old bootloader vs new vs Uno)
+    let fallback_fqbn: Option<&str> = if fqbn == "arduino:avr:nano" {
+        Some("arduino:avr:nano:cpu=atmega328old")
+    } else if fqbn == "arduino:avr:nano:cpu=atmega328old" {
+        Some("arduino:avr:nano")
+    } else if fqbn == "arduino:avr:uno" {
+        Some("arduino:avr:nano:cpu=atmega328old")
+    } else {
+        None
+    };
+
+    if let Some(fb_fqbn) = fallback_fqbn {
+        // Release port again and wait briefly before retry
+        crate::release_serial_port(&port);
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        if let Ok(retry_out) = run_upload(fb_fqbn) {
+            if retry_out.status.success() {
+                let _ = fs::remove_dir_all(&sketch_dir);
+                return Ok(UploadResult {
+                    success: true,
+                    output: format!("{}\n{}",
+                        String::from_utf8_lossy(&retry_out.stdout),
+                        String::from_utf8_lossy(&retry_out.stderr)),
+                    error: None,
+                });
+            }
         }
-        Err(e) => {
-            Ok(UploadResult {
-                success: false,
-                output: stdout,
-                error: Some(format!("{}\nRetry error: {}", stderr, e)),
-            })
-        }
+    }
+
+    let _ = fs::remove_dir_all(&sketch_dir);
+
+    // Return the primary error report
+    match primary_res {
+        Ok(out) => Ok(UploadResult {
+            success: false,
+            output: String::from_utf8_lossy(&out.stdout).to_string(),
+            error: Some(String::from_utf8_lossy(&out.stderr).to_string()),
+        }),
+        Err(e) => Err(format!("Failed to execute upload: {}", e)),
     }
 }

@@ -1,0 +1,11 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "build": {
+    "frontendDist": "../scratch-gui/build-android",
+    "beforeBuildCommand": "node scripts/prepare-android-build.mjs"
+  },
+  "bundle": {
+    "resources": []
+  },
+  "plugins": {}
+}

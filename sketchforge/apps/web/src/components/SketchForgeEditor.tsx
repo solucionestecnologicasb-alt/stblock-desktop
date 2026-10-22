@@ -1,7 +1,7 @@
 "use client";
 import { editableMeshToShape } from "@/lib/editableMeshShape";
 
-import { Check, CloudUpload, Download, FileImage, FolderOpen, Hexagon, Minus, Pencil, Scissors, Triangle, Type, X } from "lucide-react";
+import { Box, Check, CloudUpload, Download, FileImage, FolderOpen, Hexagon, Minus, Pencil, Scissors, Triangle, Type, X } from "lucide-react";
 import type manifoldModule from "manifold-3d";
 import type { ManifoldToplevel } from "manifold-3d";
 import dynamic from "next/dynamic";
@@ -54,7 +54,7 @@ import {
   ToolbarVectorExportIcon,
   ToolbarWorkplaneIcon,
 } from "./icons";
-import { WorkplaneViewport } from "./WorkplaneViewport";
+import { MAX_ELEVATION, MIN_ELEVATION, WorkplaneViewport } from "./WorkplaneViewport";
 import { createEditableMesh, type EditableMesh, type EditSelectionMode } from "@/lib/editableMesh";
 import "./mesh-edit.css";
 import { ShapeLibrary } from "./ShapeLibrary";
@@ -109,7 +109,7 @@ import { buildLibraryShape, findLibraryAsset } from "@/lib/shapeLibrary";
 import { importedShapeFromStl, importExtensionSupported } from "@/lib/stlImport";
 import { importedShapeFromSvg, invalidSvgMeshReason } from "@/lib/svgImport";
 import { toSvgProjection, type SvgProjectionLayer } from "@/lib/svgExport";
-import { normalizeSnapGrid, normalizeWorkspaceSettings, workplaneSettingsFingerprint } from "@/lib/workplaneSettings";
+import { normalizeSnapGrid, normalizeWorkspaceSettings, snapGridStep, workplaneSettingsFingerprint } from "@/lib/workplaneSettings";
 import { placementFromPlane } from "@/lib/planeBasis";
 import {
   SKETCHFORGE_MCP_POLL_MS,
@@ -120,7 +120,7 @@ import {
   type SketchForgeMcpViewFace,
 } from "@/lib/sketchforgeMcpProtocol";
 import type { CadModifierComponentMesh, CadModifierDisplayEdge, CadModifierEdge, CadModifierKind, CadModifierMeshPart, CadModifierPrimitivePart, CadModifierQuality, CadModifierWorkerRequest, CadModifierWorkerResponse } from "@/lib/cadModifierTypes";
-import type { AlignAxis, AlignHandleStatus, AlignTarget, CapDocument, CapSection, CapSectionUnionMode, GridSize, ProjectAsset, ShapeAsset, SketchEntity, SketchImage, SketchOperation, SketchPoint, SketchProfile, SketchRevolveSettings, SketchSegment, SketchShapeBuildOptions, WorkplanePlane, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
+import type { AlignAxis, AlignHandleStatus, AlignTarget, CapDocument, CapSection, CapSectionUnionMode, GridSize, ProjectAsset, ShapeAsset, ShapePlacement, SketchEntity, SketchImage, SketchOperation, SketchPoint, SketchProfile, SketchRevolveSettings, SketchSegment, SketchShapeBuildOptions, WorkplanePlane, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
 
 const SketchWorkspace = dynamic(() => import("./SketchWorkspace").then((module) => module.SketchWorkspace), { ssr: false });
 const MeshEditWorkspace = dynamic(() => import("./MeshEditWorkspace").then(module => module.MeshEditWorkspace), { ssr: false });
@@ -174,7 +174,11 @@ type EdgeFeatureRevertOption = {
   removesNewerCount: number;
 };
 type ManifoldSolid = ReturnType<ManifoldToplevel["Manifold"]["cube"]>;
-type DownloadResult = { mode: "browser" } | { mode: "folder"; path: string };
+type DownloadResult =
+  | { mode: "browser" }
+  | { mode: "folder"; path: string }
+  | { mode: "file"; path: string }
+  | { mode: "canceled" };
 type GroupBuildResult = {
   group: WorkplaneShape | null;
   booleanSelection: WorkplaneShape[];
@@ -2650,8 +2654,38 @@ async function toSvg(shapes: WorkplaneShape[], title: string) {
   return toSvgProjection(layers, title);
 }
 
-function triggerBrowserDownload(filename: string, content: string, type: string) {
-  const blob = new Blob([content], { type });
+type ExportFileFilter = { name: string; extensions: string[] };
+type SavePickerHandle = {
+  name: string;
+  createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>;
+};
+type SavePickerWindow = Window & {
+  showSaveFilePicker?: (options: {
+    suggestedName?: string;
+    types?: Array<{ description?: string; accept: Record<string, string[]> }>;
+  }) => Promise<SavePickerHandle>;
+};
+type HostSaveOutcome =
+  | { status: "saved"; path?: string }
+  | { status: "canceled" }
+  | { status: "unsupported" }
+  | { status: "error"; error: string };
+
+const EXPORT_FILE_FILTERS: Record<string, ExportFileFilter> = {
+  stl: { name: "Modelo STL", extensions: ["stl"] },
+  obj: { name: "Modelo OBJ", extensions: ["obj"] },
+  svg: { name: "Vector SVG", extensions: ["svg"] },
+  step: { name: "Paso STEP", extensions: ["step", "stp"] },
+  skf: { name: "Proyecto SketchForge", extensions: ["skf"] },
+};
+
+function exportFileFilters(filename: string): ExportFileFilter[] {
+  const extension = filename.split(".").pop()?.toLowerCase() ?? "";
+  return [EXPORT_FILE_FILTERS[extension] ?? { name: extension ? extension.toUpperCase() : "Archivo", extensions: extension ? [extension] : [] }];
+}
+
+function triggerBrowserDownload(filename: string, content: Blob | string, type: string) {
+  const blob = content instanceof Blob ? content : new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -2661,6 +2695,89 @@ function triggerBrowserDownload(filename: string, content: string, type: string)
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Pide al anfitrión (STBlock/Tauri) que abra su diálogo nativo "Guardar como".
+// El ACK permite distinguir un anfitrión que soporta el guardado (y tarda lo que
+// tarde el usuario en elegir) de uno que no, sin bloquear la exportación.
+function saveFileViaHostDialog(filename: string, bytes: Uint8Array, mimeType: string): Promise<HostSaveOutcome> {
+  if (typeof window === "undefined" || window.parent === window) return Promise.resolve({ status: "unsupported" });
+  const requestId = `save-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return new Promise<HostSaveOutcome>((resolve) => {
+    let ackTimer = 0;
+    let resultTimer = 0;
+    const cleanup = () => {
+      window.removeEventListener("message", onMessage);
+      window.clearTimeout(ackTimer);
+      window.clearTimeout(resultTimer);
+    };
+    const finish = (outcome: HostSaveOutcome) => {
+      cleanup();
+      resolve(outcome);
+    };
+    const onMessage = (event: MessageEvent) => {
+      const data = (event.data ?? {}) as {
+        type?: string;
+        requestId?: string;
+        ok?: boolean;
+        path?: string;
+        canceled?: boolean;
+        unavailable?: boolean;
+        error?: string;
+      };
+      if (data.requestId !== requestId) return;
+      if (data.type === "SKETCHFORGE_SAVE_FILE_ACK") {
+        window.clearTimeout(ackTimer);
+        resultTimer = window.setTimeout(() => finish({ status: "unsupported" }), 10 * 60 * 1000);
+        return;
+      }
+      if (data.type !== "SKETCHFORGE_SAVE_FILE_RESULT") return;
+      if (data.ok) return finish({ status: "saved", path: typeof data.path === "string" ? data.path : undefined });
+      if (data.canceled) return finish({ status: "canceled" });
+      if (data.unavailable) return finish({ status: "unsupported" });
+      return finish({ status: "error", error: data.error || "No se pudo guardar el archivo" });
+    };
+    ackTimer = window.setTimeout(() => finish({ status: "unsupported" }), 500);
+    window.addEventListener("message", onMessage);
+    try {
+      const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      window.parent.postMessage(
+        { type: "SKETCHFORGE_SAVE_FILE", requestId, filename, mimeType, filters: exportFileFilters(filename), bytes: buffer },
+        "*",
+      );
+    } catch {
+      finish({ status: "unsupported" });
+    }
+  });
+}
+
+async function saveFileWithDialog(filename: string, blob: Blob, type: string): Promise<DownloadResult> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const host = await saveFileViaHostDialog(filename, bytes, type);
+  if (host.status === "saved") return { mode: "file", path: host.path ?? "" };
+  if (host.status === "canceled") return { mode: "canceled" };
+  if (host.status === "error") throw new Error(host.error);
+
+  const picker = (window as SavePickerWindow).showSaveFilePicker;
+  if (typeof picker === "function") {
+    const [filter] = exportFileFilters(filename);
+    try {
+      const handle = await picker.call(window, {
+        suggestedName: filename,
+        types: filter ? [{ description: filter.name, accept: { [type]: filter.extensions.map((extension) => `.${extension}`) } }] : undefined,
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return { mode: "file", path: handle.name };
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return { mode: "canceled" };
+      // Sin activación de usuario o API restringida: se usa la descarga clásica.
+    }
+  }
+
+  triggerBrowserDownload(filename, blob, type);
+  return { mode: "browser" };
 }
 
 async function downloadTextFile(filename: string, content: string, type: string): Promise<DownloadResult> {
@@ -2679,8 +2796,7 @@ async function downloadTextFile(filename: string, content: string, type: string)
     return { mode: "folder", path: payload.path };
   }
 
-  triggerBrowserDownload(filename, content, type);
-  return { mode: "browser" };
+  return saveFileWithDialog(filename, new Blob([content], { type }), type);
 }
 
 async function downloadBlobFile(filename: string, blob: Blob): Promise<DownloadResult> {
@@ -2696,16 +2812,7 @@ async function downloadBlobFile(filename: string, blob: Blob): Promise<DownloadR
     if (!response.ok || !payload?.path) throw new Error(payload?.error ?? "No se pudo guardar la exportación");
     return { mode: "folder", path: payload.path };
   }
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return { mode: "browser" };
+  return saveFileWithDialog(filename, blob, blob.type || "application/octet-stream");
 }
 
 function shapeAabb(shape: WorkplaneShape): Cuboid {
@@ -5488,9 +5595,13 @@ export function SketchForgeEditor({
   const [snapGrid, setSnapGrid] = useState<GridSize>(() => normalizeSnapGrid(initialSnap));
   const [workplaneMode, setWorkplaneMode] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  // Librería de formas del modo Diseño 3D: sidebar derecho plegable, expandido
-  // por defecto. Solo se muestra en modo geometry.
-  const [shapeLibraryOpen, setShapeLibraryOpen] = useState(true);
+  // Librería de formas del modo Diseño 3D: sidebar en PC (abierto por defecto),
+  // o bandeja inferior en móvil (plegado por defecto para no tapar la pieza).
+  const [shapeLibraryOpen, setShapeLibraryOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const isMobile = window.innerWidth <= 768 || (window.innerHeight <= 550 && window.innerWidth <= 1024) || window.location.search.includes("mobile=1") || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    return !isMobile;
+  });
   const [topPanel, setTopPanel] = useState<TopPanel>(null);
   const [stepExporting, setStepExporting] = useState(false);
   const [skfExporting, setSkfExporting] = useState(false);
@@ -5501,6 +5612,35 @@ export function SketchForgeEditor({
   const [mirrorPreviewAxis, setMirrorPreviewAxis] = useState<AlignAxis | null>(null);
   const [activeMode, setActiveMode] = useState("3D Design");
   const [notice, setNotice] = useState("Ready");
+  // Aviso prominente para confirmar que una exportación terminó correctamente.
+  const [exportSuccess, setExportSuccess] = useState<string | null>(null);
+  const exportSuccessTimerRef = useRef<number | null>(null);
+  const showExportSuccess = useCallback((message: string) => {
+    setExportSuccess(message);
+    if (exportSuccessTimerRef.current !== null) window.clearTimeout(exportSuccessTimerRef.current);
+    exportSuccessTimerRef.current = window.setTimeout(() => setExportSuccess(null), 7000);
+  }, []);
+  useEffect(() => () => {
+    if (exportSuccessTimerRef.current !== null) window.clearTimeout(exportSuccessTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const updateMobileClass = () => {
+      const isMobile = window.innerWidth <= 768 || (window.innerHeight <= 550 && window.innerWidth <= 1024) || window.location.search.includes("mobile=1") || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobile) {
+        document.documentElement.classList.add("sketchforge-mobile");
+      } else {
+        document.documentElement.classList.remove("sketchforge-mobile");
+      }
+    };
+    updateMobileClass();
+    window.addEventListener("resize", updateMobileClass);
+    return () => {
+      window.removeEventListener("resize", updateMobileClass);
+      document.documentElement.classList.remove("sketchforge-mobile");
+    };
+  }, []);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const projectFileInputRef = useRef<HTMLInputElement | null>(null);
   const sketchImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -7109,7 +7249,7 @@ export function SketchForgeEditor({
   }, []);
 
   const addLibraryAsset = useCallback(
-    async (asset: ShapeAsset, point?: { x: number; z: number; elevation?: number }) => {
+    async (asset: ShapeAsset, point?: ShapePlacement) => {
       cancelPlacement(); setGeometryDrawTool(null); setAlignMode(false); setMirrorMode(false); setWorkplaneMode(false);
       const request = placementRequestRef.current; placementLoadingRef.current = true;
       const full = findLibraryAsset(asset.id) ?? asset;
@@ -7122,7 +7262,7 @@ export function SketchForgeEditor({
     },
     [cancelPlacement, commitShapes],
   );
-  const confirmPlacement = useCallback((point: { x: number; z: number; elevation?: number }) => {
+  const confirmPlacement = useCallback((point: ShapePlacement) => {
     const pending = pendingPlacementRef.current; if (!pending) return;
     const placed = canonicalizeShape({ ...pending, ...point }); cancelPlacement();
     commitShapes([...shapesRef.current, placed], placed.id, placed.name + " colocado");
@@ -8081,7 +8221,7 @@ export function SketchForgeEditor({
           selected.has(shape.id) && !shape.locked
             ? {
                 ...shape,
-                elevation: Math.max(0, Math.min(180, (shape.elevation ?? 0) + delta)),
+                elevation: Math.max(MIN_ELEVATION, Math.min(MAX_ELEVATION, (shape.elevation ?? 0) + delta)),
               }
             : shape,
         ),
@@ -8824,11 +8964,16 @@ export function SketchForgeEditor({
     }
     const selectedNotice = `Se exportó ${exportable.length} forma${exportable.length === 1 ? "" : "s"} seleccionada${exportable.length === 1 ? "" : "s"}`;
     const finishNotice = (label: string, result: DownloadResult) => {
-      if (result.mode === "folder") {
-        setNotice(`Guardado ${label} en ${result.path}`);
+      if (result.mode === "canceled") {
+        setNotice(`Exportación de ${label} cancelada`);
         return;
       }
-      setNotice(hasSelection ? `${selectedNotice} como ${label}` : `Se exportó ${label}`);
+      const location = result.mode === "folder" || result.mode === "file"
+        ? result.path ? (/[\\/]/.test(result.path) ? ` en ${result.path}` : ` como ${result.path}`) : ""
+        : "";
+      const message = hasSelection ? `${selectedNotice} como ${label}${location}` : `Se exportó ${label}${location}`;
+      setNotice(message);
+      showExportSuccess(message);
     };
     const failNotice = (label: string, error: unknown) => {
       setNotice(error instanceof Error ? error.message : `No se pudo exportar ${label}`);
@@ -8851,7 +8996,7 @@ export function SketchForgeEditor({
     void downloadTextFile(projectExportFileName(exportName, "obj"), toObj(meshes), "text/plain")
       .then((result) => finishNotice("OBJ", result))
       .catch((error: unknown) => failNotice("OBJ", error));
-  }, [hasSelection, projectName, selectedShapes, shapes]);
+  }, [hasSelection, projectName, selectedShapes, shapes, showExportSuccess]);
 
   const exportStepDesign = useCallback(async (exportName: string) => {
     if (stepExporting) {
@@ -8869,18 +9014,25 @@ export function SketchForgeEditor({
       const { blob, exportedCount, skipped } = await exportShapesToStep(sourceShapes);
       const text = await blob.text();
       const result = await downloadTextFile(projectExportFileName(exportName, "step"), text, "application/step");
-      const skipNote = skipped.length > 0 ? `; se omitieron ${skipped.length} forma${skipped.length === 1 ? "" : "s"} no primitiva${skipped.length === 1 ? "" : "s"}` : "";
-      if (result.mode === "folder") {
-        setNotice(`STEP guardado (${exportedCount} cuerpo${exportedCount === 1 ? "" : "s"}) en ${result.path}${skipNote}`);
-      } else {
-        setNotice(`Se exportó STEP B-Rep con ${exportedCount} cuerpo${exportedCount === 1 ? "" : "s"}${skipNote}`);
+      if (result.mode === "canceled") {
+        setNotice("Exportación STEP cancelada");
+        return;
       }
+      const skipNote = skipped.length > 0 ? `; se omitieron ${skipped.length} forma${skipped.length === 1 ? "" : "s"} no primitiva${skipped.length === 1 ? "" : "s"}` : "";
+      const location = result.mode === "folder" || result.mode === "file"
+        ? result.path ? (/[\\/]/.test(result.path) ? ` en ${result.path}` : ` como ${result.path}`) : ""
+        : "";
+      const message = result.mode === "browser"
+        ? `Se exportó STEP B-Rep con ${exportedCount} cuerpo${exportedCount === 1 ? "" : "s"}${skipNote}`
+        : `STEP guardado (${exportedCount} cuerpo${exportedCount === 1 ? "" : "s"})${location}${skipNote}`;
+      setNotice(message);
+      showExportSuccess(message);
     } catch (error: unknown) {
       setNotice(error instanceof Error ? error.message : "No se pudo exportar STEP");
     } finally {
       setStepExporting(false);
     }
-  }, [hasSelection, projectName, selectedShapes, shapes, stepExporting]);
+  }, [hasSelection, projectName, selectedShapes, shapes, stepExporting, showExportSuccess]);
 
   const buildSkfBytes = useCallback(async (exportName: string, historyLimitArg: SkfHistoryLimit): Promise<Uint8Array> => {
     const exportedHistory = editorHistoryForExport(historyRef.current, historyIndexRef.current, historyLimitArg);
@@ -8921,14 +9073,25 @@ export function SketchForgeEditor({
       } else {
         const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
         const result = await downloadBlobFile(projectExportFileName(exportName, "skf"), new Blob([buffer], { type: SKF_MEDIA_TYPE }));
-        setNotice(result.mode === "folder" ? `Proyecto editable de SketchForge guardado en ${result.path}` : "Proyecto editable de SketchForge guardado (.skf)");
+        if (result.mode === "canceled") {
+          setNotice("Exportación del proyecto .skf cancelada");
+          return;
+        }
+        const location = result.mode === "folder" || result.mode === "file"
+          ? result.path ? (/[\\/]/.test(result.path) ? ` en ${result.path}` : ` como ${result.path}`) : ""
+          : "";
+        const message = result.mode === "browser"
+          ? "Proyecto editable de SketchForge guardado (.skf)"
+          : `Proyecto editable de SketchForge guardado${location}`;
+        setNotice(message);
+        showExportSuccess(message);
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo guardar el proyecto de SketchForge");
     } finally {
       setSkfExporting(false);
     }
-  }, [buildSkfBytes, onSaveSharedProject, projectName, skfExporting]);
+  }, [buildSkfBytes, onSaveSharedProject, projectName, skfExporting, showExportSuccess]);
 
   // Bridge a la app anfitriona (STBlock): responde a peticiones de exportar el
   // proyecto editable .skf desde el flujo "Guardar en tu ordenador" y a la
@@ -8957,6 +9120,43 @@ export function SketchForgeEditor({
         } catch (error) {
           source?.postMessage(
             { type: "SKETCHFORGE_IMPORT_SHAPES_RESULT", requestId, ok: false, error: error instanceof Error ? error.message : "Import failed" },
+            "*",
+          );
+        }
+        return;
+      }
+      if (data.type === "SKETCHFORGE_GET_SHAPES") {
+        // Devuelve un resumen legible de las formas 3D actuales para que la IA
+        // pueda "leer" lo que el usuario ya tiene en el diseño.
+        const source = event.source as Window | null;
+        const requestId = data.requestId;
+        try {
+          const current = shapesRef.current ?? [];
+          const lines = current.map((s, idx) => {
+            const parts = [
+              `#${idx + 1} ${s.kind || "forma"}${s.name ? ` "${s.name}"` : ""}`,
+              `pos(x=${s.x ?? 0}, z=${s.z ?? 0}, elev=${s.elevation ?? 0})`,
+              `dim(w=${s.width ?? 0}, d=${s.depth ?? 0}, h=${s.height ?? 0})`,
+            ];
+            if (s.rotation) parts.push(`rot=${s.rotation}`);
+            if (s.rotationX) parts.push(`rotX=${s.rotationX}`);
+            if (s.rotationZ) parts.push(`rotZ=${s.rotationZ}`);
+            if (s.color) parts.push(`color=${s.color}`);
+            if (typeof s.radius === "number") parts.push(`radius=${s.radius}`);
+            if (typeof s.sides === "number") parts.push(`sides=${s.sides}`);
+            if (typeof s.text === "string" && s.text) parts.push(`text="${s.text}"`);
+            if (s.hole) parts.push("hole");
+            if (s.hidden) parts.push("hidden");
+            if (s.locked) parts.push("locked");
+            return parts.join(" ");
+          });
+          const text = lines.length
+            ? `Total: ${lines.length} formas.\n${lines.join("\n")}`
+            : "Total: 0 formas (escena vacía).";
+          source?.postMessage({ type: "SKETCHFORGE_GET_SHAPES_RESULT", requestId, ok: true, count: lines.length, text }, "*");
+        } catch (error) {
+          source?.postMessage(
+            { type: "SKETCHFORGE_GET_SHAPES_RESULT", requestId, ok: false, text: "", error: error instanceof Error ? error.message : "Read failed" },
             "*",
           );
         }
@@ -9535,8 +9735,8 @@ export function SketchForgeEditor({
           selected.has(shape.id) && !shape.locked
             ? {
                 ...shape,
-                x: Math.max(-110, Math.min(110, shape.x + deltaX)),
-                z: Math.max(-110, Math.min(110, shape.z + deltaZ)),
+                x: shape.x + deltaX,
+                z: shape.z + deltaZ,
               }
             : shape,
         ),
@@ -9674,7 +9874,10 @@ export function SketchForgeEditor({
         return;
       }
 
-      const step = event.shiftKey ? 5 : 1;
+      // Los atajos usan el mismo paso que la rejilla de ajuste; Shift lo
+      // multiplica para desplazamientos rápidos. Sin rejilla, 1 mm.
+      const gridStep = snapGridStep(snapGridRef.current) || 1;
+      const step = event.shiftKey ? gridStep * 5 : gridStep;
       const getCameraForwardSnapped = () => {
         const rawF = (window as any).__sketchforge_camera_forward ?? { x: 0, z: -1 };
         if (Math.abs(rawF.x) > Math.abs(rawF.z)) {
@@ -9886,9 +10089,11 @@ export function SketchForgeEditor({
   );
 
   return (
-    <div data-placement-active={!!pendingPlacement} className={`sketchforge-editor${meshEditSession ? " mesh-edit-active" : ""}`}>
+    <div data-placement-active={!!pendingPlacement} data-toolbar-mode={toolbarMode} className={`sketchforge-editor${meshEditSession ? " mesh-edit-active" : ""}`}>
       {!meshEditSession ? <SecondaryToolbar
         toolbarMode={toolbarMode}
+        shapeLibraryOpen={shapeLibraryOpen}
+        onToggleShapeLibrary={() => setShapeLibraryOpen((open) => !open)}
         onToolbarModeChange={(mode) => {
           setToolbarMode(mode);
           setTopPanel(null);
@@ -10126,6 +10331,16 @@ export function SketchForgeEditor({
       <div className="editor-toast" role="status">
         {notice}
       </div>
+      {exportSuccess ? (
+        <div className="editor-export-success" role="status" aria-live="polite">
+          <span className="editor-export-success-icon"><Check size={18} /></span>
+          <div>
+            <strong>Exportación completada</strong>
+            <span>{exportSuccess}</span>
+          </div>
+          <button type="button" aria-label="Cerrar aviso de exportación" onClick={() => setExportSuccess(null)}><X size={16} /></button>
+        </div>
+      ) : null}
       <pre data-codex-state hidden>
         {debugState}
       </pre>
@@ -10163,6 +10378,24 @@ function SketchReferenceIcon({ name }: { name: SketchReferenceIconName }) {
       src={`assets/sketchforge/${sketchReferenceIcons[name]}`}
       alt=""
     />
+  );
+}
+
+function MobileMeshEditIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3L20 7.5V16.5L12 21L4 16.5V7.5L12 3Z" />
+      <path d="M12 12L20 7.5" />
+      <path d="M12 12V21" />
+      <path d="M12 12L4 7.5" />
+      <circle cx="12" cy="3" r="1.5" fill="currentColor" />
+      <circle cx="20" cy="7.5" r="1.5" fill="currentColor" />
+      <circle cx="4" cy="7.5" r="1.5" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+      <circle cx="20" cy="16.5" r="1.5" fill="currentColor" />
+      <circle cx="4" cy="16.5" r="1.5" fill="currentColor" />
+      <circle cx="12" cy="21" r="1.5" fill="currentColor" />
+    </svg>
   );
 }
 
@@ -10239,9 +10472,13 @@ function SecondaryToolbar({
   canTopologyPick,
   onTopologyModeChange,
   onTopPanel,
+  shapeLibraryOpen,
+  onToggleShapeLibrary,
 }: {
   toolbarMode: ToolbarMode;
   onToolbarModeChange: (mode: ToolbarMode) => void;
+  shapeLibraryOpen?: boolean;
+  onToggleShapeLibrary?: () => void;
   alignMode: boolean;
   canAlign: boolean;
   canEdgeModify: boolean;
@@ -10419,214 +10656,433 @@ function SecondaryToolbar({
   };
 
   return (
+    <>
     <div className="secondary-toolbar">
-      <div className={`toolbar-mode-content ${toolbarMode}`}>
-        {toolbarMode === "geometry" && capSketchActive ? (
-          renderSketchDrawingTools(
-            onApplyCapDrawing,
-            capSectionName ? `Aplicar sección «${capSectionName}»` : "Aplicar sección",
-            onCancelCapDrawing,
-          )
-        ) : toolbarMode === "geometry" ? (
-          <>
-      {onHome ? (
-        <div className="tool-group editor-nav-group">
-          <div className="toolbar-section toolbar-home-section">
-            <div className="toolbar-section-label">Inicio</div>
-            <div className="toolbar-section-tools">
-              <button className="toolbar-icon editor-home-control" aria-label="Panel de inicio" title="Panel de inicio" onClick={onHome}>
+      {/* Desktop Toolbar Container */}
+      <div className="desktop-toolbar-container">
+        <div className={`toolbar-mode-content ${toolbarMode}`}>
+          {toolbarMode === "geometry" && capSketchActive ? (
+            renderSketchDrawingTools(
+              onApplyCapDrawing,
+              capSectionName ? `Aplicar sección «${capSectionName}»` : "Aplicar sección",
+              onCancelCapDrawing,
+            )
+          ) : toolbarMode === "geometry" ? (
+            <>
+        {onHome ? (
+          <div className="tool-group editor-nav-group">
+            <div className="toolbar-section toolbar-home-section">
+              <div className="toolbar-section-label">Inicio</div>
+              <div className="toolbar-section-tools">
+                <button className="toolbar-icon editor-home-control" aria-label="Panel de inicio" title="Panel de inicio" onClick={onHome}>
+                  <ToolbarHomeIcon />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        <div className="tool-group left">
+          <div className="toolbar-section">
+            <div className="toolbar-section-label">Portapapeles</div>
+            <div className="toolbar-section-tools">{leftTools.slice(0, 4).map(renderToolButton)}</div>
+          </div>
+          <div className="toolbar-section">
+            <div className="toolbar-section-label">Historial</div>
+            <div className="toolbar-section-tools">{leftTools.slice(4).map(renderToolButton)}</div>
+          </div>
+        </div>
+        <div className="toolbar-section toolbar-selection-mode-section">
+          <div className="toolbar-section-label">Seleccionar</div>
+          <div className="toolbar-section-tools">
+            <button type="button" className="toolbar-icon selection-mode-chip" disabled={!canTopologyPick}
+              title="Editar malla: vértices, aristas y caras (Tab)" aria-label="Editar malla"
+              onClick={() => onTopologyModeChange("vertex")}>Editar malla <kbd>Tab</kbd></button>
+
+          </div>
+        </div>
+        <div className="toolbar-section geometry-create-section">
+          <div className="toolbar-section-label">Crear</div>
+          <div className="toolbar-section-tools">
+            <button
+              className={`geometry-2d-trigger ${geometry2dOpen || geometryDrawTool || hasGeometryProfile ? "active" : ""}`}
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={geometry2dOpen}
+              onClick={() => setGeometry2dOpen((open) => !open)}
+              title="Planos y dibujo 2D directo sobre el espacio 3D"
+            >
+              <SketchEntityRectangleIcon />
+              <span>2D</span>
+            </button>
+            {geometry2dOpen ? (
+              <div className="geometry-2d-popover" role="dialog" aria-label="Dibujo 2D en geometría" onPointerDown={(event) => event.stopPropagation()}>
+                <div className="geometry-2d-popover-header">
+                  <div><strong>Dibujo 2D</strong><span>Dibuja un contorno y después extruye o corta</span></div>
+                  <button type="button" onClick={() => setGeometry2dOpen(false)} aria-label="Cerrar herramientas 2D"><X size={16} /></button>
+                </div>
+                <details className="geometry-2d-popover-group"><summary>Plano de dibujo</summary>
+
+                  <div className="geometry-2d-popover-row">
+                    <button className={geometryPlaneMode === "auto" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("auto")} title="Detectar automáticamente la superficie bajo el cursor"><span>Superficie</span></button>
+                    <button className={geometryPlaneMode === "base" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("base")}><span>Base</span></button>
+                    <button className={geometryPlaneMode === "offset" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("offset")}><span>Altura</span></button>
+                    {geometryPlaneMode === "offset" ? <input type="number" step="0.1" aria-label="Elevación del plano" value={geometryPlaneOffset} onChange={(event) => onGeometryPlaneOffset(event.currentTarget.value)} /> : null}
+                  </div>
+                </details>
+                <div className="geometry-2d-popover-group">
+                  <span className="geometry-2d-popover-label">Dibujar</span>
+                  <div className="geometry-2d-popover-row geometry-2d-tool-row">
+                    <button className={geometryDrawTool === "pencil" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("pencil"); setGeometry2dOpen(false); }}><Pencil /><span>Lápiz</span></button>
+                    <button className={geometryDrawTool === "circle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("circle"); setGeometry2dOpen(false); }}><SketchEntityCircleIcon /><span>Círculo</span></button>
+                    <button className={geometryDrawTool === "rectangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("rectangle"); setGeometry2dOpen(false); }}><SketchEntityRectangleIcon /><span>Rectángulo</span></button>
+                  </div>
+                </div>
+                <details className="geometry-2d-popover-group"><summary>Más formas</summary><div className="geometry-2d-popover-row geometry-2d-tool-row">
+                    <button className={geometryDrawTool === "semicircle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("semicircle"); setGeometry2dOpen(false); }}><SketchEntitySemicircleIcon /><span>Semicírculo</span></button>
+                    <button className={geometryDrawTool === "arc" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("arc"); setGeometry2dOpen(false); }}><SketchEntityArcIcon /><span>Arco</span></button>
+                    <button className={geometryDrawTool === "triangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("triangle"); setGeometry2dOpen(false); }}><Triangle /><span>Triángulo</span></button>
+                    <button className={geometryDrawTool === "hexagon" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("hexagon"); setGeometry2dOpen(false); }}><Hexagon /><span>Hexágono</span></button>
+                </div></details>
+                {hasGeometryProfile ? (
+                <div className="geometry-2d-popover-group">
+                  <span className="geometry-2d-popover-label">Operación</span>
+                  <div className="geometry-2d-popover-row geometry-2d-operation-row">
+                    <label><span>Profundidad</span><input type="number" step="0.1" min="0.1" value={pushPullDistance} onChange={(event) => onPushPullDistanceChange(event.currentTarget.value)} /></label>
+                    <button className="primary" type="button" onClick={() => { onGeometryExtrude(); setGeometry2dOpen(false); }} disabled={!hasGeometryProfile}><ToolbarPushPullIcon /><span>Extruir</span></button>
+                    <button type="button" onClick={() => { onGeometryCut(); setGeometry2dOpen(false); }} disabled={!hasGeometryProfile}><Minus /><span>Cortar</span></button>
+                    <button type="button" onClick={() => { onGeometryProfileCancel(); setGeometry2dOpen(false); }} disabled={!geometryDrawTool && !hasGeometryProfile}><X /><span>Cancelar</span></button>
+                  </div>
+                </div>
+                ) : <p className="geometry-2d-hint">Elige una forma y arrastra sobre el plano. Las operaciones aparecen al terminar el contorno.</p>}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="toolbar-spacer" />
+        <div className="tool-group right">
+          <div className="toolbar-section compact">
+            <div className="toolbar-section-label">Visibilidad</div>
+            <div className="toolbar-section-tools">{visibilityTools.map(renderToolButton)}</div>
+          </div>
+          <div className="toolbar-section">
+            <div className="toolbar-section-label">Combinar</div>
+            <div className="toolbar-section-tools">{combineTools.map(renderToolButton)}</div>
+          </div>
+          <div className="toolbar-section">
+            <div className="toolbar-section-label">Modificar</div>
+            <div className="toolbar-section-tools">{modifyTools.map(renderToolButton)}</div>
+          </div>
+          <div className="toolbar-section">
+            <div className="toolbar-section-label">Organizar</div>
+            <div className="toolbar-section-tools">{arrangeTools.map(renderToolButton)}</div>
+          </div>
+        </div>
+        <div className="toolbar-section toolbar-actions-section">
+          <div className="toolbar-section-label">Gestionar</div>
+          <div className="action-buttons">
+            <button className="action-icon-button" aria-label="Importar" title="Importar" onClick={() => onTopPanel("import")}>
+              <ToolbarImportIcon />
+            </button>
+            <button className="action-icon-button" aria-label="Exportar" title="Exportar" onClick={() => onTopPanel("export")}>
+              <ToolbarVectorExportIcon />
+            </button>
+            <button className="action-icon-button" aria-label="Configuración del espacio de trabajo" title="Configuración del espacio de trabajo" onClick={() => window.dispatchEvent(new Event("sketchforge:open-workspace-settings"))}>
+              <ToolbarSettingsIcon />
+            </button>
+          </div>
+        </div>
+            </>
+          ) : (
+            <div className="sketch-toolbar-ribbon" aria-label="Barra de herramientas de boceto">
+              {sketchActive || capSketchActive ? (
+                renderSketchDrawingTools(
+                  capSketchActive ? onApplyCapDrawing : onSketchFinish,
+                  capSketchActive
+                    ? (capSectionName ? `Aplicar sección «${capSectionName}»` : "Aplicar sección")
+                    : (sketchOperation === "revolve" ? "Crear sólido revolucionado" : "Crear sólido 3D"),
+                  capSketchActive ? onCancelCapDrawing : onSketchCancel,
+                )
+              ) : (
+                <div className="toolbar-section sketch-start-section">
+                  <div className="toolbar-section-label">Crear</div>
+                  <div className="toolbar-section-tools">
+                    <button
+                      className="sketch-command-button primary"
+                      type="button"
+                      aria-label="Nuevo boceto"
+                      title="Crear un boceto 2D independiente"
+                      onClick={onNewSketch}
+                    >
+                      <SketchReferenceIcon name="sketchTo3d" />
+                      <span>Nuevo boceto</span>
+                    </button>
+                    <button
+                      className="sketch-command-button primary"
+                      type="button"
+                      aria-label="Nuevo boceto revolución"
+                      title="Crear un boceto de revolución (tipo SolidWorks)"
+                      onClick={onNewRevolveSketch}
+                    >
+                      <SketchReferenceIcon name="revolveSketch" />
+                      <span>Boceto revolución</span>
+                    </button>
+                    <button
+                      className="sketch-command-button primary"
+                      type="button"
+                      aria-label="Nuevo boceto tubería"
+                      title="Crear un boceto de tubería / barrido 3D"
+                      onClick={onNewSweepSketch}
+                    >
+                      <SketchReferenceIcon name="sweepSketch" />
+                      <span>Boceto tubería</span>
+                    </button>
+                    <button className={`sketch-command-button ${canEditSketch ? "" : "disabled"}`} type="button" aria-label="Editar boceto a 3D" title="Editar boceto a 3D" onClick={onEditSketch} disabled={!canEditSketch}>
+                      <SketchReferenceIcon name="editSketchTo3d" />
+                      <span>Editar</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="toolbar-workspace-tabs" role="tablist" aria-label="Modo de editor">
+          <button
+            className={toolbarMode === "geometry" ? "active" : ""}
+            type="button"
+            role="tab"
+            aria-selected={toolbarMode === "geometry"}
+            onClick={() => selectToolbarMode("geometry")}
+          >
+            Geometría
+          </button>
+          <button
+            className={toolbarMode === "sketch" ? "active" : ""}
+            type="button"
+            role="tab"
+            aria-selected={toolbarMode === "sketch"}
+            onClick={() => selectToolbarMode("sketch")}
+          >
+            Boceto
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Toolbar Container (Rendered on mobile <= 768px) */}
+      <div className="mobile-toolbar-container">
+        {/* Tier 1: Action Strip: Inicio, Deshacer, Rehacer, Editar malla, 2D, Configuración, Importar, Exportar */}
+        <div className="mobile-toolbar-row mobile-toolbar-row-top">
+          <div className="mobile-toolbar-actions-strip">
+            {onHome ? (
+              <button
+                className="toolbar-icon editor-home-control"
+                aria-label="Panel de inicio"
+                title="Panel de inicio"
+                onClick={onHome}
+              >
                 <ToolbarHomeIcon />
               </button>
-            </div>
+            ) : null}
+            <button
+              className={`toolbar-icon ${toolbarMode === "sketch" ? (sketchCanUndo ? "" : "disabled") : (canUndo ? "" : "disabled")}`}
+              aria-label="Deshacer"
+              title="Deshacer"
+              onClick={toolbarMode === "sketch" ? onSketchUndo : onUndo}
+              disabled={toolbarMode === "sketch" ? !sketchCanUndo : !canUndo}
+            >
+              <ToolbarUndoIcon />
+            </button>
+            <button
+              className={`toolbar-icon ${toolbarMode === "sketch" ? (sketchCanRedo ? "" : "disabled") : (canRedo ? "" : "disabled")}`}
+              aria-label="Rehacer"
+              title="Rehacer"
+              onClick={toolbarMode === "sketch" ? onSketchRedo : onRedo}
+              disabled={toolbarMode === "sketch" ? !sketchCanRedo : !canRedo}
+            >
+              <ToolbarRedoIcon />
+            </button>
+
+            {toolbarMode === "geometry" ? (
+              <>
+                <button
+                  type="button"
+                  className={`toolbar-icon ${canTopologyPick ? "" : "disabled"}`}
+                  disabled={!canTopologyPick}
+                  title="Editar malla (vértices, aristas y caras)"
+                  aria-label="Editar malla"
+                  onClick={() => onTopologyModeChange("vertex")}
+                >
+                  <MobileMeshEditIcon />
+                </button>
+                <button
+                  type="button"
+                  className={`toolbar-icon geometry-2d-trigger ${geometry2dOpen || geometryDrawTool || hasGeometryProfile ? "active" : ""}`}
+                  aria-haspopup="dialog"
+                  aria-expanded={geometry2dOpen}
+                  onClick={() => setGeometry2dOpen((open) => !open)}
+                  title="Planos y dibujo 2D directo"
+                  aria-label="Dibujo 2D"
+                >
+                  <span className="mobile-2d-tag">2D</span>
+                </button>
+              </>
+            ) : null}
+
+            <button
+              className="action-icon-button"
+              aria-label="Configuración del espacio de trabajo"
+              title="Configuración del espacio de trabajo"
+              onClick={() => window.dispatchEvent(new Event("sketchforge:open-workspace-settings"))}
+            >
+              <ToolbarSettingsIcon />
+            </button>
+            <button
+              className="action-icon-button"
+              aria-label="Importar"
+              title="Importar"
+              onClick={() => onTopPanel("import")}
+            >
+              <ToolbarImportIcon />
+            </button>
+            <button
+              className="action-icon-button"
+              aria-label="Exportar"
+              title="Exportar"
+              onClick={() => onTopPanel("export")}
+            >
+              <ToolbarVectorExportIcon />
+            </button>
           </div>
         </div>
-      ) : null}
-      <div className="tool-group left">
-        <div className="toolbar-section">
-          <div className="toolbar-section-label">Portapapeles</div>
-          <div className="toolbar-section-tools">{leftTools.slice(0, 4).map(renderToolButton)}</div>
-        </div>
-        <div className="toolbar-section">
-          <div className="toolbar-section-label">Historial</div>
-          <div className="toolbar-section-tools">{leftTools.slice(4).map(renderToolButton)}</div>
-        </div>
-      </div>
-      <div className="toolbar-section toolbar-selection-mode-section">
-        <div className="toolbar-section-label">Seleccionar</div>
-        <div className="toolbar-section-tools">
-          <button type="button" className="toolbar-icon selection-mode-chip" disabled={!canTopologyPick}
-            title="Editar malla: vértices, aristas y caras (Tab)" aria-label="Editar malla"
-            onClick={() => onTopologyModeChange("vertex")}>Editar malla <kbd>Tab</kbd></button>
 
-        </div>
-      </div>
-      <div className="toolbar-section geometry-create-section">
-        <div className="toolbar-section-label">Crear</div>
-        <div className="toolbar-section-tools">
-          <button
-            className={`geometry-2d-trigger ${geometry2dOpen || geometryDrawTool || hasGeometryProfile ? "active" : ""}`}
-            type="button"
-            aria-haspopup="dialog"
-            aria-expanded={geometry2dOpen}
-            onClick={() => setGeometry2dOpen((open) => !open)}
-            title="Planos y dibujo 2D directo sobre el espacio 3D"
-          >
-            <SketchEntityRectangleIcon />
-            <span>2D</span>
-          </button>
-          {geometry2dOpen ? (
-            <div className="geometry-2d-popover" role="dialog" aria-label="Dibujo 2D en geometría" onPointerDown={(event) => event.stopPropagation()}>
-              <div className="geometry-2d-popover-header">
-                <div><strong>Dibujo 2D</strong><span>Dibuja un contorno y después extruye o corta</span></div>
-                <button type="button" onClick={() => setGeometry2dOpen(false)} aria-label="Cerrar herramientas 2D"><X size={16} /></button>
-              </div>
-              <details className="geometry-2d-popover-group"><summary>Plano de dibujo</summary>
+        {/* Tier 2: Workspace Tabs & Sketch Tools */}
+        <div className="mobile-toolbar-row mobile-toolbar-row-bottom">
+          <div className="toolbar-workspace-tabs" role="tablist" aria-label="Modo de editor">
+            <button
+              className={toolbarMode === "geometry" ? "active" : ""}
+              type="button"
+              role="tab"
+              aria-selected={toolbarMode === "geometry"}
+              onClick={() => selectToolbarMode("geometry")}
+            >
+              Geometría
+            </button>
+            <button
+              className={toolbarMode === "sketch" ? "active" : ""}
+              type="button"
+              role="tab"
+              aria-selected={toolbarMode === "sketch"}
+              onClick={() => selectToolbarMode("sketch")}
+            >
+              Boceto
+            </button>
+          </div>
 
-                <div className="geometry-2d-popover-row">
-                  <button className={geometryPlaneMode === "auto" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("auto")} title="Detectar automáticamente la superficie bajo el cursor"><span>Superficie</span></button>
-                  <button className={geometryPlaneMode === "base" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("base")}><span>Base</span></button>
-                  <button className={geometryPlaneMode === "offset" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("offset")}><span>Altura</span></button>
-                  {geometryPlaneMode === "offset" ? <input type="number" step="0.1" aria-label="Elevación del plano" value={geometryPlaneOffset} onChange={(event) => onGeometryPlaneOffset(event.currentTarget.value)} /> : null}
-                </div>
-              </details>
-              <div className="geometry-2d-popover-group">
-                <span className="geometry-2d-popover-label">Dibujar</span>
-                <div className="geometry-2d-popover-row geometry-2d-tool-row">
-                  <button className={geometryDrawTool === "pencil" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("pencil"); setGeometry2dOpen(false); }}><Pencil /><span>Lápiz</span></button>
-                  <button className={geometryDrawTool === "circle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("circle"); setGeometry2dOpen(false); }}><SketchEntityCircleIcon /><span>Círculo</span></button>
-                  <button className={geometryDrawTool === "rectangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("rectangle"); setGeometry2dOpen(false); }}><SketchEntityRectangleIcon /><span>Rectángulo</span></button>
-                </div>
+          {toolbarMode === "sketch" ? (
+            sketchActive || capSketchActive ? (
+              <div className="mobile-sketch-finish-group">
+                <button className="sketch-command-button primary" type="button" onClick={capSketchActive ? onApplyCapDrawing : onSketchFinish}>
+                  <Check size={14} /><span>{capSketchActive ? "Aplicar" : "Listo"}</span>
+                </button>
+                <button className="sketch-command-button cancel" type="button" onClick={capSketchActive ? onCancelCapDrawing : onSketchCancel}>
+                  <X size={14} /><span>Cancelar</span>
+                </button>
               </div>
-              <details className="geometry-2d-popover-group"><summary>Más formas</summary><div className="geometry-2d-popover-row geometry-2d-tool-row">
-                  <button className={geometryDrawTool === "semicircle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("semicircle"); setGeometry2dOpen(false); }}><SketchEntitySemicircleIcon /><span>Semicírculo</span></button>
-                  <button className={geometryDrawTool === "arc" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("arc"); setGeometry2dOpen(false); }}><SketchEntityArcIcon /><span>Arco</span></button>
-                  <button className={geometryDrawTool === "triangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("triangle"); setGeometry2dOpen(false); }}><Triangle /><span>Triángulo</span></button>
-                  <button className={geometryDrawTool === "hexagon" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("hexagon"); setGeometry2dOpen(false); }}><Hexagon /><span>Hexágono</span></button>
-              </div></details>
-              {hasGeometryProfile ? (
-              <div className="geometry-2d-popover-group">
-                <span className="geometry-2d-popover-label">Operación</span>
-                <div className="geometry-2d-popover-row geometry-2d-operation-row">
-                  <label><span>Profundidad</span><input type="number" step="0.1" min="0.1" value={pushPullDistance} onChange={(event) => onPushPullDistanceChange(event.currentTarget.value)} /></label>
-                  <button className="primary" type="button" onClick={() => { onGeometryExtrude(); setGeometry2dOpen(false); }} disabled={!hasGeometryProfile}><ToolbarPushPullIcon /><span>Extruir</span></button>
-                  <button type="button" onClick={() => { onGeometryCut(); setGeometry2dOpen(false); }} disabled={!hasGeometryProfile}><Minus /><span>Cortar</span></button>
-                  <button type="button" onClick={() => { onGeometryProfileCancel(); setGeometry2dOpen(false); }} disabled={!geometryDrawTool && !hasGeometryProfile}><X /><span>Cancelar</span></button>
-                </div>
+            ) : (
+              <div className="mobile-sketch-start-group">
+                <button className="sketch-command-button primary" type="button" onClick={onNewSketch} title="Nuevo boceto">
+                  <SketchReferenceIcon name="sketchTo3d" />
+                  <span>Nuevo</span>
+                </button>
+                <button className={`sketch-command-button ${canEditSketch ? "" : "disabled"}`} type="button" onClick={onEditSketch} disabled={!canEditSketch} title="Editar">
+                  <SketchReferenceIcon name="editSketchTo3d" />
+                  <span>Editar</span>
+                </button>
               </div>
-              ) : <p className="geometry-2d-hint">Elige una forma y arrastra sobre el plano. Las operaciones aparecen al terminar el contorno.</p>}
-            </div>
+            )
           ) : null}
         </div>
-      </div>
-      <div className="toolbar-spacer" />
-      <div className="tool-group right">
-        <div className="toolbar-section compact">
-          <div className="toolbar-section-label">Visibilidad</div>
-          <div className="toolbar-section-tools">{visibilityTools.map(renderToolButton)}</div>
-        </div>
-        <div className="toolbar-section">
-          <div className="toolbar-section-label">Combinar</div>
-          <div className="toolbar-section-tools">{combineTools.map(renderToolButton)}</div>
-        </div>
-        <div className="toolbar-section">
-          <div className="toolbar-section-label">Modificar</div>
-          <div className="toolbar-section-tools">{modifyTools.map(renderToolButton)}</div>
-        </div>
-        <div className="toolbar-section">
-          <div className="toolbar-section-label">Organizar</div>
-          <div className="toolbar-section-tools">{arrangeTools.map(renderToolButton)}</div>
-        </div>
-      </div>
-      <div className="toolbar-section toolbar-actions-section">
-        <div className="toolbar-section-label">Gestionar</div>
-        <div className="action-buttons">
-          <button className="action-icon-button" aria-label="Importar" title="Importar" onClick={() => onTopPanel("import")}>
-            <ToolbarImportIcon />
-          </button>
-          <button className="action-icon-button" aria-label="Exportar" title="Exportar" onClick={() => onTopPanel("export")}>
-            <ToolbarVectorExportIcon />
-          </button>
-          <button className="action-icon-button" aria-label="Configuración del espacio de trabajo" title="Configuración del espacio de trabajo" onClick={() => window.dispatchEvent(new Event("sketchforge:open-workspace-settings"))}>
-            <ToolbarSettingsIcon />
-          </button>
-        </div>
-      </div>
-          </>
-        ) : (
-          <div className="sketch-toolbar-ribbon" aria-label="Barra de herramientas de boceto">
-            {sketchActive || capSketchActive ? (
-              renderSketchDrawingTools(
-                capSketchActive ? onApplyCapDrawing : onSketchFinish,
-                capSketchActive
-                  ? (capSectionName ? `Aplicar sección «${capSectionName}»` : "Aplicar sección")
-                  : (sketchOperation === "revolve" ? "Crear sólido revolucionado" : "Crear sólido 3D"),
-                capSketchActive ? onCancelCapDrawing : onSketchCancel,
-              )
-            ) : (
-              <div className="toolbar-section sketch-start-section">
-                <div className="toolbar-section-label">Crear</div>
-                <div className="toolbar-section-tools">
-                  <button
-                    className="sketch-command-button primary"
-                    type="button"
-                    aria-label="Nuevo boceto"
-                    title="Crear un boceto 2D independiente"
-                    onClick={onNewSketch}
-                  >
-                    <SketchReferenceIcon name="sketchTo3d" />
-                    <span>Nuevo boceto</span>
-                  </button>
-                  <button
-                    className="sketch-command-button primary"
-                    type="button"
-                    aria-label="Nuevo boceto revolución"
-                    title="Crear un boceto de revolución (tipo SolidWorks)"
-                    onClick={onNewRevolveSketch}
-                  >
-                    <SketchReferenceIcon name="revolveSketch" />
-                    <span>Boceto revolución</span>
-                  </button>
-                  <button
-                    className="sketch-command-button primary"
-                    type="button"
-                    aria-label="Nuevo boceto tubería"
-                    title="Crear un boceto de tubería / barrido 3D"
-                    onClick={onNewSweepSketch}
-                  >
-                    <SketchReferenceIcon name="sweepSketch" />
-                    <span>Boceto tubería</span>
-                  </button>
-                  <button className={`sketch-command-button ${canEditSketch ? "" : "disabled"}`} type="button" aria-label="Editar boceto a 3D" title="Editar boceto a 3D" onClick={onEditSketch} disabled={!canEditSketch}>
-                    <SketchReferenceIcon name="editSketchTo3d" />
-                    <span>Editar</span>
-                  </button>
-                </div>
+
+        {geometry2dOpen ? (
+          <div className="geometry-2d-popover" role="dialog" aria-label="Dibujo 2D en geometría" onPointerDown={(event) => event.stopPropagation()}>
+            <div className="geometry-2d-popover-header">
+              <div><strong>Dibujo 2D</strong><span>Dibuja un contorno y después extruye o corta</span></div>
+              <button type="button" onClick={() => setGeometry2dOpen(false)} aria-label="Cerrar herramientas 2D"><X size={16} /></button>
+            </div>
+            <details className="geometry-2d-popover-group"><summary>Plano de dibujo</summary>
+              <div className="geometry-2d-popover-row">
+                <button className={geometryPlaneMode === "auto" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("auto")} title="Detectar automáticamente la superficie bajo el cursor"><span>Superficie</span></button>
+                <button className={geometryPlaneMode === "base" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("base")}><span>Base</span></button>
+                <button className={geometryPlaneMode === "offset" ? "active" : ""} type="button" onClick={() => onGeometryPlaneMode("offset")}><span>Altura</span></button>
+                {geometryPlaneMode === "offset" ? <input type="number" step="0.1" aria-label="Elevación del plano" value={geometryPlaneOffset} onChange={(event) => onGeometryPlaneOffset(event.currentTarget.value)} /> : null}
               </div>
-            )}
+            </details>
+            <div className="geometry-2d-popover-group">
+              <span className="geometry-2d-popover-label">Dibujar</span>
+              <div className="geometry-2d-popover-row geometry-2d-tool-row">
+                <button className={geometryDrawTool === "pencil" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("pencil"); setGeometry2dOpen(false); }}><Pencil /><span>Lápiz</span></button>
+                <button className={geometryDrawTool === "circle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("circle"); setGeometry2dOpen(false); }}><SketchEntityCircleIcon /><span>Círculo</span></button>
+                <button className={geometryDrawTool === "rectangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("rectangle"); setGeometry2dOpen(false); }}><SketchEntityRectangleIcon /><span>Rectángulo</span></button>
+              </div>
+            </div>
+            <details className="geometry-2d-popover-group"><summary>Más formas</summary><div className="geometry-2d-popover-row geometry-2d-tool-row">
+                <button className={geometryDrawTool === "semicircle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("semicircle"); setGeometry2dOpen(false); }}><SketchEntitySemicircleIcon /><span>Semicírculo</span></button>
+                <button className={geometryDrawTool === "arc" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("arc"); setGeometry2dOpen(false); }}><SketchEntityArcIcon /><span>Arco</span></button>
+                <button className={geometryDrawTool === "triangle" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("triangle"); setGeometry2dOpen(false); }}><Triangle /><span>Triángulo</span></button>
+                <button className={geometryDrawTool === "hexagon" ? "active" : ""} type="button" onClick={() => { onGeometryDrawTool("hexagon"); setGeometry2dOpen(false); }}><Hexagon /><span>Hexágono</span></button>
+            </div></details>
+            {hasGeometryProfile ? (
+            <div className="geometry-2d-popover-group">
+              <span className="geometry-2d-popover-label">Operación</span>
+              <div className="geometry-2d-popover-row geometry-2d-operation-row">
+                <label><span>Profundidad</span><input type="number" step="0.1" min="0.1" value={pushPullDistance} onChange={(event) => onPushPullDistanceChange(event.currentTarget.value)} /></label>
+                <button className="primary" type="button" onClick={() => { onGeometryExtrude(); setGeometry2dOpen(false); }} disabled={!hasGeometryProfile}><ToolbarPushPullIcon /><span>Extruir</span></button>
+                <button type="button" onClick={() => { onGeometryCut(); setGeometry2dOpen(false); }} disabled={!hasGeometryProfile}><Minus /><span>Cortar</span></button>
+                <button type="button" onClick={() => { onGeometryProfileCancel(); setGeometry2dOpen(false); }} disabled={!geometryDrawTool && !hasGeometryProfile}><X /><span>Cancelar</span></button>
+              </div>
+            </div>
+            ) : <p className="geometry-2d-hint">Elige una forma y arrastra sobre el plano. Las operaciones aparecen al terminar el contorno.</p>}
           </div>
-        )}
-      </div>
-      <div className="toolbar-workspace-tabs" role="tablist" aria-label="Modo de editor">
-        <button
-          className={toolbarMode === "geometry" ? "active" : ""}
-          type="button"
-          role="tab"
-          aria-selected={toolbarMode === "geometry"}
-          onClick={() => selectToolbarMode("geometry")}
-        >
-          Geometría
-        </button>
-        <button
-          className={toolbarMode === "sketch" ? "active" : ""}
-          type="button"
-          role="tab"
-          aria-selected={toolbarMode === "sketch"}
-          onClick={() => selectToolbarMode("sketch")}
-        >
-          Boceto
-        </button>
+        ) : null}
       </div>
     </div>
+    {toolbarMode === "geometry" ? (
+      <nav className="mobile-sketchforge-bottom-bar" aria-label="Herramientas móviles de geometría">
+        {onToggleShapeLibrary ? (
+          <button
+            type="button"
+            className={`toolbar-icon mobile-bot-library-btn ${shapeLibraryOpen ? "active" : ""}`}
+            onClick={onToggleShapeLibrary}
+            title="Librería de formas"
+            aria-label="Librería de formas"
+          >
+            <Box size={18} />
+            <span>Formas</span>
+          </button>
+        ) : null}
+        <span className="mobile-bot-sep" />
+        <div className="mobile-bot-group">
+          {renderToolButton(leftTools[0]) /* Copiar */}
+          {renderToolButton(leftTools[1]) /* Pegar */}
+          {renderToolButton(leftTools[2]) /* Duplicar */}
+          {renderToolButton(leftTools[3]) /* Eliminar */}
+        </div>
+        <span className="mobile-bot-sep" />
+        <div className="mobile-bot-group">
+          {renderToolButton(combineTools[0]) /* Agrupar */}
+          {renderToolButton(combineTools[1]) /* Desagrupar */}
+          {renderToolButton(combineTools[2]) /* Intersección */}
+        </div>
+        <span className="mobile-bot-sep" />
+        <div className="mobile-bot-group">
+          {renderToolButton(modifyTools[0]) /* Alinear */}
+          {renderToolButton(modifyTools[1]) /* Reflejar */}
+          {renderToolButton(modifyTools[3]) /* Chaflán */}
+          {renderToolButton(modifyTools[4]) /* Redondeo */}
+        </div>
+      </nav>
+    ) : null}
+    </>
   );
 }
 

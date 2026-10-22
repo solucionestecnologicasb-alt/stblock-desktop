@@ -1,4 +1,23 @@
-import type { WorkplaneShape } from "@/types/sketchforge";
+import type { ShapePlacement, WorkplaneShape } from "@/types/sketchforge";
+
+// Convierte un punto de contacto sobre una cara en la posición del centro del
+// grupo three.js: la base local (-Y) se apoya contra la normal de la cara y el
+// cuerpo se separa de ella media altura. Sin `surface` el destino ya viene
+// expresado como posición de la base en el plano horizontal.
+export function applyPlacementToHeight(point: ShapePlacement, height: number): ShapePlacement {
+  if (!point.surface) {
+    return point;
+  }
+  const [nx, ny, nz] = point.surface.normal;
+  const [cx, cy, cz] = point.surface.contact;
+  const half = Number.isFinite(height) ? height / 2 : 0;
+  return {
+    ...point,
+    x: cx + nx * half,
+    z: cz + nz * half,
+    elevation: cy + ny * half - half,
+  };
+}
 
 export function normalizeDegrees(value: number) {
   return ((value % 360) + 360) % 360;

@@ -332,6 +332,7 @@ class Scratch3Arduino {
                     items: [
                         {text: 'Arduino Uno', value: 'arduinoUno'},
                         {text: 'Arduino Nano', value: 'arduinoNano'},
+                        {text: 'Arduino Nano LGT8F328P', value: 'arduinoLGT8F328P'},
                         {text: 'Arduino Mega', value: 'arduinoMega'},
                         {text: 'ESP32', value: 'esp32'}
                     ]

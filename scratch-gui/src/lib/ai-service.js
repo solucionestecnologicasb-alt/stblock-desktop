@@ -182,15 +182,20 @@ function buildPythonModePrompt() {
     return lines;
 }
 
-function buildDeviceModePrompt() {
+function buildDeviceModePrompt(boardContext) {
     var lines = [];
     lines.push('=== MODO ELECTRÓNICA (Arduino C++ + Gearbot) ===');
     lines.push('Generá código Arduino C++ en el campo "arduinoCode". Se compila/ejecuta en el modo Electrónica y en el simulador Gearbot (stblock-execute).');
     lines.push('');
-    lines.push('REGLAS C++ ARDUINO (Arduino UNO):');
+    if (boardContext) {
+        // La placa seleccionada y sus bloques disponibles se inyectan desde STBlock.
+        lines.push(boardContext);
+        lines.push('');
+    }
+    lines.push('REGLAS C++ ARDUINO:');
     lines.push('- Todo programa tiene void setup() y void loop().');
-    lines.push('- pinMode(pin, OUTPUT/INPUT/INPUT_PULLUP) se llama en setup(); digitalWrite(pin, HIGH/LOW); digitalRead(pin); analogWrite(pin, valor) para PWM (0-255); analogRead(pin) para pines A0-A5 (0-1023); delay(ms); tone(pin, frecuencia); Serial.begin(9600) y Serial.print/println.');
-    lines.push('- Pines UNO: digitales 2-13; analógicos A0-A5; PWM: 3, 5, 6, 9, 10, 11.');
+    lines.push('- pinMode(pin, OUTPUT/INPUT/INPUT_PULLUP) se llama en setup(); digitalWrite(pin, HIGH/LOW); digitalRead(pin); analogWrite(pin, valor) para PWM (0-255); analogRead(pin) para pines analógicos (0-1023 en AVR); delay(ms); tone(pin, frecuencia); Serial.begin(baud) y Serial.print/println.');
+    lines.push('- Ajustá los pines, voltaje lógico y periféricos SEGÚN LA PLACA SELECCIONADA de arriba. No uses pines que esa placa no tenga.');
     lines.push('- Usá delay() con moderación (bloquea el programa).');
     lines.push('');
     lines.push('=== GEARBOT (robot simulador embebido en static/gears/index.html) ===');
@@ -209,11 +214,57 @@ function buildDeviceModePrompt() {
     lines.push('  * radio_* : enviar/recibir mensajes entre robots.');
     lines.push('- Ejemplo "robot que esquiva obstáculos": leé ultrasonic_sensor en el puerto delantero y usá move_steering para girar cuando la distancia es corta.');
     lines.push('');
-    lines.push('CONTRATO: respondé con {"mode":"device","arduinoCode":"<código C++>","explanation":"..."}.');
+    lines.push('CONTRATO: respondé con {"mode":"device","arduinoCode":"<código C++>","freeCode":true|false,"explanation":"..."}.');
+    lines.push('- "freeCode": true cuando el usuario pide escribir código libre, avanzado o completo que querrá editar a mano (o pide explícitamente desbloquear/editar el editor de código). El host desbloqueará el editor para que el usuario escriba.');
+    lines.push('- "freeCode": false para código simple generado a partir de bloques (comportamiento por defecto, el editor queda sincronizado con los bloques).');
     lines.push('');
     lines.push('EJEMPLO (LED parpadeante):');
     lines.push('void setup() { pinMode(13, OUTPUT); }');
     lines.push('void loop() { digitalWrite(13, HIGH); delay(1000); digitalWrite(13, LOW); delay(1000); }');
+    return lines;
+}
+
+function buildCircuitModePrompt() {
+    var lines = [];
+    lines.push('=== MODO CIRCUITO 3D (Electronics Lab) ===');
+    lines.push('Creá o editá un circuito 3D y devolvelo en el campo "circuitDoc". Usá EXACTAMENTE el mismo esquema JSON que los circuitos precargados de Electronics Lab.');
+    lines.push('');
+    lines.push('ESQUEMA (JSON):');
+    lines.push('{');
+    lines.push('  "schema": "electronics-lab.universal.v1",');
+    lines.push('  "metadata": { "name": "Nombre del circuito", "description": "..." },');
+    lines.push('  "circuit": {');
+    lines.push('    "components": [');
+    lines.push('      { "id":"u1", "typeId":"timer-555", "name":"U1 · NE555", "position":{"x":0,"y":0,"z":0}, "rotation":{"x":0,"y":0,"z":0}, "parameters":{...} }');
+    lines.push('    ],');
+    lines.push('    "wires": [');
+    lines.push('      { "id":"w1", "from":{"componentId":"u1","pinId":"8"}, "to":{"componentId":"supply","pinId":"ch1_pos"}, "color":"#ef4444" }');
+    lines.push('    ]');
+    lines.push('  }');
+    lines.push('}');
+    lines.push('');
+    lines.push('COMPONENTES DISPONIBLES (typeId · pines · parámetros habituales):');
+    lines.push('- breadboard · pines "1A".."30J" (fila+columna) · infraestructura; incluí SIEMPRE una como base.');
+    lines.push('- power-supply-triple · ch1_pos,ch1_neg,ch2_pos,ch2_neg,ch3_pos,ch3_neg · params: {"masterPower":true,"ch1_enabled":true,"ch1_voltage":5}.');
+    lines.push('- resistor · pines 1,2 · params: {"resistance":220}.');
+    lines.push('- led · pines A(ánodo),K(cátodo) · params: {"color":"#ff0000","forwardVoltage":1.8}.');
+    lines.push('- pushbutton · pines 1,2 · params: {"pressed":false}.');
+    lines.push('- capacitor-electrolytic · pines POS,NEG · params: {"capacitance":0.000001}.');
+    lines.push('- capacitor-ceramic · pines 1,2 · params: {"capacitance":0.0000001}.');
+    lines.push('- timer-555 · pines 1..8 (1=GND,2=TRIG,3=OUT,4=RESET,5=CTRL,6=THRES,7=DISCH,8=VCC) · params:{"vccMin":4.5}.');
+    lines.push('- 2n2222 (transistor NPN) · pines E(emisor),B(base),C(colector) · params:{"hfe":100}.');
+    lines.push('- potentiometer · pines 1,W(wiper),2 · params:{"totalResistance":10000,"ratio":0.5}.');
+    lines.push('- relay-spdt · pines com,coil1,coil2,no,nc · params:{"nominalVoltage":5}.');
+    lines.push('');
+    lines.push('REGLAS:');
+    lines.push('1. Cada "id" de componente debe ser único y cada cable debe referenciar componentId + pinId existentes.');
+    lines.push('2. Incluí SIEMPRE una breadboard y una power-supply-triple, y conectá la alimentación (ch1_pos/ch1_neg) a los rieles o componentes.');
+    lines.push('3. Usá SOLO los typeId y pines de la lista. NO inventes componentes ni pines.');
+    lines.push('4. Posicioná los componentes con "position" {x,y,z} en una rejilla simple (breadboard centrada en 0,0,0) para que se vean ordenados.');
+    lines.push('5. Si el usuario pide modificar el circuito actual, PARTÍ del CIRCUITO 3D ACTUAL provisto como contexto y cambiá solo lo necesario.');
+    lines.push('6. Devolvé el documento COMPLETO (todos los componentes y cables), no un diff.');
+    lines.push('');
+    lines.push('CONTRATO: respondé con {"mode":"circuit","circuitDoc":{...},"explanation":"..."}.');
     return lines;
 }
 
@@ -264,27 +315,30 @@ function build3dModePrompt() {
     return lines;
 }
 
-function buildAppSystemPrompt(trainingExamples, sessionSummary, activeMode) {
+function buildAppSystemPrompt(trainingExamples, sessionSummary, activeMode, boardContext) {
     activeMode = activeMode || 'blocks';
-    if (!trainingExamples && !sessionSummary && _appPromptCacheByMode[activeMode]) return _appPromptCacheByMode[activeMode];
+    if (!trainingExamples && !sessionSummary && !boardContext && _appPromptCacheByMode[activeMode]) return _appPromptCacheByMode[activeMode];
     var lines = [
-        'Eres asistente STBlock. PODÉS crear/editar bloques reales y código según el modo activo: bloques Scratch (modo Juego), código Python (modo Programación), código Arduino C++ (modo Electrónica + Gearbot) o modelos 3D procedurales (modo Diseño 3D).',
+        'Eres asistente STBlock. PODÉS crear/editar bloques reales y código según el modo activo: bloques Scratch (modo Juego), código Python (modo Programación), código Arduino C++ (modo Electrónica + Gearbot), circuitos 3D (modo Circuito 3D) o modelos 3D procedurales (modo Diseño 3D).',
         '',
         'CAPACIDADES:',
         '- Crear bloques de Scratch (movimiento, apariencia, sonido, eventos, control, sensores, operadores, variables, lápiz, música)',
         '- Crear bloques de Arduino (digitalWrite, digitalRead, analogWrite, analogRead, servo, serial, etc.), ESP32 (WiFi, touch, DAC, etc.) y Micro:bit (matriz LED, botones, acelerómetro, etc.)',
         '- Generar código Python para el panel de Programación (se ejecuta con Pyodide)',
         '- Generar código Arduino C++ para el modo Electrónica y el simulador Gearbot',
+        '- Crear/editar circuitos 3D de Electronics Lab (componentes y cables) en modo Circuito 3D',
         '- Generar modelos 3D procedurales para SketchForge (modo Diseño 3D)',
         '',
         'DEBES responder SIEMPRE en formato JSON con la siguiente estructura. Solo el campo correspondiente al MODO ACTIVO va lleno; los demás van vacíos u omitidos:',
         '{',
         '  "explanation": "Explicación en español para mostrar en el chat sobre lo que genera o la respuesta a la pregunta del usuario.",',
-        '  "mode": "blocks | python | device | 3d",',
+        '  "mode": "blocks | python | device | circuit | 3d",',
         '  "clearExisting": true o false (modo blocks/3d: si true reemplaza el contenido actual; si false agrega),',
         '  "scripts": [ ... bloques Scratch, solo modo blocks ... ],',
         '  "pythonCode": "... código Python, solo modo python ...",',
         '  "arduinoCode": "... código C++ Arduino, solo modo device ...",',
+        '  "freeCode": true o false (solo modo device: true desbloquea el editor de código),',
+        '  "circuitDoc": { ... documento de circuito Electronics Lab, solo modo circuit ... },',
         '  "script3D": "clear=true\\nadd box(...)\\nrepeat(4) as i { ... }", solo modo 3d',
         '}',
         '',
@@ -301,8 +355,11 @@ function buildAppSystemPrompt(trainingExamples, sessionSummary, activeMode) {
         var pythonPrompt = buildPythonModePrompt();
         for (var pi = 0; pi < pythonPrompt.length; pi++) lines.push(pythonPrompt[pi]);
     } else if (activeMode === 'device') {
-        var devicePrompt = buildDeviceModePrompt();
+        var devicePrompt = buildDeviceModePrompt(boardContext);
         for (var di = 0; di < devicePrompt.length; di++) lines.push(devicePrompt[di]);
+    } else if (activeMode === 'circuit') {
+        var circuitPrompt = buildCircuitModePrompt();
+        for (var ci = 0; ci < circuitPrompt.length; ci++) lines.push(circuitPrompt[ci]);
     } else if (activeMode === '3d') {
         var d3dPrompt = build3dModePrompt();
         for (var d3i = 0; d3i < d3dPrompt.length; d3i++) lines.push(d3dPrompt[d3i]);
@@ -479,7 +536,7 @@ function buildAppSystemPrompt(trainingExamples, sessionSummary, activeMode) {
         lines.push(buildTrainingPrompt(trainingExamples));
     }
 
-    if (!trainingExamples && !sessionSummary) {
+    if (!trainingExamples && !sessionSummary && !boardContext) {
         _appPromptCacheByMode[activeMode] = lines.join('\n');
     }
     return lines.join('\n');
@@ -726,7 +783,7 @@ AiService.prototype._call = function (messages, maxTokens) {
     return Promise.reject(new Error('Formato no soportado'));
 };
 
-AiService.prototype.ask = function (userMessage, sessionSummary, mentorMode, activeMode) {
+AiService.prototype.ask = function (userMessage, sessionSummary, mentorMode, activeMode, boardContext) {
     var prompt;
     var mode = activeMode || this.activeMode || 'blocks';
     if (mentorMode) {
@@ -735,7 +792,8 @@ AiService.prototype.ask = function (userMessage, sessionSummary, mentorMode, act
         prompt = buildAppSystemPrompt(
             this.trainingData.length > 0 ? this.trainingData : null,
             sessionSummary,
-            mode
+            mode,
+            boardContext
         );
     }
     return this._call([

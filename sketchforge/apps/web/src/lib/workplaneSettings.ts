@@ -4,6 +4,13 @@ import { DEFAULT_WORKPLANE_GRID_COLOR } from "@/lib/workplaneGrid";
 
 export const DEFAULT_SNAP_GRID: GridSize = "1.0 mm";
 
+// Paso en milímetros de la rejilla de ajuste. 0 significa ajuste desactivado.
+export function snapGridStep(size: GridSize) {
+  if (size === "Desactivado") return 0;
+  if (size === "Ladrillo") return 8;
+  return Number.parseFloat(size) || 1;
+}
+
 export const DEFAULT_WORKPLANE_WORKSPACE: WorkplaneWorkspaceSettings = {
   width: 200,
   depth: 200,

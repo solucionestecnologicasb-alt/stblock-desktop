@@ -33,6 +33,26 @@ describe("shape catalog", () => {
     });
   });
 
+  it("rests a placed shape on the target surface", () => {
+    const asset: ShapeAsset = { id: "box", name: "Box", src: "box.png", kind: "box", color: "#d41721" };
+
+    const onTop = makeShapeFromAsset(asset, {
+      x: 0,
+      z: 0,
+      surface: { contact: [4, 22, -3], normal: [0, 1, 0] },
+    });
+    expect(onTop).toMatchObject({ x: 4, z: -3, elevation: 22, rotationX: 0, rotationZ: 0 });
+
+    const onWall = makeShapeFromAsset(asset, {
+      x: 0,
+      z: 0,
+      rotationX: 0,
+      rotationZ: -90,
+      surface: { contact: [10, 5, -2], normal: [1, 0, 0] },
+    });
+    expect(onWall).toMatchObject({ x: 20, z: -2, elevation: -5, rotationX: 0, rotationZ: -90 });
+  });
+
   it("uses shape-specific defaults for text and round profiles", () => {
     const text = makeShapeFromAsset({ id: "text", name: "Text", src: "text.png", kind: "text", color: "#cf101b" });
     const torus = makeShapeFromAsset({ id: "torus", name: "Torus", src: "torus.png", kind: "torus", color: "#0098c7" });

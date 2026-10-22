@@ -29,6 +29,25 @@ export type ShapeAsset = {
   hole?: boolean;
 };
 
+// Cara de otra pieza sobre la que se apoya una pieza nueva. `contact` y
+// `normal` están en coordenadas de mundo.
+export type ShapePlacementSurface = {
+  contact: [number, number, number];
+  normal: [number, number, number];
+};
+
+// Destino de colocación de una pieza. Si `surface` está presente, la pieza
+// apoya su base sobre esa cara en lugar del plano horizontal de trabajo.
+export type ShapePlacement = {
+  x: number;
+  z: number;
+  elevation?: number;
+  rotation?: number;
+  rotationX?: number;
+  rotationZ?: number;
+  surface?: ShapePlacementSurface;
+};
+
 export type ProjectAssetSourceFormat = "stl" | "obj" | "svg" | "step";
 
 export type ProjectAsset = {

@@ -329,9 +329,17 @@ class VirtualMachine extends EventEmitter {
         return this.runtime.getDeviceProfile();
     }
 
+    setProgramMode (mode) {
+        this.runtime.setProgramMode(mode);
+    }
+
+    getProgramMode () {
+        return this.runtime.getProgramMode();
+    }
+
     setHardwareModeActive (active) {
         this.runtime.setHardwareModeActive(active);
-        if (this.runtime.getEditingTarget()) {
+        if (this.runtime.getEditingTarget() && this.runtime.getTargetForStage()) {
             this.emitWorkspaceUpdate();
         }
     }
@@ -412,8 +420,8 @@ class VirtualMachine extends EventEmitter {
      * Upload realtime firmware to the extension's connected peripheral.
      * @param {string} extensionId - the id of the extension.
      */
-    uploadFirmwareToPeripheral (extensionId) {
-        this.runtime.uploadFirmwareToPeripheral(extensionId);
+    uploadFirmwareToPeripheral (extensionId, customPort = null) {
+        return this.runtime.uploadFirmwareToPeripheral(extensionId, customPort);
     }
 
     /**
@@ -449,6 +457,9 @@ class VirtualMachine extends EventEmitter {
      * @return {!Promise} Promise that resolves after targets are installed.
      */
     loadProject (input) {
+        if (typeof window !== 'undefined' && window.__stbLog) {
+            window.__stbLog('INFO', `[VM] loadProject iniciado. Tipo: ${typeof input}, ArrayBuffer: ${input instanceof ArrayBuffer}, length: ${input ? (input.byteLength || input.length) : 0}`);
+        }
         if (typeof input === 'object' && !(input instanceof ArrayBuffer) &&
           !ArrayBuffer.isView(input)) {
             // If the input is an object and not any ArrayBuffer
@@ -465,7 +476,15 @@ class VirtualMachine extends EventEmitter {
             // The second argument of false below indicates to the validator that the
             // input should be parsed/validated as an entire project (and not a single sprite)
             validate(input, false, (error, res) => {
-                if (error) return reject(error);
+                if (error) {
+                    if (typeof window !== 'undefined' && window.__stbLog) {
+                        window.__stbLog('WARN', `[VM] scratch-parser advertencia/error: ${error.message || error}`);
+                    }
+                    return reject(error);
+                }
+                if (typeof window !== 'undefined' && window.__stbLog) {
+                    window.__stbLog('INFO', `[VM] scratch-parser validación exitosa (projectVersion: ${res && res[0] && res[0].projectVersion})`);
+                }
                 resolve(res);
             });
         })
@@ -493,9 +512,27 @@ class VirtualMachine extends EventEmitter {
             });
 
         return validationPromise
-            .then(validatedInput => this.deserializeProject(validatedInput[0], validatedInput[1]))
-            .then(() => this.runtime.handleProjectLoaded())
+            .then(validatedInput => {
+                if (typeof window !== 'undefined' && window.__stbLog) {
+                    window.__stbLog('INFO', '[VM] scratch-parser listo. Iniciando deserializeProject...');
+                }
+                return this.deserializeProject(validatedInput[0], validatedInput[1]);
+            })
+            .then(() => {
+                if (typeof window !== 'undefined' && window.__stbLog) {
+                    window.__stbLog('INFO', '[VM] deserializeProject finalizado. Invocando runtime.handleProjectLoaded()...');
+                }
+                return this.runtime.handleProjectLoaded();
+            })
+            .then(() => {
+                if (typeof window !== 'undefined' && window.__stbLog) {
+                    window.__stbLog('SUCCESS', '[VM] runtime.handleProjectLoaded() finalizado con éxito.');
+                }
+            })
             .catch(error => {
+                if (typeof window !== 'undefined' && window.__stbLog) {
+                    window.__stbLog('ERROR', `[VM] loadProject falló: ${error && (error.message || error)}`, error && error.stack);
+                }
                 // Intentionally rejecting here (want errors to be handled by caller)
                 if (Object.prototype.hasOwnProperty.call(error, 'validationError')) {
                     return Promise.reject(JSON.stringify(error));
@@ -764,6 +801,9 @@ class VirtualMachine extends EventEmitter {
      * @returns {Promise} Promise that resolves after the project has loaded
      */
     deserializeProject (projectJSON, zip) {
+        if (typeof window !== 'undefined' && window.__stbLog) {
+            window.__stbLog('INFO', `[VM] deserializeProject: version=${projectJSON.projectVersion}, device=${projectJSON.device}, targets=${projectJSON.targets ? projectJSON.targets.length : 0}`);
+        }
         // Clear the current runtime
         this.clear();
         this.runtime.setDeviceProfile(projectJSON.device || null, projectJSON.programMode || null, false);
@@ -1705,11 +1745,14 @@ class VirtualMachine extends EventEmitter {
      * of the current editing target's blocks.
      */
     emitWorkspaceUpdate () {
-        // Create a list of broadcast message Ids according to the stage variables
-        const stageVariables = this.runtime.getTargetForStage().variables;
+        const stage = this.runtime.getTargetForStage();
+        if (!stage || !this.editingTarget) {
+            return;
+        }
+        const stageVariables = stage.variables || {};
         let messageIds = [];
         for (const varId in stageVariables) {
-            if (stageVariables[varId].type === Variable.BROADCAST_MESSAGE_TYPE) {
+            if (stageVariables[varId] && stageVariables[varId].type === Variable.BROADCAST_MESSAGE_TYPE) {
                 messageIds.push(varId);
             }
         }
@@ -1719,7 +1762,7 @@ class VirtualMachine extends EventEmitter {
             const currTarget = this.runtime.targets[i];
             const currBlocks = currTarget.blocks._blocks;
             for (const blockId in currBlocks) {
-                if (currBlocks[blockId].fields.BROADCAST_OPTION) {
+                if (currBlocks[blockId].fields && currBlocks[blockId].fields.BROADCAST_OPTION) {
                     const id = currBlocks[blockId].fields.BROADCAST_OPTION.id;
                     const index = messageIds.indexOf(id);
                     if (index !== -1) {
@@ -1732,12 +1775,14 @@ class VirtualMachine extends EventEmitter {
         // Anything left in messageIds is not referenced by a block, so delete it.
         for (let i = 0; i < messageIds.length; i++) {
             const id = messageIds[i];
-            delete this.runtime.getTargetForStage().variables[id];
+            if (stage.variables) {
+                delete stage.variables[id];
+            }
         }
-        const globalVarMap = Object.assign({}, this.runtime.getTargetForStage().variables);
+        const globalVarMap = Object.assign({}, stage.variables || {});
         const localVarMap = this.editingTarget.isStage ?
             Object.create(null) :
-            Object.assign({}, this.editingTarget.variables);
+            Object.assign({}, this.editingTarget.variables || {});
 
         const globalVariables = Object.keys(globalVarMap).map(k => globalVarMap[k]);
         const localVariables = Object.keys(localVarMap).map(k => localVarMap[k]);
@@ -1933,6 +1978,82 @@ class VirtualMachine extends EventEmitter {
             return !!zip.files['flynt.json'];
         }).catch(function () {
             return false;
+        });
+    }
+
+    /**
+     * Extract all metadata from a .flynt zip in a single safe pass.
+     * @param {ArrayBuffer} buffer The .flynt zip content.
+     * @return {!Promise<object|null>} Object containing {isFlynt, aiData, deviceData, sketchforgeData, pythonData}.
+     */
+    static extractFlyntAll (buffer) {
+        if (!buffer) return Promise.resolve(null);
+        return JSZip.loadAsync(buffer).then(function (zip) {
+            if (!zip.files['flynt.json']) {
+                return {isFlynt: false};
+            }
+
+            var promises = [];
+            var aiData = {};
+            var deviceData = {};
+            var sketchforgeData = null;
+            var pythonData = null;
+
+            function readJsonFile(name, target, key) {
+                var file = zip.files[name];
+                if (file && !file.dir) {
+                    promises.push(file.async('string').then(function (text) {
+                        try {
+                            target[key] = JSON.parse(text);
+                        } catch (e) {
+                            target[key] = text;
+                        }
+                    }).catch(function () {}));
+                }
+            }
+
+            readJsonFile('ai/training.json', aiData, 'training');
+            readJsonFile('ai/session.json', aiData, 'session');
+            readJsonFile('ai/settings.json', aiData, 'settings');
+
+            readJsonFile('devices/projects.json', deviceData, 'deviceProjects');
+            readJsonFile('devices/code-state.json', deviceData, 'codeState');
+            readJsonFile('devices/terminal.json', deviceData, 'terminalHistory');
+            readJsonFile('devices/connection-state.json', deviceData, 'connectionState');
+            readJsonFile('devices/circuit-data.json', deviceData, 'circuitData');
+            readJsonFile('devices/circuit3d-data.json', deviceData, 'circuit3dData');
+            readJsonFile('ai/conversation.json', deviceData, 'conversation');
+
+            var skfFile = zip.files['sketchforge/project.skf'];
+            if (skfFile && !skfFile.dir) {
+                promises.push(skfFile.async('arraybuffer').then(function (arrayBuffer) {
+                    sketchforgeData = {bytes: arrayBuffer};
+                }).catch(function () {}));
+            }
+
+            var pyFile = zip.files['python/python-data.json'];
+            if (pyFile && !pyFile.dir) {
+                promises.push(pyFile.async('string').then(function (text) {
+                    try {
+                        pythonData = JSON.parse(text);
+                    } catch (e) {
+                        pythonData = null;
+                    }
+                }).catch(function () {}));
+            }
+
+            return Promise.all(promises).then(function () {
+                return {
+                    isFlynt: true,
+                    aiData: Object.keys(aiData).length > 0 ? aiData : null,
+                    deviceData: Object.keys(deviceData).length > 0 ? deviceData : null,
+                    sketchforgeData: sketchforgeData,
+                    pythonData: pythonData
+                };
+            });
+        }).catch(function (err) {
+            log.warn('Could not read zip buffer in extractFlyntAll:', err);
+            return {isFlynt: false};
         });
     }
 

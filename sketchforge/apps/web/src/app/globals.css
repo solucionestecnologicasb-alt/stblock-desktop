@@ -3209,6 +3209,86 @@ button {
   pointer-events: none;
 }
 
+.editor-export-success {
+  position: fixed;
+  top: calc(var(--editor-toolbar-height) + 18px);
+  left: 50%;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 12px 14px;
+  color: #14532d;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(20, 83, 45, 0.22);
+  transform: translateX(-50%);
+  animation: editor-export-success-in 0.22s ease-out;
+}
+
+.editor-export-success-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: #ffffff;
+  background: #22c55e;
+  border-radius: 50%;
+}
+
+.editor-export-success > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.editor-export-success strong {
+  font-size: 13px;
+}
+
+.editor-export-success > div > span {
+  overflow-wrap: anywhere;
+  color: #166534;
+  font-size: 12px;
+}
+
+.editor-export-success button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0;
+  color: #15803d;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.editor-export-success button:hover {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+@keyframes editor-export-success-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 .editor-body {
   position: fixed;
   inset: var(--editor-toolbar-height) 0 0 0;
@@ -6964,71 +7044,613 @@ html[data-theme="dark"] .sketch-vector-summary {
   }
 }
 
-@media (max-width: 640px) {
+.mobile-sketchforge-bottom-bar {
+  display: none !important;
+}
+
+.shape-library-categories-bar {
+  display: none;
+}
+
+.desktop-toolbar-container {
+  display: contents;
+}
+
+.mobile-toolbar-container {
+  display: none !important;
+}
+
+@media (max-width: 768px), (orientation: landscape) and (max-height: 550px) {
+  /* Ocultar toast 'Listo' que flota sobre los controles en móvil */
+  .editor-toast {
+    display: none !important;
+  }
+
+  .desktop-toolbar-container {
+    display: none !important;
+  }
+
+  /* Barra superior secundaria en 2 filas organizadas y sin scroll */
+  .secondary-toolbar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
+    height: 84px !important;
+    min-height: 84px !important;
+    max-height: 84px !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: visible !important;
+    z-index: 25 !important;
+    background: #f4f7f9 !important;
+    border-bottom: 1px solid #d2dce5 !important;
+    box-sizing: border-box !important;
+  }
+
+  .mobile-toolbar-container {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    height: 84px !important;
+    box-sizing: border-box !important;
+    justify-content: space-between !important;
+    padding: 4px 8px !important;
+    overflow: hidden !important;
+  }
+
+  .mobile-toolbar-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
+  }
+
+  .mobile-toolbar-actions-strip {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: clamp(3px, 1.2vw, 5px) !important;
+    width: 100% !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .mobile-toolbar-actions-strip .toolbar-icon,
+  .mobile-toolbar-actions-strip .action-icon-button {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 33px !important;
+    max-width: 38px !important;
+    flex: 0 0 auto !important;
+    padding: 0 !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    border: 1px solid #d0dbe4 !important;
+    color: #2b455c !important;
+    display: grid !important;
+    place-items: center !important;
+    cursor: pointer !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  .mobile-toolbar-actions-strip .toolbar-icon svg,
+  .mobile-toolbar-actions-strip .action-icon-button svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .mobile-toolbar-actions-strip .toolbar-icon:disabled,
+  .mobile-toolbar-actions-strip .toolbar-icon.disabled {
+    opacity: 0.38 !important;
+    background: #f1f5f8 !important;
+    border-color: #e2e8f0 !important;
+    cursor: default !important;
+  }
+
+  .mobile-toolbar-actions-strip .geometry-2d-trigger.active {
+    background: #009cde !important;
+    color: #ffffff !important;
+    border-color: #0077aa !important;
+  }
+
+  .mobile-2d-tag {
+    font-size: 13px !important;
+    font-weight: 850 !important;
+    line-height: 1 !important;
+    letter-spacing: -0.5px !important;
+  }
+
+  /* Fila 2: Pestañas de espacio de trabajo Geometría / Boceto */
+  .mobile-toolbar-row-bottom .toolbar-workspace-tabs {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    height: 34px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    background: #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 2px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .mobile-toolbar-row-bottom .toolbar-workspace-tabs button {
+    height: 30px !important;
+    padding: 0 10px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    border-radius: 6px !important;
+    border-bottom: none !important;
+    color: #475569 !important;
+    background: transparent !important;
+  }
+
+  .mobile-toolbar-row-bottom .toolbar-workspace-tabs button.active {
+    background: #ffffff !important;
+    color: #0077aa !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  /* Fila 2: Herramientas contextuales (Editar malla, 2D) */
+  .mobile-toolbar-tools .selection-mode-chip {
+    height: 34px !important;
+    padding: 4px 10px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    border: 1px solid #d0dbe4 !important;
+    color: #2b455c !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+    cursor: pointer !important;
+  }
+
+  .mobile-toolbar-tools .geometry-2d-trigger {
+    height: 34px !important;
+    padding: 4px 10px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    border: 1px solid #d0dbe4 !important;
+    color: #2b455c !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+    cursor: pointer !important;
+  }
+
+  .mobile-toolbar-tools .geometry-2d-trigger.active {
+    background: #009cde !important;
+    color: #ffffff !important;
+    border-color: #0077aa !important;
+  }
+
+  .mobile-sketch-finish-group,
+  .mobile-sketch-start-group {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+  }
+
+  .mobile-sketch-finish-group .sketch-command-button,
+  .mobile-sketch-start-group .sketch-command-button {
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 10px !important;
+    font-size: 11px !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Popover 2D en móvil */
+  .geometry-2d-popover {
+    position: fixed !important;
+    top: 88px !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-height: calc(100vh - 150px) !important;
+    overflow-y: auto !important;
+    z-index: 40 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22) !important;
+  }
+
+  /* Barra inferior móvil de geometría */
+  .mobile-sketchforge-bottom-bar {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 54px !important;
+    background: #ffffff !important;
+    border-top: 1px solid #dce4eb !important;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.08) !important;
+    z-index: 25 !important;
+    padding: 0 8px !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 5px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box !important;
+  }
+
+  .mobile-bot-group {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .mobile-bot-sep {
+    display: inline-block !important;
+    width: 1px !important;
+    height: 26px !important;
+    background: #cbd5e1 !important;
+    margin: 0 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .mobile-sketchforge-bottom-bar .toolbar-icon {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    padding: 5px !important;
+    border-radius: 8px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .mobile-bot-library-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    background: #e6f4fc !important;
+    color: #0077aa !important;
+    border: 1px solid #009cde !important;
+    border-radius: 8px !important;
+    padding: 4px 12px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    flex-shrink: 0 !important;
+    height: 38px !important;
+  }
+
+  .mobile-bot-library-btn.active {
+    background: #009cde !important;
+    color: #ffffff !important;
+  }
+
+  /* Lienzo y escenario 3D adaptados al espacio exacto */
+  .sketchforge-editor {
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute !important;
+    inset: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .sketchforge-editor[data-toolbar-mode="geometry"] .editor-body {
+    position: absolute !important;
+    top: 84px !important;
+    bottom: 54px !important;
+    left: 0 !important;
+    right: 0 !important;
+    inset: 84px 0 54px 0 !important;
+  }
+
+  .sketchforge-editor[data-toolbar-mode="geometry"] .workplane-stage {
+    height: 100% !important;
+    width: 100% !important;
+  }
+
+  .sketchforge-editor[data-toolbar-mode="sketch"] .editor-body {
+    position: absolute !important;
+    top: 84px !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    inset: 84px 0 0 0 !important;
+  }
+
+  .sketchforge-editor[data-toolbar-mode="sketch"] .workplane-stage {
+    height: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Librería de formas horizontal en la parte inferior */
   .shape-library {
-    position: fixed;
-    top: var(--editor-toolbar-height);
-    right: 0;
-    bottom: 0;
-    z-index: 12;
-    width: min(280px, calc(100vw - 40px));
-    box-shadow: -8px 0 24px rgba(26, 47, 66, 0.22);
+    position: fixed !important;
+    bottom: 54px !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    height: 175px !important;
+    max-height: 175px !important;
+    border-left: none !important;
+    border-top: 1px solid #cfdce5 !important;
+    border-radius: 12px 12px 0 0 !important;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12) !important;
+    z-index: 30 !important;
+    background: #ffffff !important;
+  }
+
+  .shape-library-reopen {
+    display: none !important;
+  }
+
+  .shape-library-header {
+    height: 34px !important;
+    padding: 0 10px !important;
+    font-size: 13px !important;
+  }
+
+  .shape-library-toolbar {
+    display: none !important;
+  }
+
+  .shape-library-categories-bar {
+    display: flex !important;
+    gap: 6px !important;
+    padding: 5px 8px !important;
+    overflow-x: auto !important;
+    background: #f1f5f8 !important;
+    border-bottom: 1px solid #dbe5ed !important;
+    flex-shrink: 0 !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none !important;
+  }
+
+  .shape-library-categories-bar::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .shape-library-cat-chip {
+    flex: 0 0 auto !important;
+    padding: 4px 10px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    border-radius: 14px !important;
+    border: 1px solid #cbd9e3 !important;
+    background: #ffffff !important;
+    color: #435b70 !important;
+    cursor: pointer !important;
+  }
+
+  .shape-library-cat-chip.active {
+    background: #009cde !important;
+    color: #ffffff !important;
+    border-color: #0088cc !important;
+  }
+
+  .shape-library-body {
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow-y: hidden !important;
+    overflow-x: auto !important;
+    padding: 6px 8px !important;
+    flex-direction: row !important;
+    display: flex !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .shape-library-category {
+    display: contents !important;
+  }
+
+  .shape-library-category-header {
+    display: none !important;
+  }
+
+  .shape-library-items {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    padding: 2px !important;
+    align-items: center !important;
+  }
+
+  .shape-library-item {
+    flex: 0 0 76px !important;
+    width: 76px !important;
+    height: 80px !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 4px !important;
+    padding: 4px !important;
+    text-align: center !important;
+    background: #f8fafb !important;
+    border: 1px solid #dde5ed !important;
+    border-radius: 8px !important;
+  }
+
+  .shape-library-item img {
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  .shape-library-item-name {
+    font-size: 10px !important;
+    max-width: 70px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .shape-library-item-meta {
+    display: none !important;
+  }
+
+  .shape-library-cache-summary,
+  .shape-library-import {
+    display: none !important;
+  }
+
+  /* Inspector de propiedades (modal/panel inferior) */
+  .shape-inspector {
+    position: fixed !important;
+    top: auto !important;
+    bottom: 60px !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-height: 42vh !important;
+    border-radius: 14px !important;
+    border: 1px solid #cfdce5 !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22) !important;
+    z-index: 28 !important;
+    background: rgba(255, 255, 255, 0.98) !important;
+    backdrop-filter: blur(12px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .shape-inspector.minimized {
+    height: 42px !important;
+    max-height: 42px !important;
+    overflow: hidden !important;
+  }
+
+  .shape-inspector-header {
+    height: 42px !important;
+    padding: 0 10px !important;
+  }
+
+  .shape-inspector-header strong {
+    font-size: 14px !important;
+    padding-left: 6px !important;
+  }
+
+  /* Controles de vista y cámara */
+  .view-cube {
+    top: 6px !important;
+    left: 6px !important;
+    transform: scale(0.68) !important;
+    transform-origin: top left !important;
+  }
+
+  .camera-controls {
+    top: 72px !important;
+    left: 6px !important;
+    transform: scale(0.72) !important;
+    transform-origin: top left !important;
+  }
+
+  .grid-settings {
+    right: 8px !important;
+    bottom: 62px !important;
+    transform: scale(0.85) !important;
+    transform-origin: bottom right !important;
+  }
+
+  .shape-floating-controls {
+    left: 8px !important;
+    right: 8px !important;
+    bottom: 62px !important;
   }
 
   .mode-tabs,
   .collaborator {
-    display: none;
-  }
-
-  .action-buttons button {
-    width: 43px;
-    min-width: 43px;
-    padding: 0;
-  }
-
-  .action-buttons .action-icon-button {
-    width: 43px;
-    min-width: 43px;
-  }
-
-  .view-cube {
-    left: 18px;
-    transform: scale(0.82);
-    transform-origin: top left;
-  }
-
-  .camera-controls {
-    left: 7px;
-    transform: scale(0.86);
-    transform-origin: top left;
+    display: none !important;
   }
 
   .workplane-plane {
-    inset: 0;
-  }
-
-  .shape-floating-controls {
-    left: 58px;
-    right: 18px;
-    bottom: 82px;
-  }
-
-  .shape-inspector {
-    top: 12px;
-    right: 12px;
-    left: 70px;
-    width: auto;
+    inset: 0 !important;
   }
 
   .color-grid {
-    grid-template-columns: repeat(5, 24px);
-    gap: 7px;
+    grid-template-columns: repeat(5, 24px) !important;
+    gap: 7px !important;
   }
 
   .color-grid button {
-    width: 24px;
-    height: 24px;
+    width: 24px !important;
+    height: 24px !important;
   }
+}
+
+html[data-theme="dark"] .mobile-sketchforge-bottom-bar {
+  background: #17232d !important;
+  border-top-color: #304250 !important;
+}
+html[data-theme="dark"] .mobile-bot-sep {
+  background: #304250 !important;
+}
+html[data-theme="dark"] .shape-library-categories-bar {
+  background: #1c2a35 !important;
+  border-bottom-color: #334652 !important;
+}
+html[data-theme="dark"] .shape-library-cat-chip {
+  background: #243440 !important;
+  border-color: #3a4f5e !important;
+  color: #c7d8e4 !important;
+}
+html[data-theme="dark"] .shape-library-cat-chip.active {
+  background: #009cde !important;
+  color: #ffffff !important;
+  border-color: #0088cc !important;
+}
+
+html[data-theme="dark"] .secondary-toolbar {
+  background: #17232d !important;
+  border-bottom-color: #304250 !important;
+}
+
+html[data-theme="dark"] .mobile-toolbar-actions-strip .toolbar-icon,
+html[data-theme="dark"] .mobile-toolbar-actions-strip .action-icon-button {
+  background: #1d2c38 !important;
+  border-color: #334653 !important;
+  color: #c7d8e4 !important;
+}
+
+html[data-theme="dark"] .mobile-toolbar-actions-strip .toolbar-icon:disabled,
+html[data-theme="dark"] .mobile-toolbar-actions-strip .toolbar-icon.disabled {
+  background: #141f27 !important;
+  border-color: #273742 !important;
+  color: #647a8c !important;
+}
+
+html[data-theme="dark"] .mobile-toolbar-row-bottom .toolbar-workspace-tabs {
+  background: #1d2c38 !important;
+}
+
+html[data-theme="dark"] .mobile-toolbar-row-bottom .toolbar-workspace-tabs button {
+  color: #9cb1bf !important;
+}
+
+html[data-theme="dark"] .mobile-toolbar-row-bottom .toolbar-workspace-tabs button.active {
+  background: #253642 !important;
+  color: #42c7eb !important;
+}
+html[data-theme="dark"] .shape-library-item {
+  background: #1c2a35 !important;
+  border-color: #334652 !important;
+  color: #c7d8e4 !important;
+}
+html[data-theme="dark"] .shape-inspector {
+  background: rgba(23, 35, 45, 0.98) !important;
+  border-color: #304250 !important;
+  color: #d8e6f1 !important;
 }
 
 html[data-theme="dark"] {
@@ -7339,7 +7961,7 @@ html[data-theme="dark"] .topology-live-value-row input {
   border-color: #435965;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (orientation: landscape) and (max-height: 550px) {
   .topology-inspector {
     top: auto;
     right: 10px;

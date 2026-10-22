@@ -2,6 +2,7 @@ module.exports = {
     arduinoUno: require('./manifests/arduinoUno.json'),
     stBoardExtension: require('./manifests/stBoardExtension.json'),
     arduinoNano: require('./manifests/arduinoNano.json'),
+    arduinoLGT8F328P: require('./manifests/arduinoLGT8F328P.json'),
     arduinoLeonardo: require('./manifests/arduinoLeonardo.json'),
     arduinoMega2560: require('./manifests/arduinoMega2560.json'),
     stbBoardV2: require('./manifests/stbBoardV2.json'),

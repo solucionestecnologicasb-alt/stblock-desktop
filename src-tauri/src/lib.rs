@@ -180,10 +180,13 @@ fn open_serial_port(port_name: String, baud_rate: u32) -> Result<String, String>
         return Ok(port_name);
     }
 
-    let port = serialport::new(&port_name, baud_rate)
+    let mut port = serialport::new(&port_name, baud_rate)
         .timeout(Duration::from_millis(100))
         .open()
         .map_err(|e| format!("Failed to open port {}: {}", port_name, e))?;
+
+    let _ = port.write_data_terminal_ready(true);
+    let _ = port.write_request_to_send(true);
 
     let port_id = port_name.clone();
     ports.insert(port_id.clone(), port);
@@ -193,16 +196,30 @@ fn open_serial_port(port_name: String, baud_rate: u32) -> Result<String, String>
 
 #[tauri::command]
 fn close_serial_port(port_id: String) -> Result<(), String> {
-    let mut ports = SERIAL_PORTS.lock().map_err(|e| e.to_string())?;
-    // Toggle DTR low briefly to trigger bootloader reset on CH340/Arduino boards
-    if let Some(port) = ports.get_mut(&port_id) {
-        let _ = port.write_data_terminal_ready(false);
-    }
-    // Remove and drop the port (closes the file handle)
-    drop(ports.remove(&port_id));
-    // Brief delay to let the driver release the port
-    std::thread::sleep(Duration::from_millis(300));
+    release_serial_port(&port_id);
     Ok(())
+}
+
+/// Release and close serial port handle from SERIAL_PORTS safely
+pub fn release_serial_port(target_port: &str) {
+    if let Ok(mut ports) = SERIAL_PORTS.lock() {
+        let keys_to_remove: Vec<String> = ports.keys()
+            .filter(|k| {
+                let k_upper = k.to_uppercase();
+                let t_upper = target_port.to_uppercase();
+                k_upper == t_upper || k_upper.contains(&t_upper) || t_upper.contains(&k_upper)
+            })
+            .cloned()
+            .collect();
+        for k in keys_to_remove {
+            if let Some(mut p) = ports.remove(&k) {
+                let _ = p.write_data_terminal_ready(false);
+                drop(p);
+            }
+        }
+    }
+    // Brief delay to let the OS / USB serial driver release the port handle
+    std::thread::sleep(Duration::from_millis(400));
 }
 
 #[tauri::command]
@@ -211,7 +228,9 @@ fn write_serial_port(port_id: String, data: Vec<u8>) -> Result<usize, String> {
     let port = ports.get_mut(&port_id)
         .ok_or_else(|| format!("Port {} not found", port_id))?;
 
-    port.write(&data).map_err(|e| e.to_string())
+    let n = port.write(&data).map_err(|e| e.to_string())?;
+    let _ = port.flush();
+    Ok(n)
 }
 
 #[tauri::command]
@@ -315,17 +334,25 @@ fn install_drivers(app_handle: tauri::AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 async fn fetch_update_policy(url: String) -> Result<serde_json::Value, String> {
-    let response = reqwest::get(&url)
-        .await
-        .map_err(|e| format!("No se pudo conectar con la política de actualización: {}", e))?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("No se pudo leer la política de actualización ({})", status));
+    #[cfg(target_os = "android")]
+    {
+        let _ = url;
+        Err("Las actualizaciones en Android son gestionadas por Google Play Store".to_string())
     }
-    response
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| format!("La política de actualización no es JSON válido: {}", e))
+    #[cfg(not(target_os = "android"))]
+    {
+        let response = reqwest::get(&url)
+            .await
+            .map_err(|e| format!("No se pudo conectar con la política de actualización: {}", e))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(format!("No se pudo leer la política de actualización ({})", status));
+        }
+        response
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("La política de actualización no es JSON válido: {}", e))
+    }
 }
 
 // ── Modo Aula: relay WebSocket ──
@@ -352,10 +379,17 @@ fn classroom_local_ip() -> Vec<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+
+    #[cfg(not(target_os = "android"))]
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    let app = builder
         .invoke_handler(tauri::generate_handler![
             save_file,
             list_serial_ports,
@@ -392,24 +426,24 @@ pub fn run() {
                 )?;
             }
 
-            // ── Launch backend processes ──
-            let handle = app.handle();
-
-            // Backend server (port 3001) — AI chat + Gearbot CRUD
-            let backend_exe = if cfg!(windows) {
-                "stblock-backend-server.exe"
-            } else {
-                "stblock-backend-server"
-            };
-            launch_backend(
-                handle,
-                "Backend Server",
-                backend_exe,
-                3001,
-                vec![("PORT", "3001".to_string())],
-            );
-
-            println!("[launcher] Backend lanzado. La app puede tardar unos segundos en estar lista.");
+            // ── Launch backend processes (Desktop only: Windows / Linux / macOS) ──
+            #[cfg(not(target_os = "android"))]
+            {
+                let handle = app.handle();
+                let backend_exe = if cfg!(windows) {
+                    "stblock-backend-server.exe"
+                } else {
+                    "stblock-backend-server"
+                };
+                launch_backend(
+                    handle,
+                    "Backend Server",
+                    backend_exe,
+                    3001,
+                    vec![("PORT", "3001".to_string())],
+                );
+                println!("[launcher] Backend lanzado. La app puede tardar unos segundos en estar lista.");
+            }
 
             Ok(())
         })

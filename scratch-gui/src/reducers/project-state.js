@@ -143,7 +143,10 @@ const reducer = function (state, action) {
         return state;
     case DONE_LOADING_VM_WITHOUT_ID:
         if (state.loadingState === LoadingState.LOADING_VM_FILE_UPLOAD ||
-            state.loadingState === LoadingState.LOADING_VM_NEW_DEFAULT) {
+            state.loadingState === LoadingState.LOADING_VM_NEW_DEFAULT ||
+            state.loadingState === LoadingState.SHOWING_WITHOUT_ID ||
+            state.loadingState === LoadingState.SHOWING_WITH_ID ||
+            state.loadingState === LoadingState.NOT_LOADED) {
             return Object.assign({}, state, {
                 loadingState: LoadingState.SHOWING_WITHOUT_ID,
                 projectId: defaultProjectId
@@ -436,7 +439,7 @@ const onLoadedProject = (loadingState, canSave, success) => {
         // failed to load default project; show error
         return {type: START_ERROR};
     default:
-        return;
+        return {type: DONE_LOADING_VM_WITHOUT_ID};
     }
 };
 

@@ -1,7 +1,7 @@
-import { canonicalizeShape, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
+import { applyPlacementToHeight, canonicalizeShape, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { createLocalId } from "@/lib/localIds";
 import { DEFAULT_GEAR_CENTER_HOLE_SIZE, DEFAULT_GEAR_HELIX_ANGLE, DEFAULT_GEAR_HELIX_QUALITY, DEFAULT_GEAR_TEETH, DEFAULT_GEAR_TOOTH_SIZE, DEFAULT_GEAR_TYPE } from "@/lib/gearGeometry";
-import type { ShapeAsset, WorkplaneShape } from "@/types/sketchforge";
+import type { ShapeAsset, ShapePlacement, WorkplaneShape } from "@/types/sketchforge";
 
 export type ToolbarShapeAsset = ShapeAsset & { menuIcon: string };
 
@@ -110,7 +110,23 @@ export function sceneShape(shape: Partial<WorkplaneShape> & Pick<WorkplaneShape,
   });
 }
 
-export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: number; elevation?: number }): WorkplaneShape {
+// Aplica el destino de colocación a una forma recién creada. Necesita la
+// altura final de la pieza para separar su centro de la cara de apoyo.
+function placeShape(shape: WorkplaneShape, point?: ShapePlacement): WorkplaneShape {
+  if (!point) return shape;
+  const placed = applyPlacementToHeight(point, shape.height);
+  return {
+    ...shape,
+    x: placed.x,
+    z: placed.z,
+    elevation: placed.elevation ?? 0,
+    rotation: placed.rotation ?? shape.rotation,
+    rotationX: placed.rotationX ?? shape.rotationX,
+    rotationZ: placed.rotationZ ?? shape.rotationZ,
+  };
+}
+
+export function makeShapeFromAsset(asset: ShapeAsset, point?: ShapePlacement): WorkplaneShape {
   const composite = asset as CompositeShapeAsset;
   if (composite.children?.length) {
     const children = composite.children.map((child) =>
@@ -125,14 +141,14 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     const width = composite.width ?? bounds.width;
     const depth = composite.depth ?? bounds.depth;
     const height = composite.height ?? bounds.height;
-    return sceneShape({
+    return placeShape(sceneShape({
       name: asset.name,
       kind: "assembly",
       color: asset.color,
       hole: asset.hole,
-      x: point?.x ?? 0,
-      z: point?.z ?? 0,
-      elevation: point?.elevation ?? 0,
+      x: 0,
+      z: 0,
+      elevation: 0,
       width,
       depth,
       height,
@@ -141,7 +157,7 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
       groupedBaseDepth: depth,
       groupedBaseHeight: height,
       groupOperation: "group",
-    });
+    }), point);
   }
 
   const roundProfile = asset.kind === "sphere" || asset.kind === "torus" || asset.kind === "ring" || asset.kind === "halfSphere";
@@ -151,15 +167,15 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
   const width = asset.kind === "text" ? 86 : size;
   const depth = asset.kind === "text" ? 28 : size;
 
-  return {
+  return placeShape({
     id: createLocalId(asset.id),
     name: asset.name,
     kind: asset.kind,
     color: asset.color,
     hole: asset.hole,
-    x: point?.x ?? 0,
-    z: point?.z ?? 0,
-    elevation: point?.elevation ?? 0,
+    x: 0,
+    z: 0,
+    elevation: 0,
     size,
     width,
     depth,
@@ -184,5 +200,5 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     helixQuality: asset.kind === "gear" ? DEFAULT_GEAR_HELIX_QUALITY : undefined,
     locked: false,
     hidden: false,
-  };
+  }, point);
 }

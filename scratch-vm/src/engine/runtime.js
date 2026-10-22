@@ -953,6 +953,277 @@ class Runtime extends EventEmitter {
                 }
             }
         }
+        this._registerDevicePrimitives();
+    }
+
+    _registerDevicePrimitives () {
+        const getPeripheral = () => {
+            if (!this.peripheralExtensions) this.peripheralExtensions = {};
+            if (this.peripheralExtensions.arduino) return this.peripheralExtensions.arduino;
+            const profile = typeof this.getDeviceProfile === 'function' ? this.getDeviceProfile() : null;
+            if (profile && profile.deviceId && this.peripheralExtensions[profile.deviceId]) {
+                return this.peripheralExtensions[profile.deviceId];
+            }
+            for (const key of Object.keys(this.peripheralExtensions)) {
+                const p = this.peripheralExtensions[key];
+                if (p && typeof p.digitalWrite === 'function') {
+                    return p;
+                }
+            }
+            try {
+                const {ArduinoPeripheral} = require('../devices/common/arduino-peripheral');
+                const boardType = profile ? (profile.deviceId || profile.id || 'arduinoUno') : 'arduinoUno';
+                return new ArduinoPeripheral(this, 'arduino', boardType);
+            } catch (e) {
+                // Ignore fallback creation error
+            }
+            return null;
+        };
+
+        const resolvePin = args => {
+            const raw = args.PIN !== undefined ? args.PIN : args.pin;
+            return raw !== undefined ? raw : '0';
+        };
+
+        const resolveLevel = args => {
+            const raw = args.LEVEL !== undefined ? args.LEVEL : args.level;
+            return raw !== undefined ? raw : 'HIGH';
+        };
+
+        // Pin Configuration & I/O
+        const setPinModeHandler = args => {
+            const p = getPeripheral();
+            const pin = resolvePin(args);
+            const mode = args.MODE !== undefined ? args.MODE : (args.mode || 'INPUT');
+            if (p && typeof p.setPinMode === 'function') {
+                return p.setPinMode(pin, mode);
+            }
+        };
+        this._primitives.arduino_pin_setPinMode = setPinModeHandler;
+        this._primitives.arduino_pin_setMode = setPinModeHandler;
+
+        const setDigitalOutputHandler = args => {
+            const p = getPeripheral();
+            const pin = resolvePin(args);
+            const level = resolveLevel(args);
+            if (p && typeof p.digitalWrite === 'function') {
+                return p.digitalWrite(pin, level);
+            }
+        };
+        this._primitives.arduino_pin_setDigitalOutput = setDigitalOutputHandler;
+        this._primitives.arduino_pin_digitalWrite = setDigitalOutputHandler;
+
+        const setPwmOutputHandler = args => {
+            const p = getPeripheral();
+            const pin = resolvePin(args);
+            const out = args.OUT !== undefined ? args.OUT : (args.value || 0);
+            if (p && typeof p.analogWrite === 'function') {
+                return p.analogWrite(pin, out);
+            }
+        };
+        this._primitives.arduino_pin_setPwmOutput = setPwmOutputHandler;
+        this._primitives.arduino_pin_analogWrite = setPwmOutputHandler;
+
+        const readDigitalHandler = args => {
+            const p = getPeripheral();
+            const pin = resolvePin(args);
+            if (p && typeof p.digitalRead === 'function') {
+                return p.digitalRead(pin);
+            }
+            return 0;
+        };
+        this._primitives.arduino_pin_readDigitalPin = readDigitalHandler;
+        this._primitives.arduino_pin_readDigital = readDigitalHandler;
+        this._primitives.arduino_pin_digitalRead = readDigitalHandler;
+
+        const readAnalogHandler = args => {
+            const p = getPeripheral();
+            const pin = resolvePin(args);
+            if (p && typeof p.analogRead === 'function') {
+                return p.analogRead(pin);
+            }
+            return 0;
+        };
+        this._primitives.arduino_pin_readAnalogPin = readAnalogHandler;
+        this._primitives.arduino_pin_readAnalog = readAnalogHandler;
+        this._primitives.arduino_pin_analogRead = readAnalogHandler;
+
+        // Servos
+        const setServoHandler = args => {
+            const p = getPeripheral();
+            const pin = resolvePin(args);
+            const angle = args.OUT !== undefined ? args.OUT : (args.angle || 90);
+            if (p && typeof p.servoWrite === 'function') {
+                return p.servoWrite(pin, angle);
+            }
+        };
+        this._primitives.arduino_pin_setServoOutput = setServoHandler;
+        this._primitives.arduino_pin_setServoPulseOutput = setServoHandler;
+        this._primitives.arduino_pin_moveServoSmooth = setServoHandler;
+
+        this._primitives.arduino_pin_attachServo = args => {
+            const p = getPeripheral();
+            const pin = resolvePin(args);
+            if (p && typeof p.setPinMode === 'function') {
+                return p.setPinMode(pin, 'SERVO');
+            }
+        };
+
+        this._primitives.arduino_pin_detachServo = args => {
+            const p = getPeripheral();
+            const pin = resolvePin(args);
+            if (p && typeof p.setPinMode === 'function') {
+                return p.setPinMode(pin, 'INPUT');
+            }
+        };
+
+        const centerServoHandler = args => {
+            const p = getPeripheral();
+            const pin = resolvePin(args);
+            if (p && typeof p.servoWrite === 'function') {
+                return p.servoWrite(pin, 90);
+            }
+        };
+        this._primitives.arduino_pin_centerServo = centerServoHandler;
+        this._primitives.arduino_pin_stopContinuousServo = centerServoHandler;
+
+        this._primitives.arduino_pin_setContinuousServoSpeed = args => {
+            const p = getPeripheral();
+            const pin = resolvePin(args);
+            const speed = Number(args.OUT) || 0;
+            const angle = Math.round(90 + (speed * 0.9));
+            if (p && typeof p.servoWrite === 'function') {
+                return p.servoWrite(pin, angle);
+            }
+        };
+
+        this._primitives.arduino_pin_isServoAttached = () => true;
+        this._primitives.arduino_pin_readServoAngle = () => 90;
+        this._primitives.arduino_pin_readServoPulse = () => 1500;
+
+        // Pin Dropdown Menus
+        this._primitives.arduino_pin_menu_level = args => args.level || 'HIGH';
+        this._primitives.arduino_pin_menu_pins = args => args.pins || '0';
+        this._primitives.arduino_pin_menu_mode = args => args.mode || 'INPUT';
+        this._primitives.arduino_pin_menu_analogPins = args => args.analogPins || 'A0';
+        this._primitives.arduino_pin_menu_pwmPins = args => args.pwmPins || '3';
+        this._primitives.arduino_pin_menu_interruptPins = args => args.interruptPins || '2';
+        this._primitives.arduino_pin_menu_interruptMode = args => args.interruptMode || 'RISING';
+
+        // Serial primitives
+        this._primitives.arduino_serial_serialBegin = () => {};
+        this._primitives.arduino_serial_serialPrint = args => {
+            const p = getPeripheral();
+            const text = args.VALUE !== undefined ? String(args.VALUE) : '';
+            const eol = args.EOL === 'noWarp' ? '' : '\r\n';
+            if (p && typeof p.sendSerialData === 'function') {
+                return p.sendSerialData(text + eol);
+            }
+        };
+        this._primitives.arduino_serial_serialAvailable = () => 0;
+        this._primitives.arduino_serial_serialReadAByte = () => '';
+        this._primitives.arduino_serial_menu_baudrate = args => args.baudrate || '9600';
+        this._primitives.arduino_serial_menu_eol = args => args.eol || 'warp';
+
+        // Data primitives
+        this._primitives.arduino_data_dataMap = args => {
+            const val = Number(args.DATA) || 0;
+            const inMin = Number(args.ARG0) || 0;
+            const inMax = Number(args.ARG1) || 100;
+            const outMin = Number(args.ARG2) || 0;
+            const outMax = Number(args.ARG3) || 1000;
+            if (inMax === inMin) return outMin;
+            return ((val - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+        };
+        this._primitives.arduino_data_dataConstrain = args => {
+            const val = Number(args.DATA) || 0;
+            const min = Number(args.ARG0) || 0;
+            const max = Number(args.ARG1) || 100;
+            return Math.max(min, Math.min(max, val));
+        };
+        this._primitives.arduino_data_dataConvert = args => {
+            const val = args.DATA;
+            const type = args.TYPE || 'INTEGER';
+            if (type === 'INTEGER') return parseInt(val, 10) || 0;
+            if (type === 'DECIMAL') return parseFloat(val) || 0;
+            return String(val);
+        };
+        this._primitives.arduino_data_dataConvertASCIICharacter = args => {
+            const code = Number(args.DATA) || 0;
+            return String.fromCharCode(code);
+        };
+        this._primitives.arduino_data_dataConvertASCIINumber = args => {
+            const str = String(args.DATA || '');
+            return str.length > 0 ? str.charCodeAt(0) : 0;
+        };
+        this._primitives.arduino_data_bitwiseOp = args => {
+            const a = Number(args.A) || 0;
+            const b = Number(args.B) || 0;
+            const op = args.OP || '&';
+            switch (op) {
+            case '&': return a & b;
+            case '|': return a | b;
+            case '^': return a ^ b;
+            case '<<': return a << b;
+            case '>>': return a >> b;
+            default: return a & b;
+            }
+        };
+        this._primitives.arduino_data_bitwiseNot = args => {
+            const a = Number(args.A) || 0;
+            return ~a;
+        };
+        this._primitives.arduino_data_menu_dataType = args => args.dataType || 'INTEGER';
+        this._primitives.arduino_data_menu_bitwise = args => args.bitwise || '&';
+
+        // Array primitives
+        this._deviceArrays = this._deviceArrays || {};
+        this._primitives.arduino_arrays_arrayDeclare = args => {
+            const name = String(args.NAME || 'miArray');
+            const size = Math.max(0, parseInt(args.SIZE, 10) || 10);
+            this._deviceArrays[name] = new Array(size).fill(0);
+        };
+        this._primitives.arduino_arrays_arrayDeclareWithValues = args => {
+            const name = String(args.NAME || 'miArray');
+            const vals = String(args.VALUES || '').split(',').map(s => s.trim());
+            this._deviceArrays[name] = vals;
+        };
+        this._primitives.arduino_arrays_arrayGet = args => {
+            const name = String(args.NAME || 'miArray');
+            const idx = parseInt(args.INDEX, 10) || 0;
+            const arr = this._deviceArrays[name] || [];
+            return arr[idx] !== undefined ? arr[idx] : 0;
+        };
+        this._primitives.arduino_arrays_arraySet = args => {
+            const name = String(args.NAME || 'miArray');
+            const idx = parseInt(args.INDEX, 10) || 0;
+            if (!this._deviceArrays[name]) this._deviceArrays[name] = [];
+            this._deviceArrays[name][idx] = args.VALUE;
+        };
+        this._primitives.arduino_arrays_arrayLength = args => {
+            const name = String(args.NAME || 'miArray');
+            const arr = this._deviceArrays[name] || [];
+            return arr.length;
+        };
+        this._primitives.arduino_arrays_arrayPush = args => {
+            const name = String(args.NAME || 'miArray');
+            if (!this._deviceArrays[name]) this._deviceArrays[name] = [];
+            this._deviceArrays[name].push(args.VALUE);
+        };
+        this._primitives.arduino_arrays_arrayPop = args => {
+            const name = String(args.NAME || 'miArray');
+            const arr = this._deviceArrays[name] || [];
+            return arr.pop() || 0;
+        };
+        this._primitives.arduino_arrays_arrayClear = args => {
+            const name = String(args.NAME || 'miArray');
+            this._deviceArrays[name] = [];
+        };
+        this._primitives.arduino_arrays_menu_arrayType = args => args.arrayType || 'int';
+
+        // Fallbacks for STBoard V2 custom blocks in programming mode
+        this._primitives.arduino_stbv2puertos_readDistCm = () => 0;
+        this._primitives.arduino_stbv2puertos_readDistInch = () => 0;
     }
 
     getMonitorState () {
@@ -1156,6 +1427,20 @@ class Runtime extends EventEmitter {
             null;
         if (emitProjectChanged) this.emitProjectChanged();
         this.emit('DEVICE_EXTENSIONS_CHANGED', this.getDeviceExtensionIds());
+
+        if (this._deviceProfile && (this._deviceProfile.generator === 'arduino' || this._deviceProfile.type === 'arduino')) {
+            const boardType = this._deviceProfile.deviceId || this._deviceProfile.id || 'arduinoUno';
+            if (!this.peripheralExtensions || !this.peripheralExtensions.arduino) {
+                try {
+                    const {ArduinoPeripheral} = require('../devices/common/arduino-peripheral');
+                    new ArduinoPeripheral(this, 'arduino', boardType);
+                } catch (e) {
+                    // Ignore
+                }
+            } else if (typeof this.peripheralExtensions.arduino.setBoardType === 'function') {
+                this.peripheralExtensions.arduino.setBoardType(boardType);
+            }
+        }
     }
 
     setHardwareModeActive (active) {
@@ -1172,6 +1457,19 @@ class Runtime extends EventEmitter {
 
     getProgramMode () {
         return this._programMode;
+    }
+
+    setProgramMode (mode) {
+        this._programMode = mode;
+        if (this.peripheralExtensions) {
+            for (const extId in this.peripheralExtensions) {
+                const peripheral = this.peripheralExtensions[extId];
+                if (peripheral && typeof peripheral.setProgramMode === 'function' && peripheral._programMode !== mode) {
+                    peripheral.setProgramMode(mode);
+                }
+            }
+        }
+        this.emit('PROGRAM_MODE_CHANGED', mode);
     }
 
     /**
@@ -1882,9 +2180,7 @@ class Runtime extends EventEmitter {
         // En modo Programación (fuera de Electrónica), la paleta del dispositivo
         // solo muestra los bloques utilizables en modo en vivo (Firmata/Python).
         // En modo Electrónica (subida C++) se muestran todos los bloques del manifest.
-        const deviceBlockInfo = this._hardwareModeActive ?
-            this._deviceBlockInfo :
-            filterLiveDeviceCategories(this._deviceBlockInfo);
+        const deviceBlockInfo = this._deviceBlockInfo;
         const blockInfo = this._hardwareModeActive ?
             deviceBlockInfo.concat(this._blockInfo.filter(category =>
                 category.id === 'myBlocks')) :
@@ -2035,6 +2331,17 @@ class Runtime extends EventEmitter {
      * @param {string} extensionId - the id of the extension.
      */
     scanForPeripheral (extensionId) {
+        if (!this.peripheralExtensions) this.peripheralExtensions = {};
+        if (!this.peripheralExtensions[extensionId] && extensionId === 'arduino') {
+            try {
+                const {ArduinoPeripheral} = require('../devices/common/arduino-peripheral');
+                const profile = typeof this.getDeviceProfile === 'function' ? this.getDeviceProfile() : null;
+                const boardType = profile ? (profile.deviceId || profile.id || 'arduinoUno') : 'arduinoUno';
+                new ArduinoPeripheral(this, 'arduino', boardType);
+            } catch (e) {
+                // Ignore
+            }
+        }
         if (this.peripheralExtensions[extensionId]) {
             this.peripheralExtensions[extensionId].scan();
         }
@@ -2047,6 +2354,17 @@ class Runtime extends EventEmitter {
      * @param {object} [connectOptions] - optional connection options (e.g. {baudRate}).
      */
     connectPeripheral (extensionId, peripheralId, connectOptions) {
+        if (!this.peripheralExtensions) this.peripheralExtensions = {};
+        if (!this.peripheralExtensions[extensionId] && extensionId === 'arduino') {
+            try {
+                const {ArduinoPeripheral} = require('../devices/common/arduino-peripheral');
+                const profile = typeof this.getDeviceProfile === 'function' ? this.getDeviceProfile() : null;
+                const boardType = profile ? (profile.deviceId || profile.id || 'arduinoUno') : 'arduinoUno';
+                new ArduinoPeripheral(this, 'arduino', boardType);
+            } catch (e) {
+                // Ignore
+            }
+        }
         if (this.peripheralExtensions[extensionId]) {
             this.peripheralExtensions[extensionId].connect(peripheralId, connectOptions);
         }
@@ -2066,11 +2384,24 @@ class Runtime extends EventEmitter {
     /**
      * Upload realtime firmware to the extension's specified peripheral.
      * @param {string} extensionId - the id of the extension.
+     * @param {string} [customPort] - optional custom port name.
      */
-    uploadFirmwareToPeripheral (extensionId) {
-        if (this.peripheralExtensions[extensionId]) {
-            this.peripheralExtensions[extensionId].uploadFirmware();
+    uploadFirmwareToPeripheral (extensionId, customPort = null) {
+        if (!this.peripheralExtensions) this.peripheralExtensions = {};
+        if (!this.peripheralExtensions[extensionId] && extensionId === 'arduino') {
+            try {
+                const {ArduinoPeripheral} = require('../devices/common/arduino-peripheral');
+                const profile = typeof this.getDeviceProfile === 'function' ? this.getDeviceProfile() : null;
+                const boardType = profile ? (profile.deviceId || profile.id || 'arduinoUno') : 'arduinoUno';
+                new ArduinoPeripheral(this, 'arduino', boardType);
+            } catch (e) {
+                // Ignore
+            }
         }
+        if (this.peripheralExtensions[extensionId]) {
+            return this.peripheralExtensions[extensionId].uploadFirmware(customPort);
+        }
+        return Promise.reject(new Error(`Periférico no disponible para ${extensionId}`));
     }
 
     /**

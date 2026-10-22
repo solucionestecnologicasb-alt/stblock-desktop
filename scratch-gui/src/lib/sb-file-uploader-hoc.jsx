@@ -65,8 +65,39 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 'handleStartSelectingFileUpload',
                 'handleChange',
                 'onload',
+                'loadBuffer',
                 'removeFileObjects'
             ]);
+        }
+        componentDidMount () {
+            if (typeof window !== 'undefined') {
+                window.stblockLoadProjectFromBase64 = (filename, base64) => {
+                    if (window.__stbLog) {
+                        window.__stbLog('INFO', `[Uploader] stblockLoadProjectFromBase64 recibido: "${filename}", base64 len: ${base64 ? base64.length : 0}`);
+                    }
+                    try {
+                        const binaryString = window.atob(base64);
+                        const len = binaryString.length;
+                        const bytes = new Uint8Array(len);
+                        for (let i = 0; i < len; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        if (window.__stbLog) {
+                            window.__stbLog('INFO', `[Uploader] Base64 decodificado correctamente. Buffer: ${bytes.buffer.byteLength} bytes. Llamando a loadBuffer...`);
+                        }
+                        this.loadBuffer(bytes.buffer, filename);
+                    } catch (e) {
+                        if (window.__stbLog) {
+                            window.__stbLog('ERROR', `[Uploader] Error al decodificar base64: ${e.message}`, e.stack);
+                        }
+                        console.error('Error al decodificar proyecto:', e);
+                        alert('Error al leer el proyecto seleccionado: ' + (e.message || e));
+                        try {
+                            this.props.onLoadingFinished(this.props.loadingState, false);
+                        } catch (_) {}
+                    }
+                };
+            }
         }
         componentDidUpdate (prevProps) {
             if (this.props.isLoadingUpload && !prevProps.isLoadingUpload) {
@@ -74,6 +105,9 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             }
         }
         componentWillUnmount () {
+            if (typeof window !== 'undefined' && window.stblockLoadProjectFromBase64) {
+                delete window.stblockLoadProjectFromBase64;
+            }
             this.removeFileObjects();
         }
         // step 1: this is where the upload process begins
@@ -89,9 +123,18 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             // create fileReader
             this.fileReader = new FileReader();
             this.fileReader.onload = this.onload;
+            this.fileReader.onerror = () => {
+                log.warn('FileReader error on upload');
+                this.props.onLoadingFinished(this.props.loadingState, false);
+                this.removeFileObjects();
+            };
+            this.fileReader.onabort = () => {
+                this.props.onLoadingFinished(this.props.loadingState, false);
+                this.removeFileObjects();
+            };
             // create <input> element and add it to DOM
             this.inputElement = document.createElement('input');
-            this.inputElement.accept = '.sb,.sb2,.sb3,.flynt';
+            this.inputElement.accept = '.sb,.sb2,.sb3,.flynt,*/*';
             this.inputElement.style.display = 'none';
             this.inputElement.type = 'file';
             this.inputElement.onchange = this.handleChange; // connects to step 3
@@ -193,192 +236,225 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         // file upload raw data is available in the reader
         onload () {
             if (this.fileReader) {
-                var self = this;
                 var buffer = this.fileReader.result;
                 var filename = this.fileToUpload && this.fileToUpload.name;
-
-                if (!(buffer instanceof ArrayBuffer) || buffer.byteLength === 0) {
-                    self.props.onLoadingStarted();
+                this.loadBuffer(buffer, filename);
+            }
+        }
+        async loadBuffer (buffer, filename) {
+            const self = this;
+            if (window.__stbLog) {
+                window.__stbLog('INFO', `[Uploader] loadBuffer iniciado: "${filename || 'proyecto'}", buffer: ${buffer ? buffer.byteLength : 0} bytes`);
+            }
+            if (!(buffer instanceof ArrayBuffer) || buffer.byteLength === 0) {
+                if (window.__stbLog) {
+                    window.__stbLog('ERROR', '[Uploader] Buffer inválido o vacío');
+                }
+                self.props.onLoadingStarted();
+                try {
                     alert(self.props.intl.formatMessage(messages.emptyProjectError)); // eslint-disable-line no-alert
+                } catch (_) {}
+                self.props.onLoadingFinished(self.props.loadingState, false);
+                self.removeFileObjects();
+                return;
+            }
+
+            self.props.onLoadingStarted();
+            if (window.__stbLog) {
+                window.__stbLog('INFO', `[Uploader] onLoadingStarted() ejecutado. loadingState="${self.props.loadingState}"`);
+            }
+            let loadingSuccess = false;
+
+            // Failsafe timer: garantiza que la pantalla de carga no quede bloqueada indefinidamente
+            const failsafeTimer = setTimeout(() => {
+                if (window.__stbLog) {
+                    window.__stbLog('WARN', '[Uploader] Failsafe timer (12s) activado: forzando fin de carga');
+                }
+                try {
                     self.props.onLoadingFinished(self.props.loadingState, false);
-                    self.removeFileObjects();
-                    return;
+                } catch (_) {}
+            }, 12000);
+
+            try {
+                let aiData = null;
+                let deviceData = null;
+                let sketchforgeData = null;
+                let pythonData = null;
+
+                const VMClass = self.props.vm && self.props.vm.constructor;
+                if (VMClass) {
+                    if (typeof VMClass.extractFlyntAll === 'function') {
+                        try {
+                            const allMeta = await VMClass.extractFlyntAll(buffer);
+                            if (allMeta && allMeta.isFlynt) {
+                                aiData = allMeta.aiData;
+                                deviceData = allMeta.deviceData;
+                                sketchforgeData = allMeta.sketchforgeData;
+                                pythonData = allMeta.pythonData;
+                            }
+                        } catch (err) {
+                            log.warn('extractFlyntAll failed, continuing with project load:', err);
+                        }
+                    } else if (typeof VMClass.isFlynt === 'function') {
+                        try {
+                            const isFlynt = await VMClass.isFlynt(buffer);
+                            if (isFlynt) {
+                                const promises = [
+                                    VMClass.extractFlyntAiData ? VMClass.extractFlyntAiData(buffer).catch(() => null) : Promise.resolve(null),
+                                    VMClass.extractFlyntDeviceData ? VMClass.extractFlyntDeviceData(buffer).catch(() => null) : Promise.resolve(null),
+                                    VMClass.extractFlyntSketchforgeData ? VMClass.extractFlyntSketchforgeData(buffer).catch(() => null) : Promise.resolve(null),
+                                    VMClass.extractFlyntPythonData ? VMClass.extractFlyntPythonData(buffer).catch(() => null) : Promise.resolve(null)
+                                ];
+                                const results = await Promise.all(promises);
+                                aiData = results[0];
+                                deviceData = results[1];
+                                sketchforgeData = results[2];
+                                pythonData = results[3];
+                            }
+                        } catch (err) {
+                            log.warn('Legacy flynt extraction failed:', err);
+                        }
+                    }
                 }
 
-                // Check if .flynt format and extract AI, device, 3D and Python data
-                // before loading project.
-                var aiDataPromise = Promise.resolve(null);
-                var deviceDataPromise = Promise.resolve(null);
-                var sketchforgeDataPromise = Promise.resolve(null);
-                var pythonDataPromise = Promise.resolve(null);
-                if (buffer && typeof buffer === 'object') {
-                    var VMClass = self.props.vm && self.props.vm.constructor;
-                    if (VMClass && VMClass.isFlynt) {
-                        aiDataPromise = VMClass.isFlynt(buffer).then(function (isFlynt) {
-                            if (isFlynt && VMClass.extractFlyntAiData) {
-                                return VMClass.extractFlyntAiData(buffer);
-                            }
-                            return null;
-                        });
-                        deviceDataPromise = VMClass.isFlynt(buffer).then(function (isFlynt) {
-                            if (isFlynt && VMClass.extractFlyntDeviceData) {
-                                return VMClass.extractFlyntDeviceData(buffer);
-                            }
-                            return null;
-                        });
-                        sketchforgeDataPromise = VMClass.isFlynt(buffer).then(function (isFlynt) {
-                            if (isFlynt && VMClass.extractFlyntSketchforgeData) {
-                                return VMClass.extractFlyntSketchforgeData(buffer);
-                            }
-                            return null;
-                        });
-                        pythonDataPromise = VMClass.isFlynt(buffer).then(function (isFlynt) {
-                            if (isFlynt && VMClass.extractFlyntPythonData) {
-                                return VMClass.extractFlyntPythonData(buffer);
-                            }
-                            return null;
-                        });
-                    }
+                try { localStorage.removeItem('ai_messages'); } catch (_) {}
+
+                // Guardar los códigos Python y el candado con clave ANTES de loadProject:
+                // el handler de PROJECT_LOADED en gui.jsx los lee para restaurar
+                // el editor de texto y el estado de bloqueo del archivo cargado.
+                if (pythonData && pythonData.pythonCodes) {
+                    try {
+                        localStorage.setItem('stblock_python_project_codes',
+                            JSON.stringify(pythonData.pythonCodes));
+                    } catch (_) {}
+                } else {
+                    try { localStorage.removeItem('stblock_python_project_codes'); } catch (_) {}
+                }
+                if (pythonData && pythonData.pythonKeyLock) {
+                    try {
+                        localStorage.setItem('stblock_python_project_key_lock',
+                            String(pythonData.pythonKeyLock));
+                    } catch (_) {}
+                } else {
+                    try { localStorage.removeItem('stblock_python_project_key_lock'); } catch (_) {}
                 }
 
-                Promise.all([
-                    aiDataPromise,
-                    deviceDataPromise,
-                    sketchforgeDataPromise,
-                    pythonDataPromise
-                ]).then(function (results) {
-                    var aiData = results[0];
-                    var deviceData = results[1];
-                    var sketchforgeData = results[2];
-                    var pythonData = results[3];
-                    self.props.onLoadingStarted();
-                    try { localStorage.removeItem('ai_messages'); } catch (e) {}
-                    // Guardar los códigos Python y el candado con clave ANTES de loadProject:
-                    // el handler de PROJECT_LOADED en gui.jsx los lee para restaurar
-                    // el editor de texto y el estado de bloqueo del archivo cargado.
-                    if (pythonData && pythonData.pythonCodes) {
-                        try {
-                            localStorage.setItem('stblock_python_project_codes',
-                                JSON.stringify(pythonData.pythonCodes));
-                        } catch (_) {}
-                    } else {
-                        // No es un .flynt con datos Python: descartar códigos
-                        // antiguos para no restaurarlos en otro proyecto.
-                        try { localStorage.removeItem('stblock_python_project_codes'); } catch (_) {}
+                // Cargar el proyecto en el VM de Scratch
+                if (window.__stbLog) {
+                    window.__stbLog('INFO', '[Uploader] Llamando a self.props.vm.loadProject(buffer)...');
+                }
+                const startTime = Date.now();
+                await self.props.vm.loadProject(buffer);
+                const elapsed = Date.now() - startTime;
+                if (window.__stbLog) {
+                    window.__stbLog('SUCCESS', `[Uploader] vm.loadProject finalizado exitosamente en ${elapsed}ms`);
+                }
+
+                if (filename) {
+                    const uploadedProjectTitle = self.getProjectTitleFromFilename(filename);
+                    self.props.onSetProjectTitle(uploadedProjectTitle);
+                }
+                loadingSuccess = true;
+
+                // Restaurar datos de IA desde .flynt a localStorage
+                if (aiData) {
+                    try {
+                        if (aiData.training) {
+                            localStorage.setItem('ai_training_data',
+                                typeof aiData.training === 'string' ?
+                                    aiData.training : JSON.stringify(aiData.training));
+                        }
+                        if (aiData.session) {
+                            localStorage.setItem('ai_session',
+                                typeof aiData.session === 'string' ?
+                                    aiData.session : JSON.stringify(aiData.session));
+                        }
+                        if (aiData.settings) {
+                            if (aiData.settings.provider) {
+                                localStorage.setItem('ai_provider', aiData.settings.provider);
+                            }
+                            if (aiData.settings.model) {
+                                localStorage.setItem(
+                                    aiData.settings.provider + '_model',
+                                    aiData.settings.model);
+                            }
+                            if (aiData.settings.trainingEnabled !== undefined) {
+                                localStorage.setItem('ai_training_enabled',
+                                    aiData.settings.trainingEnabled);
+                            }
+                        }
+                    } catch (_) {}
+                }
+
+                // Restaurar datos de dispositivos desde .flynt al store de Redux
+                if (deviceData) {
+                    try {
+                        if (deviceData.deviceProjects) {
+                            Object.keys(deviceData.deviceProjects).forEach(function (deviceId) {
+                                const project = deviceData.deviceProjects[deviceId];
+                                self.props.onRestoreDeviceProject(
+                                    deviceId,
+                                    project.projectData,
+                                    project.hasBlocks
+                                );
+                            });
+                        }
+                        if (deviceData.terminalHistory && Array.isArray(deviceData.terminalHistory)) {
+                            deviceData.terminalHistory.forEach(function (line) {
+                                self.props.onAppendTerminal(line);
+                            });
+                        }
+                        if (deviceData.connectionState) {
+                            self.props.onRestoreDeviceState(deviceData.connectionState);
+                        }
+                        if (deviceData.circuitData) {
+                            self.props.onSetCircuitData(deviceData.circuitData);
+                        }
+                        if (deviceData.circuit3dData) {
+                            self.props.onSetCircuit3dData(deviceData.circuit3dData);
+                        } else {
+                            self.props.onClearCircuit3dData();
+                        }
+                        if (deviceData.conversation) {
+                            localStorage.setItem('ai_conversation',
+                                typeof deviceData.conversation === 'string' ?
+                                    deviceData.conversation : JSON.stringify(deviceData.conversation));
+                        }
+                    } catch (_) {}
+                } else {
+                    self.props.onClearCircuit3dData();
+                }
+
+                // Restaurar proyecto 3D SketchForge (.skf)
+                if (sketchforgeData) {
+                    try {
+                        self.props.onSetSketchforgeData(sketchforgeData);
+                    } catch (_) {}
+                }
+            } catch (error) {
+                if (window.__stbLog) {
+                    window.__stbLog('ERROR', `[Uploader] Error en loadBuffer: ${error && (error.message || error)}`, error && error.stack);
+                }
+                log.warn('Error en loadBuffer:', error);
+                try { localStorage.removeItem('stblock_python_project_codes'); } catch (_) {}
+                try { localStorage.removeItem('stblock_python_project_key_lock'); } catch (_) {}
+                try {
+                    alert(self.props.intl.formatMessage(messages.loadError)); // eslint-disable-line no-alert
+                } catch (_) {}
+            } finally {
+                clearTimeout(failsafeTimer);
+                if (window.__stbLog) {
+                    window.__stbLog('INFO', `[Uploader] Bloque finally: llamando a onLoadingFinished(success=${loadingSuccess})`);
+                }
+                try {
+                    self.props.onLoadingFinished(self.props.loadingState, loadingSuccess);
+                } catch (e) {
+                    if (window.__stbLog) {
+                        window.__stbLog('ERROR', `[Uploader] Error en onLoadingFinished: ${e.message}`, e.stack);
                     }
-                    if (pythonData && pythonData.pythonKeyLock) {
-                        try {
-                            localStorage.setItem('stblock_python_project_key_lock',
-                                String(pythonData.pythonKeyLock));
-                        } catch (_) {}
-                    } else {
-                        try { localStorage.removeItem('stblock_python_project_key_lock'); } catch (_) {}
-                    }
-                    var loadingSuccess = false;
-                    self.props.vm.loadProject(buffer)
-                        .then(function () {
-                            if (filename) {
-                                var uploadedProjectTitle = self.getProjectTitleFromFilename(filename);
-                                self.props.onSetProjectTitle(uploadedProjectTitle);
-                            }
-                            loadingSuccess = true;
-
-                            // Restore AI data from .flynt to localStorage
-                            if (aiData) {
-                                try {
-                                    if (aiData.training) {
-                                        localStorage.setItem('ai_training_data',
-                                            typeof aiData.training === 'string' ?
-                                                aiData.training : JSON.stringify(aiData.training));
-                                    }
-                                    if (aiData.session) {
-                                        localStorage.setItem('ai_session',
-                                            typeof aiData.session === 'string' ?
-                                                aiData.session : JSON.stringify(aiData.session));
-                                    }
-                                    if (aiData.settings) {
-                                        if (aiData.settings.provider) {
-                                            localStorage.setItem('ai_provider', aiData.settings.provider);
-                                        }
-                                        if (aiData.settings.model) {
-                                            localStorage.setItem(
-                                                aiData.settings.provider + '_model',
-                                                aiData.settings.model);
-                                        }
-                                        if (aiData.settings.trainingEnabled !== undefined) {
-                                            localStorage.setItem('ai_training_enabled',
-                                                aiData.settings.trainingEnabled);
-                                        }
-                                    }
-                                } catch (_) {}
-                            }
-
-                            // Restore device data from .flynt to Redux store
-                            if (deviceData) {
-                                try {
-                                    // Restore device projects (workspaces per device)
-                                    if (deviceData.deviceProjects) {
-                                        Object.keys(deviceData.deviceProjects).forEach(function (deviceId) {
-                                            var project = deviceData.deviceProjects[deviceId];
-                                            self.props.onRestoreDeviceProject(
-                                                deviceId,
-                                                project.projectData,
-                                                project.hasBlocks
-                                            );
-                                        });
-                                    }
-                                    // Restore terminal history
-                                    if (deviceData.terminalHistory && Array.isArray(deviceData.terminalHistory)) {
-                                        deviceData.terminalHistory.forEach(function (line) {
-                                            self.props.onAppendTerminal(line);
-                                        });
-                                    }
-                                    // Restore connection state (selected device, port, terminal settings)
-                                    if (deviceData.connectionState) {
-                                        self.props.onRestoreDeviceState(deviceData.connectionState);
-                                    }
-                                    // Restore circuit data (legacy state)
-                                    if (deviceData.circuitData) {
-                                        self.props.onSetCircuitData(deviceData.circuitData);
-                                    }
-                                    // Restore Circuito 3D data (Electronics Lab state)
-                                    if (deviceData.circuit3dData) {
-                                        self.props.onSetCircuit3dData(deviceData.circuit3dData);
-                                    } else {
-                                        self.props.onClearCircuit3dData();
-                                    }
-                                    // Restore AI conversation to localStorage
-                                    if (deviceData.conversation) {
-                                        localStorage.setItem('ai_conversation',
-                                            typeof deviceData.conversation === 'string' ?
-                                                deviceData.conversation : JSON.stringify(deviceData.conversation));
-                                    }
-                                } catch (_) {}
-                            } else {
-                                self.props.onClearCircuit3dData();
-                            }
-
-                            // Restore 3D SketchForge project (.skf) from .flynt to Redux store.
-                            // Se conserva hasta que se capture un .skf más reciente del iframe.
-                            if (sketchforgeData) {
-                                try {
-                                    self.props.onSetSketchforgeData(sketchforgeData);
-                                } catch (_) {}
-                            }
-                        })
-                        .catch(function (error) {
-                            log.warn(error);
-                            try { localStorage.removeItem('stblock_python_project_codes'); } catch (_) {}
-                            try { localStorage.removeItem('stblock_python_project_key_lock'); } catch (_) {}
-                            alert(self.props.intl.formatMessage(messages.loadError)); // eslint-disable-line no-alert
-                        })
-                        .then(function () {
-                            self.props.onLoadingFinished(self.props.loadingState, loadingSuccess);
-                            // go back to step 7: whether project loading succeeded
-                            // or failed, reset file objects
-                            self.removeFileObjects();
-                        });
-                });
+                    log.warn('Error en onLoadingFinished:', e);
+                }
+                self.removeFileObjects();
             }
         }
         // step 7: remove the <input> element from the DOM and clear reader and
@@ -464,9 +540,34 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         // transition project state from loading to regular, and close
         // loading screen and file menu
         onLoadingFinished: (loadingState, success) => {
-            dispatch(onLoadedProject(loadingState, ownProps.canSave, success));
-            dispatch(closeLoadingProject());
-            dispatch(closeFileMenu());
+            if (window.__stbLog) {
+                window.__stbLog('INFO', `[Uploader] onLoadingFinished: state="${loadingState}", success=${success}`);
+            }
+            try {
+                const action = onLoadedProject(loadingState, ownProps.canSave, success);
+                if (action) {
+                    dispatch(action);
+                } else {
+                    dispatch({type: 'DONE_LOADING_VM_WITHOUT_ID'});
+                }
+            } catch (err) {
+                if (window.__stbLog) {
+                    window.__stbLog('ERROR', `[Uploader] Error en dispatch onLoadedProject: ${err.message}`, err.stack);
+                }
+            }
+            try {
+                dispatch(closeLoadingProject());
+                if (window.__stbLog) {
+                    window.__stbLog('INFO', '[Uploader] closeLoadingProject despachado exitosamente');
+                }
+            } catch (err) {
+                if (window.__stbLog) {
+                    window.__stbLog('ERROR', `[Uploader] Error al cerrar modal de carga: ${err.message}`, err.stack);
+                }
+            }
+            try {
+                dispatch(closeFileMenu());
+            } catch (_) {}
         },
         // show project loading screen
         onLoadingStarted: () => dispatch(openLoadingProject()),

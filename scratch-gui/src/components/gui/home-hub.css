@@ -1,0 +1,297 @@
+.home-hub-overlay {
+    position: fixed;
+    top: calc(clamp(40px, 5.5vh, 48px) + max(env(safe-area-inset-top, 0px), 18px));
+    left: 0;
+    right: 0;
+    bottom: calc(clamp(46px, 6.5vh, 54px) + max(env(safe-area-inset-bottom, 0px), 6px));
+    width: 100vw;
+    height: auto;
+    background-color: #f8fafc;
+    z-index: 490;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 14px 24px 14px;
+    box-sizing: border-box;
+    color: #1e293b;
+    user-select: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (orientation: landscape) and (max-height: 550px) {
+    .home-hub-overlay {
+        top: clamp(36px, 8.5vh, 42px);
+        bottom: clamp(36px, 8.5vh, 42px);
+    }
+}
+
+.home-hub-hero {
+    margin-bottom: 16px;
+    flex-shrink: 0;
+}
+
+.home-hub-greeting {
+    font-size: 1.45rem;
+    font-weight: 800;
+    margin: 0 0 4px 0;
+    color: #0f172a;
+}
+
+.home-hub-subtitle {
+    font-size: 0.88rem;
+    color: #64748b;
+    margin: 0;
+}
+
+.home-hub-close-btn {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    transition: background 0.15s ease;
+}
+
+.home-hub-close-btn:active {
+    background: #e2e8f0;
+}
+
+.home-hub-section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #3b82f6;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+
+/* Grilla responsive que nunca desborda horizontalmente */
+.home-hub-modes-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+    width: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.home-hub-mode-card {
+    background-color: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    touch-action: manipulation;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: transform 0.1s ease, border-color 0.15s ease, background 0.15s ease;
+    box-sizing: border-box;
+    min-width: 0;
+}
+
+.home-hub-mode-card:active {
+    transform: scale(0.96);
+    background-color: #eff6ff;
+    border-color: #3b82f6;
+}
+
+.home-hub-card-icon {
+    font-size: 1.8rem;
+    margin-bottom: 6px;
+    display: block;
+}
+
+.home-hub-card-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+.home-hub-card-desc {
+    font-size: 0.68rem;
+    color: #64748b;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Barra de acciones rápidas */
+.home-hub-actions-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    width: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.home-hub-primary-btn {
+    flex: 1;
+    min-height: 46px;
+    background: linear-gradient(135deg, #0284c7, #0369a1);
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.90rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    touch-action: manipulation;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+}
+
+.home-hub-primary-btn:active {
+    transform: scale(0.97);
+}
+
+.home-hub-secondary-btn {
+    flex: 1;
+    min-height: 46px;
+    background-color: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    color: #334155;
+    border-radius: 10px;
+    font-size: 0.90rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    touch-action: manipulation;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.home-hub-secondary-btn:active {
+    background-color: #f1f5f9;
+}
+
+/* Lista de proyectos */
+.home-hub-projects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+    width: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.home-hub-project-item {
+    background-color: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    touch-action: manipulation;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    box-sizing: border-box;
+}
+
+.home-hub-project-item:active {
+    background-color: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.home-hub-project-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.home-hub-project-file-icon {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+.home-hub-project-name {
+    font-size: 0.90rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.home-hub-project-meta {
+    font-size: 0.72rem;
+    color: #64748b;
+}
+
+.home-hub-project-open-arrow {
+    color: #0284c7;
+    font-size: 1.2rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+/* Teaser / Cloud */
+.home-hub-login-teaser {
+    padding: 14px;
+    background-color: #f0f9ff;
+    border: 1px dashed #7dd3fc;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.home-hub-login-text {
+    font-size: 0.80rem;
+    color: #0369a1;
+    line-height: 1.35;
+}
+
+.home-hub-login-text strong {
+    color: #0c4a6e;
+}
+
+.home-hub-login-btn {
+    padding: 8px 14px;
+    background-color: #0284c7;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.80rem;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.home-hub-login-btn:active {
+    background-color: #0369a1;
+}

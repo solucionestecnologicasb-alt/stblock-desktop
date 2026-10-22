@@ -35,4 +35,9 @@ if (!existsSync(destIndexHtml)) {
   process.exit(1);
 }
 
-console.log(`[copy-sketchforge-to-build] Export de SketchForge copiado en ${destRoot}.`);
+import { patchSketchforgeDirectory } from "./patch-sketchforge-relative.mjs";
+
+await patchSketchforgeDirectory(destRoot);
+
+console.log(`[copy-sketchforge-to-build] Export de SketchForge copiado y parcheado con rutas relativas en ${destRoot}.`);
+

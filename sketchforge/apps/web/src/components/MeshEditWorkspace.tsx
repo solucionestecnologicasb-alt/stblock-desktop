@@ -1,9 +1,9 @@
 "use client";
 
 import { MeshAdvancedTools } from "./MeshAdvancedTools";
-import { MeshEditMenus } from "./MeshEditMenus";
+import { MeshEditHeaderCommands } from "./MeshEditHeaderCommands";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Move, Rotate3D, Scaling, Undo2, Redo2, ScanEye, Focus, Split, Trash2, Box, ChevronUp, Plus } from "lucide-react";
+import { ArrowLeft, Move, Rotate3D, Scaling, Expand, Undo2, Redo2, ScanEye, Focus, Split, Trash2, Box, ChevronUp, Plus } from "lucide-react";
 import { MeshEditViewport, type MeshEditState, type MeshEditTool } from "@/lib/meshEditViewport";
 import type { EditableMesh, EditSelectionMode } from "@/lib/editableMesh";
 
@@ -22,7 +22,7 @@ type Props = {
 export function MeshEditWorkspace(props: Props) {
   const host = useRef<HTMLDivElement>(null), output = useRef<HTMLOutputElement>(null), controller = useRef<MeshEditViewport | null>(null);
   const callbacks = useRef(props); callbacks.current = props;
-  const [state, setState] = useState<MeshEditState>({ mode: props.initialMode, tool: "translate", count: 0, xray: false, undo: false, redo: false, active: false });
+  const [state, setState] = useState<MeshEditState>({ mode: props.initialMode, tool: "translate", count: 0, xray: false, undo: false, redo: false, active: false, uniformScale: false });
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     try {
@@ -48,12 +48,14 @@ export function MeshEditWorkspace(props: Props) {
       <span className="mesh-edit-count">{state.count} seleccionados</span>
       <button type="button" title="Deshacer (Ctrl+Z)" aria-label="Deshacer edición" disabled={!state.undo || state.active} onClick={() => controller.current?.undo()}><Undo2 size={18} /></button>
       <button type="button" title="Rehacer (Ctrl+Shift+Z)" aria-label="Rehacer edición" disabled={!state.redo || state.active} onClick={() => controller.current?.undo(true)}><Redo2 size={18} /></button>
+      <MeshEditHeaderCommands controller={controller} state={state} />
     </div>
     <div className="mesh-edit-canvas" ref={host} />
     <div className="mesh-edit-tools" role="toolbar" aria-label="Transformar selección">
       {tool("translate", "Mover", "G", Move)}
       {tool("rotate", "Rotar", "R", Rotate3D)}
       {tool("scale", "Escalar", "S", Scaling)}
+      <button type="button" aria-pressed={state.uniformScale} disabled={state.active} onClick={() => controller.current?.setUniformScale(!state.uniformScale)} title="Escala uniforme al centro: cualquier manija aplica el mismo factor en X, Y y Z. Desactívala para escalar por eje"><Expand size={18} /><span>Uniforme</span><kbd>U</kbd></button>
       <hr />
       <button type="button" disabled={state.active || state.mode !== "face" || !state.count} onClick={() => controller.current?.extrude()} title="Extruir caras seleccionadas"><ChevronUp size={18} /><span>Extruir</span><kbd>E</kbd></button>
       <button type="button" disabled={state.active || state.mode !== "edge" || !state.count} onClick={() => controller.current?.subdivide()} title="Divide las aristas y sus caras adyacentes"><Split size={18} /><span>Subdividir</span></button>
@@ -64,7 +66,6 @@ export function MeshEditWorkspace(props: Props) {
       <button type="button" disabled={!state.count || state.active} onClick={() => controller.current?.remove()} title="Eliminar componentes seleccionados (Supr)"><Trash2 size={18} /><span>Eliminar</span></button>
       <hr />
       <MeshAdvancedTools controller={controller} state={state} />
-      <MeshEditMenus controller={controller} state={state} />
     </div>
     <div className="mesh-edit-help"><Box size={14} /> Edición de superficie <span>Shift + clic: añadir · B: recuadro · A: todo</span></div>
     {state.active ? <div className="mesh-edit-confirm"><button onClick={() => controller.current?.finish()}>Confirmar <kbd>Enter</kbd></button><button onClick={() => controller.current?.cancel()}>Cancelar <kbd>Esc</kbd></button></div> : null}

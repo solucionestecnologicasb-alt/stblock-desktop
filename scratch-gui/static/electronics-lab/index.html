@@ -5,8 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Electronics Lab 3D</title>
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <script type="module" crossorigin src="./assets/index-5ShQjx1V.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DrrdcYP0.css">
+    <script>
+      // Silenciar logs ruidosos del simulador (motor [SimEngine] y avisos de
+      // límite físico del protoboard) para no ensuciar la consola de STBlock.
+      (function () {
+        var NOISE = ['[SimEngine]', 'Límite físico'];
+        function isNoise(args) {
+          var first = args.length ? args[0] : null;
+          if (typeof first !== 'string') return false;
+          for (var i = 0; i < NOISE.length; i++) {
+            if (first.indexOf(NOISE[i]) !== -1) return true;
+          }
+          return false;
+        }
+        ['log', 'warn', 'info'].forEach(function (level) {
+          var original = console[level];
+          if (typeof original !== 'function') return;
+          console[level] = function () {
+            if (isNoise(arguments)) return;
+            return original.apply(console, arguments);
+          };
+        });
+      }());
+    </script>
+    <script type="module" crossorigin src="./assets/index-DrjTsv6H.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DH29Uutk.css">
   </head>
   <body class="h-full w-full overflow-hidden bg-white">
     <div id="root" class="h-full w-full"></div>

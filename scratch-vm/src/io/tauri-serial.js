@@ -134,7 +134,7 @@ class TauriSerial {
                     this.disconnect();
                 }
             }
-        }, 10); // Poll every 10ms
+        }, 50); // Poll every 50ms (20 Hz) — suficiente para datos serie y menos IPC
     }
 
     /**

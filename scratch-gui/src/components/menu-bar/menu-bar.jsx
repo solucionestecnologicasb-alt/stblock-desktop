@@ -95,6 +95,10 @@ const getFlyntBytes = async content => {
     return bytes;
 };
 
+// Tiempo mínimo de inactividad (sin cambios ni ejecución) antes de autoguardar.
+// Evita que proyectos pesados se congelen mientras se edita o se ejecuta el juego.
+const AUTO_SAVE_IDLE_MS = 6000;
+
 const downloadProjectInBrowser = (bytes, filename) => {
     const blob = new Blob([bytes], {type: 'application/x.scratch.flynt'});
 
@@ -146,6 +150,9 @@ class MenuBar extends React.Component {
         this.hasPendingChanges = false;
         this.autoSaveDebounceTimer = null;
         this.autoSaveIntervalTimer = null;
+        // Marca de tiempo de la última actividad (cambio de bloques, arrastre, etc.).
+        // El autoguardado solo se ejecuta tras AUTO_SAVE_IDLE_MS sin actividad.
+        this.lastActivityTime = 0;
         bindAll(this, [
             'handleClickNew',
             'handleClickRemix',
@@ -157,6 +164,9 @@ class MenuBar extends React.Component {
             'handleDeviceModeChange',
             'scheduleAutoSave',
             'performAutoSave',
+            'isProjectRunning',
+            'handleProjectRunStart',
+            'handleProjectRunStop',
             'handleProjectLoaded',
             'attachVmAutoSaveListeners',
             'detachVmAutoSaveListeners'
@@ -169,12 +179,14 @@ class MenuBar extends React.Component {
         window.addEventListener('stblock-python-changed', this.scheduleAutoSave);
         this.attachVmAutoSaveListeners(this.props.vm);
 
-        // Intervalo periódico de auto-guardado cada 30 segundos si hay cambios pendientes
+        // Comprobación periódica: autoguarda solo si hay cambios pendientes, el proyecto
+        // NO está en ejecución y se superó el tiempo de inactividad requerido.
         this.autoSaveIntervalTimer = setInterval(() => {
-            if (this.state.hasSaveTarget && this.hasPendingChanges && !this.state.isSavingToTarget) {
-                this.performAutoSave();
-            }
-        }, 30000);
+            if (!this.state.hasSaveTarget || !this.hasPendingChanges || this.state.isSavingToTarget) return;
+            if (this.isProjectRunning()) return;
+            if (Date.now() - this.lastActivityTime < AUTO_SAVE_IDLE_MS) return;
+            this.performAutoSave();
+        }, 2000);
     }
     componentDidUpdate (prevProps) {
         if (prevProps.vm !== this.props.vm) {
@@ -211,6 +223,8 @@ class MenuBar extends React.Component {
         vm.on('PROJECT_CHANGED', this.scheduleAutoSave);
         vm.on('workspaceUpdate', this.scheduleAutoSave);
         vm.on('targetsUpdate', this.scheduleAutoSave);
+        vm.on('PROJECT_RUN_START', this.handleProjectRunStart);
+        vm.on('PROJECT_RUN_STOP', this.handleProjectRunStop);
         if (vm.runtime) {
             vm.runtime.on('PROJECT_LOADED', this.handleProjectLoaded);
         }
@@ -220,24 +234,54 @@ class MenuBar extends React.Component {
         vm.removeListener('PROJECT_CHANGED', this.scheduleAutoSave);
         vm.removeListener('workspaceUpdate', this.scheduleAutoSave);
         vm.removeListener('targetsUpdate', this.scheduleAutoSave);
+        vm.removeListener('PROJECT_RUN_START', this.handleProjectRunStart);
+        vm.removeListener('PROJECT_RUN_STOP', this.handleProjectRunStop);
         if (vm.runtime) {
             vm.runtime.removeListener('PROJECT_LOADED', this.handleProjectLoaded);
+        }
+    }
+    // El proyecto se considera "en ejecución" (bandera verde activa) mientras el
+    // runtime mantiene su intervalo de stepping. Durante ese estado no se autoguarda.
+    isProjectRunning () {
+        const vm = this.props.vm;
+        return Boolean(vm && vm.runtime && vm.runtime._steppingInterval !== null);
+    }
+    handleProjectRunStart () {
+        // Mientras el juego corre no se autoguarda: se cancela cualquier guardado
+        // pendiente y se mantiene la marca de cambios para cuando se detenga.
+        if (this.autoSaveDebounceTimer) {
+            clearTimeout(this.autoSaveDebounceTimer);
+            this.autoSaveDebounceTimer = null;
+        }
+    }
+    handleProjectRunStop () {
+        // Al detenerse la ejecución, reiniciar la cuenta de inactividad; el guardado
+        // se producirá tras AUTO_SAVE_IDLE_MS sin actividad si quedaron cambios.
+        if (this.hasPendingChanges) {
+            this.scheduleAutoSave();
         }
     }
     scheduleAutoSave () {
         if (!this.state.hasSaveTarget) return;
         this.hasPendingChanges = true;
+        this.lastActivityTime = Date.now();
 
         if (this.autoSaveDebounceTimer) {
             clearTimeout(this.autoSaveDebounceTimer);
         }
-        // Esperar 2.5 segundos tras el último cambio/arrastre de bloque antes de guardar
+        // Esperar AUTO_SAVE_IDLE_MS tras el último cambio/arrastre antes de guardar.
         this.autoSaveDebounceTimer = setTimeout(() => {
+            this.autoSaveDebounceTimer = null;
             this.performAutoSave();
-        }, 2500);
+        }, AUTO_SAVE_IDLE_MS);
     }
     async performAutoSave () {
         if (this.state.isSavingToTarget || !this.state.hasSaveTarget || !this.hasPendingChanges) return;
+        // No guardar mientras se ejecuta el juego ni si hubo actividad reciente;
+        // se reintentará cuando se alcance la inactividad requerida.
+        if (this.isProjectRunning() || (Date.now() - this.lastActivityTime) < AUTO_SAVE_IDLE_MS) {
+            return;
+        }
         if (this.autoSaveDebounceTimer) {
             clearTimeout(this.autoSaveDebounceTimer);
             this.autoSaveDebounceTimer = null;
@@ -479,12 +523,6 @@ class MenuBar extends React.Component {
                 circuit3dData
             );
             const contentBytes = await getFlyntBytes(content);
-            console.info(isAutoSave ? '[AutoSave] Auto-guardado en proceso...' : '[Flynt] Proyecto listo para guardar', { // eslint-disable-line no-console
-                filename,
-                bytes: contentBytes.byteLength,
-                runtime: tauriRuntime ? 'tauri' : 'browser',
-                overwrite: reuseSavedTarget
-            });
 
             if (tauriRuntime) {
                 let filePath = reuseSavedTarget ? this.savedFilePath : null;

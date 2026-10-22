@@ -102,8 +102,8 @@ const StudentEvaluacionPlayer = ({onSetDeviceMode}) => {
     if (!evalData) {
         return (
             <div className={styles.playerContainer}>
-                <div className={styles.card} style={{textAlign: 'center', marginTop: '80px'}}>
-                    <div style={{fontSize: '64px', marginBottom: '16px'}}>🎓</div>
+                <div className={styles.card} style={{textAlign: 'center'}}>
+                    <div style={{fontSize: '52px', marginBottom: '12px'}}>🎓</div>
                     <h1 className={styles.title}>Evaluaciones STBlock</h1>
                     <p className={styles.description}>
                         Bienvenido a la sección de evaluaciones. Carga el archivo JSON que te ha proporcionado tu tutor para iniciar tu prueba interactiva.
@@ -111,13 +111,13 @@ const StudentEvaluacionPlayer = ({onSetDeviceMode}) => {
 
                     <div
                         className={styles.dropzone}
-                        onClick={() => fileInputRef.current.click()}
+                        onClick={() => fileInputRef.current && fileInputRef.current.click()}
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
                     >
                         <div className={styles.dropzoneIcon}>📥</div>
-                        <p className={styles.dropzoneText}>Arrastra y suelta tu archivo JSON aquí</p>
-                        <p className={styles.dropzoneSubtext}>o haz clic para buscarlo en tu dispositivo</p>
+                        <p className={styles.dropzoneText}>Toca aquí para buscar el archivo JSON</p>
+                        <p className={styles.dropzoneSubtext}>o arrástralo desde tu explorador de archivos</p>
                     </div>
 
                     <input
@@ -128,13 +128,22 @@ const StudentEvaluacionPlayer = ({onSetDeviceMode}) => {
                         onChange={handleFileLoad}
                     />
 
-                    <button
-                        className={styles.btnSecondary}
-                        onClick={() => onSetDeviceMode('game')}
-                        style={{marginTop: '20px'}}
-                    >
-                        ← Volver al Panel Principal
-                    </button>
+                    <div className={styles.actionButtonGroup}>
+                        <button
+                            type="button"
+                            className={styles.btnPrimary}
+                            onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                        >
+                            📂 Cargar Archivo de Evaluación (.json)
+                        </button>
+                        <button
+                            type="button"
+                            className={styles.btnSecondary}
+                            onClick={() => onSetDeviceMode('game')}
+                        >
+                            ← Volver al Modo Programación
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -142,11 +151,11 @@ const StudentEvaluacionPlayer = ({onSetDeviceMode}) => {
 
     // 2. Cargar el iframe del alumno a pantalla completa
     return (
-        <div style={{width: '100%', height: 'calc(100vh - 48px)', border: 'none', overflow: 'hidden'}}>
+        <div className={styles.evalIframeWrapper}>
             <iframe
                 ref={iframeRef}
                 src={iframeUrl}
-                style={{width: '100%', height: '100%', border: 'none'}}
+                className={styles.evalIframe}
                 onLoad={handleIframeLoad}
             />
         </div>

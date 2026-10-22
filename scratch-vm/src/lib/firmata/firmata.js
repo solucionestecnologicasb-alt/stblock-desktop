@@ -58,8 +58,8 @@ const FIRMATA = {
  * Firmata class for Arduino communication
  */
 class Firmata {
-    constructor () {
-        this._serialPort = null;
+    constructor (serialPort = null) {
+        this._serialPort = serialPort;
         this._isConnected = false;
         this._firmwareVersion = null;
         this._firmwareName = null;
@@ -75,11 +75,13 @@ class Firmata {
         this._onConnect = null;
         this._onDisconnect = null;
         this._onError = null;
+        this._onString = null;
 
         // Message parsing
         this._buffer = [];
         this._sysexBuffer = [];
         this._inSysex = false;
+        this._onDataBound = this._processData.bind(this);
 
         // Heartbeat
         this._heartbeatInterval = null;
@@ -88,32 +90,53 @@ class Firmata {
 
     /**
      * Connect to serial port
-     * @param {Object} serialPort - WebSerial port object
+     * @param {Object} [serialPort] - WebSerial port object (optional if passed to constructor)
      * @returns {Promise<boolean>}
      */
     async connect (serialPort) {
-        this._serialPort = serialPort;
+        if (serialPort) {
+            this._serialPort = serialPort;
+        }
+
+        if (!this._serialPort) {
+            throw new Error('No serial port provided to Firmata');
+        }
 
         try {
+            // Reset parser state
+            this._buffer = [];
+            this._sysexBuffer = [];
+            this._inSysex = false;
+            this._firmwareVersion = null;
+            this._firmwareName = null;
+
             // Start reading from serial port
             this._startReading();
 
+            // Send initial System Reset to synchronize Firmata state machine
+            try {
+                await this._sendMessage([FIRMATA.SYSTEM_RESET]);
+            } catch (e) {
+                // Ignore
+            }
+
             // Request firmware version periodically until we get a response to handle bootloader delay
-            const versionRequestInterval = setInterval(async () => {
-                if (this._firmwareVersion || this._isConnected) {
-                    clearInterval(versionRequestInterval);
-                    return;
-                }
+            const queryVersions = async () => {
+                if (this._firmwareVersion || this._isConnected) return;
                 try {
                     await this._sendMessage([FIRMATA.REPORT_VERSION]);
+                    await this._sendSysex(FIRMATA.REPORT_FIRMWARE, []);
                 } catch (e) {
                     // Ignore errors during bootloader phase
                 }
-            }, 500);
+            };
 
-            // Wait for response
+            await queryVersions();
+            const versionRequestInterval = setInterval(queryVersions, 300);
+
+            // Wait for response (up to 7 seconds to accommodate bootloader)
             try {
-                await this._waitForFirmware(4000);
+                await this._waitForFirmware(7000);
             } finally {
                 clearInterval(versionRequestInterval);
             }
@@ -143,6 +166,10 @@ class Firmata {
     disconnect () {
         this._stopHeartbeat();
         this._isConnected = false;
+
+        if (this._serialPort && typeof this._serialPort.offData === 'function' && this._onDataBound) {
+            this._serialPort.offData(this._onDataBound);
+        }
         this._serialPort = null;
 
         if (this._onDisconnect) {
@@ -311,6 +338,74 @@ class Firmata {
     onConnect (callback) { this._onConnect = callback; }
     onDisconnect (callback) { this._onDisconnect = callback; }
     onError (callback) { this._onError = callback; }
+    onString (callback) { this._onString = callback; }
+
+    /**
+     * Compatibility EventEmitter-like `on` method.
+     * Maps 'ready', 'connect', 'digital-read', 'analog-read', 'close', 'disconnect', 'error', 'string'.
+     * @param {string} event
+     * @param {Function} callback
+     */
+    on (event, callback) {
+        if (typeof callback !== 'function') return;
+        switch (event) {
+        case 'ready':
+        case 'connect':
+            this._onConnect = callback;
+            if (this._isConnected) {
+                try {
+                    callback();
+                } catch (e) {
+                    // Ignore
+                }
+            }
+            break;
+        case 'digital-read':
+            this._onDigitalChange = (pin, value) => {
+                try {
+                    callback({pin, value});
+                } catch (e) {
+                    // Ignore
+                }
+            };
+            break;
+        case 'analog-read':
+            this._onAnalogChange = (pin, value) => {
+                try {
+                    callback({pin, value});
+                } catch (e) {
+                    // Ignore
+                }
+            };
+            break;
+        case 'close':
+        case 'disconnect':
+            this._onDisconnect = callback;
+            break;
+        case 'error':
+            this._onError = callback;
+            break;
+        case 'string':
+            this._onString = callback;
+            break;
+        default:
+            break;
+        }
+    }
+
+    /**
+     * Query firmware version (compatibility method)
+     */
+    async queryVersion () {
+        return this._sendMessage([FIRMATA.REPORT_VERSION]);
+    }
+
+    /**
+     * Query firmware name and version (compatibility method)
+     */
+    async queryFirmware () {
+        return this._sendSysex(FIRMATA.REPORT_FIRMWARE, []);
+    }
 
     // Private methods
 
@@ -342,9 +437,7 @@ class Firmata {
 
         // If it's WebSerial, register data callback and return
         if (typeof this._serialPort.onData === 'function') {
-            this._serialPort.onData(data => {
-                this._processData(data);
-            });
+            this._serialPort.onData(this._onDataBound);
             return;
         }
 
@@ -376,6 +469,11 @@ class Firmata {
                     this._processSysex(this._sysexBuffer);
                     this._sysexBuffer = [];
                     this._inSysex = false;
+                } else if (byte >= 0x80) {
+                    // Non-data byte while in sysex means sysex was interrupted/aborted
+                    this._inSysex = false;
+                    this._sysexBuffer = [];
+                    this._buffer = [byte];
                 } else {
                     this._sysexBuffer.push(byte);
                 }
@@ -460,7 +558,9 @@ class Firmata {
                 chars.push(data[i] | (data[i + 1] << 7));
             }
             const message = String.fromCharCode(...chars);
-            // Could emit string event here
+            if (this._onString) {
+                this._onString(message);
+            }
             break;
         }
     }

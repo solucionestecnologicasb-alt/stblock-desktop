@@ -25,7 +25,10 @@ import {
 
 import {
     closeCostumeLibrary,
+    openBackdropLibrary,
     closeBackdropLibrary,
+    openSpriteLibrary,
+    closeSpriteLibrary,
     closeTelemetryModal,
     openExtensionLibrary,
     closeDebugModal,
@@ -234,6 +237,10 @@ const mapStateToProps = state => {
         tabOrder: state.scratchGui.editorTab.tabOrder,
         alertsVisible: state.scratchGui.alerts.visible,
         backdropLibraryVisible: state.scratchGui.modals.backdropLibrary,
+        spriteLibraryVisible: state.scratchGui.modals.spriteLibrary,
+        sprites: state.scratchGui.targets.sprites,
+        stage: state.scratchGui.targets.stage,
+        editingTarget: state.scratchGui.targets.editingTarget,
         blocksTabVisible: state.scratchGui.editorTab.activeTabIndex === BLOCKS_TAB_INDEX ||
             (state.scratchGui.editorTab.secondaryTabIndex !== null &&
              state.scratchGui.editorTab.secondaryTabIndex === BLOCKS_TAB_INDEX),
@@ -259,7 +266,8 @@ const mapStateToProps = state => {
         deviceLibraryVisible: state.scratchGui.modals.deviceLibrary,
         vm: state.scratchGui.vm,
         pendingExplain: state.scratchGui.editorTab.pendingExplain,
-        projectKey: state.scratchGui.editorTab.projectKey
+        projectKey: state.scratchGui.editorTab.projectKey,
+        projectTitle: state.scratchGui.projectTitle
     };
 };
 
@@ -267,6 +275,9 @@ const mapDispatchToProps = dispatch => ({
     dispatch: dispatch,
     onExtensionButtonClick: () => dispatch(openExtensionLibrary()),
     onActivateTab: tab => dispatch(activateTab(tab)),
+    onRequestOpenSpriteLibrary: () => dispatch(openSpriteLibrary()),
+    onRequestCloseSpriteLibrary: () => dispatch(closeSpriteLibrary()),
+    onRequestOpenBackdropLibrary: () => dispatch(openBackdropLibrary()),
     onRequestCloseBackdropLibrary: () => dispatch(closeBackdropLibrary()),
     onRequestCloseCostumeLibrary: () => dispatch(closeCostumeLibrary()),
     onRequestCloseDebugModal: () => dispatch(closeDebugModal()),

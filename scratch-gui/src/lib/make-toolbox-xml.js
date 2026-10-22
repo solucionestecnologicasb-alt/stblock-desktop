@@ -821,12 +821,6 @@ const deviceSensing = function () {
         <block id="timer" type="sensing_timer"/>
         <block type="sensing_resettimer"/>
         ${blockSeparator}
-        <block id="of" type="sensing_of">
-            <value name="OBJECT">
-                <shadow id="sensing_of_object_menu" type="sensing_of_object_menu"/>
-            </value>
-        </block>
-        ${blockSeparator}
         <block id="current" type="sensing_current"/>
         <block type="sensing_dayssince2000"/>
         ${categorySeparator}
@@ -1318,17 +1312,13 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     backdropName = xmlEscape(backdropName);
     soundName = xmlEscape(soundName);
     categoriesXML = categoriesXML.slice();
-    const deviceCategoriesXML = device ? categoriesXML.filter(categoryInfo =>
-        !shouldHideGameDeviceCategory(categoryInfo)) : [];
-    const coreCategoriesXML = device ? [] : categoriesXML;
     const moveCategory = categoryId => {
-        const index = coreCategoriesXML.findIndex(categoryInfo => categoryInfo.id === categoryId);
+        const index = categoriesXML.findIndex(categoryInfo => categoryInfo.id === categoryId);
         if (index >= 0) {
-            // remove the category from coreCategoriesXML and return its XML
-            const [categoryInfo] = coreCategoriesXML.splice(index, 1);
+            // remove the category from categoriesXML and return its XML
+            const [categoryInfo] = categoriesXML.splice(index, 1);
             return categoryInfo.xml;
         }
-        // return `undefined`
     };
     const motionXML = moveCategory('motion') || motion(isInitialSetup, isStage, targetId, colors.motion);
     const looksXML = moveCategory('looks') ||
@@ -1340,6 +1330,16 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     const operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);
     const variablesXML = moveCategory('data') || variables(isInitialSetup, isStage, targetId, colors.data);
     const myBlocksXML = moveCategory('procedures') || myBlocks(isInitialSetup, isStage, targetId, colors.more);
+
+    const isDeviceCategory = categoryInfo => {
+        if (!device) return false;
+        const id = (categoryInfo && categoryInfo.id) || '';
+        return id.startsWith('arduino_') || id.startsWith('stb') || !['pen', 'music', 'videoSensing', 'text2speech', 'translate'].includes(id);
+    };
+
+    const deviceCategoriesXML = device ? categoriesXML.filter(isDeviceCategory) : [];
+    const coreCategoriesXML = device ? categoriesXML.filter(c => !deviceCategoriesXML.includes(c)) : categoriesXML;
+
     const hasDeviceBlocks = Boolean(device && deviceCategoriesXML.length > 0);
     const everything = [
         xmlOpen,
@@ -1369,10 +1369,9 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
                 everything.push(gap, extensionCategory.xml);
             }
         }
-    } else {
-        for (const extensionCategory of coreCategoriesXML) {
-            everything.push(gap, extensionCategory.xml);
-        }
+    }
+    for (const extensionCategory of coreCategoriesXML) {
+        everything.push(gap, extensionCategory.xml);
     }
     everything.push(xmlClose);
     return everything.join('\n');

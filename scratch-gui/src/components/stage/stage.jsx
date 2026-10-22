@@ -39,12 +39,14 @@ const StageComponent = props => {
             <Box
                 className={classNames(
                     styles.stageWrapper,
+                    'stage-inner-wrapper',
                     {[styles.withColorPicker]: !isFullScreen && isColorPicking})}
                 onDoubleClick={onDoubleClick}
             >
                 <Box
                     className={classNames(
                         styles.stage,
+                        'stage-box-element',
                         {[styles.fullScreen]: isFullScreen}
                     )}
                     style={{
@@ -53,6 +55,7 @@ const StageComponent = props => {
                     }}
                 >
                     <DOMElementRenderer
+                        className="stage-dom-renderer"
                         domElement={canvas}
                         style={{
                             height: stageDimensions.height,
