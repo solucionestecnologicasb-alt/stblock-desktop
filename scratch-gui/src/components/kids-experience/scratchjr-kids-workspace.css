@@ -1,0 +1,134 @@
+.workspace{position:fixed;inset:0;z-index:400;overflow:hidden;background:#087fbb;color:#24435b;font-family:"Nunito","Trebuchet MS",sans-serif}
+.toolbar{position:absolute;z-index:3;inset:0 0 auto;height:62px;display:flex;align-items:center;gap:12px;padding:0 14px;box-sizing:border-box;background:#fff;border-bottom:1px solid #d8e7ee;box-shadow:0 3px 12px #21445914}
+.exit{width:40px;height:40px;flex:0 0 40px;border:0;border-radius:14px;background:#eaf4fa;color:#2c759e;font-size:26px;font-weight:900;cursor:pointer}
+.brand{width:128px;height:54px;object-fit:contain;border-radius:8px}
+.modes{display:flex;align-items:center;gap:4px;padding:4px;border-radius:17px;background:#edf3f5}
+.modeButton{height:42px;min-width:86px;padding:0 12px;display:flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:13px;background:transparent;color:#607783;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;white-space:nowrap}
+.modeButton>span:first-child{font-size:19px}.modeActive{background:#fff;color:#276e9e;box-shadow:0 2px 7px #243f5019}
+.workspace[data-mode="robot"] .modeActive{color:#2e8b4b}.workspace[data-mode="free"] .modeActive{color:#bd7417}
+.actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+.storyPicker,.connect{height:40px;padding:0 13px;display:flex;align-items:center;gap:7px;border:1px solid #cfe1e8;border-radius:14px;background:#f7fbfc;color:#37637a;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap}
+.storyPicker>span:first-child{font-size:18px}.storyPicker:hover{background:#eaf6fb}
+.workspace[data-mode="robot"] .storyPicker{display:none}
+.connect{border-color:#b5dabb;background:#eaf8ec;color:#287b3d}.connect>span:first-child{font-size:18px;font-weight:1000}.connect:hover{background:#dcf2df}.connected{background:#dff4e3;border-color:#80c896;color:#216c34}
+.workspace[data-mode="robot"] .connect:not(.connected)>span:first-child{animation:bluetooth-bob 1.6s ease-in-out infinite}
+@keyframes bluetooth-bob{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-2px) scale(1.12)}}
+.mapChoices{display:flex;align-items:center;gap:4px;padding:3px;border-radius:15px;background:#edf5f8}
+.mapChoice{width:36px;height:36px;border:0;border-radius:12px;background:transparent;font-size:20px;cursor:pointer;transition:transform .16s ease,background .16s ease}
+.mapChoice:hover{transform:translateY(-2px)}.mapActive{background:white;box-shadow:0 2px 7px #243f5019}
+.editor{position:absolute;left:0;top:62px;width:100%;height:calc(100% - 62px);border:0;background:#f4f8f8}
+@media(max-width:760px){.toolbar{height:58px;gap:6px;padding:0 7px}.exit{width:36px;height:36px;flex-basis:36px}.brand{width:85px;height:45px}.modes{gap:1px;padding:3px}.modeButton{height:38px;min-width:0;padding:0 8px;gap:4px;font-size:12px}.modeButton>span:first-child{font-size:17px}.actions{gap:4px}.storyPicker,.connect{height:36px;padding:0 8px;font-size:11px}.storyPicker>span:last-child,.connect>span:last-child{display:none}.editor{top:58px;height:calc(100% - 58px)}}
+@media(max-width:480px){.brand{width:65px}.toolbar{gap:4px}.modeButton{padding:0 6px;font-size:11px}.storyPicker,.connect{width:34px;justify-content:center;padding:0}.storyPicker>span:first-child,.connect>span:first-child{font-size:18px}.exit{width:32px;height:32px;flex-basis:32px}}
+@media(max-width:760px){.mapChoices{gap:1px;padding:2px}.mapChoice{width:30px;height:32px;font-size:17px}}
+:global(body[data-stblock-kids-robot="true"] #bluetoothModal){border:5px solid #73c8e7;border-radius:28px;overflow:hidden;box-shadow:0 18px 55px #18384c40}
+:global(body[data-stblock-kids-robot="true"] #bluetoothModal) header{background:#eaf8ff;border-bottom:2px solid #d5edf7}
+:global(body[data-stblock-kids-robot="true"] #bluetoothModal) button{min-height:46px;border-radius:18px;font-weight:800}
+:global(body[data-stblock-kids-robot="true"] #bluetoothModal) [class*="baud-row"],
+:global(body[data-stblock-kids-robot="true"] #bluetoothModal) [class*="baud-status"]{display:none!important}
+:global(body[data-stblock-kids-robot="true"] #bluetoothModal) [class*="peripheralActivityIcon"]{animation:robot-bluetooth-float 1.8s ease-in-out infinite}
+@keyframes robot-bluetooth-float{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-5px) rotate(4deg)}}
+
+/* STBlock Kids: tactile controls, with a fresh green and white palette. */
+main.workspace{background:#238b50;color:#28583b}
+header.toolbar{background:#238b50}
+.exit{border-color:#d8f4df;background:#fff;color:#218249}
+.brand{border-color:#d8f4df;box-shadow:0 4px 12px #14542f45}
+.modes{border-color:#bce5c7;background:#e8f7eb}
+.modeButton{color:#477257}
+.modeActive,.workspace[data-mode="robot"] .modeActive,.workspace[data-mode="free"] .modeActive{color:#218249}
+.storyPicker,.connect{border-color:#bce5c7;background:#fff;color:#267544}
+.storyPicker:hover,.connect:hover{background:#f0fbf2}
+.connect{border-color:#91d3a1;background:#e9f8ec;color:#20743b}
+.mapChoices{border-color:#c5e8ce;background:#eaf7ed}
+.editorSurface{border-color:#c9ebd1;background:#fff;box-shadow:0 10px 25px #14542f36}
+.editor{background:#fff}
+.modalShade{position:absolute;z-index:10;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:#183d2e80;backdrop-filter:blur(3px)}
+.mapModal{position:relative;width:min(560px,100%);padding:30px;border:5px solid #d5f0dc;border-radius:30px;background:#fff;color:#28583b;text-align:center;box-shadow:0 18px 55px #18382c45;animation:map-modal-pop .2s ease-out}
+.mapModal h2{margin:4px 0 5px;font-size:30px;color:#237c43}.mapModal p{margin:0 0 22px;color:#678273;font-size:16px;font-weight:700}
+.modalClose{position:absolute;top:10px;right:12px;width:40px;height:40px;border:0;border-radius:14px;background:#eaf7ed;color:#297847;font-size:30px;cursor:pointer}
+.mapCards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.mapCard{min-height:130px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:3px solid #e1eee4;border-radius:22px;background:#f7fbf8;color:#37684a;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;transition:transform .16s ease,border-color .16s ease,background .16s ease}
+.mapCard:hover{transform:translateY(-4px)}.mapCard>span{font-size:42px}.mapCardActive{border-color:#61b879;background:#eaf8ed;color:#237c43;box-shadow:0 4px 12px #39875226}
+@keyframes map-modal-pop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:760px){.toolbar{background:#238b50}.editorSurface{inset:98px 5px 5px}.mapModal{padding:24px 14px}.mapCards{gap:8px}.mapCard{min-height:100px;font-size:13px}.mapCard>span{font-size:33px}}
+@media(max-width:390px){.mapCard{min-height:90px}}
+
+/* Final brand colors override the inherited blue editor frame. */
+.workspace{background:#238b50;color:#28583b}
+.toolbar{background:#238b50}
+.exit{border-color:#d8f4df;background:#fff;color:#218249}
+.brand{border-color:#d8f4df}
+.modes{border-color:#bce5c7;background:#e8f7eb}
+.modeButton{color:#477257}
+.modeActive,.workspace[data-mode="robot"] .modeActive,.workspace[data-mode="free"] .modeActive{color:#218249}
+.editorSurface{border-color:#c9ebd1}
+@media(max-width:760px){.toolbar{background:#238b50}}
+
+/* Tactile-inspired frame with the STBlock Kids green palette. */
+main.workspace{background:#238b50;color:#28583b}
+.toolbar{height:78px;background:#238b50;border:0;box-shadow:none}
+.exit{position:absolute;left:15px;top:15px;border:3px solid #d4efff;background:#fff;color:#087fbb;box-shadow:0 3px 8px #084f7738}
+.spaceSelector{position:absolute;left:62px;top:15px;width:40px;height:40px;border:3px solid #d4efff;border-radius:14px;background:#fff;color:#087fbb;font-size:24px;font-weight:900;box-shadow:0 3px 8px #084f7738;cursor:pointer}
+.brand{position:absolute;left:50%;top:7px;transform:translateX(-50%);width:214px;height:60px;padding:4px 12px;box-sizing:border-box;border:3px solid #d9f0ff;border-radius:0 0 20px 20px;background:#fff;box-shadow:0 4px 12px #064d783d}
+.modes{position:absolute;left:68px;top:16px;padding:4px;border:2px solid #cdeafa;background:#e7f6ff}
+.modes{left:110px}
+.modeButton{height:40px;border-radius:12px;color:#3e6378}
+.modeActive{background:#fff;color:#147db2;box-shadow:0 2px 7px #164d6a2b}
+.workspace[data-mode="robot"] .modeActive{color:#238b4b}
+.workspace[data-mode="free"] .modeActive{color:#c27b11}
+.actions{position:absolute;right:15px;top:17px}
+.storyPicker,.connect{border:2px solid #d1eafa;background:#fff;color:#22617f;box-shadow:0 2px 7px #064d7824}
+.storyPicker:hover,.connect:hover{background:#f2fbff}
+.connect{border-color:#bce7c3;background:#edfff0;color:#277a3d}
+.mapChoices{border:2px solid #d4eafa;background:#edf8fd}
+.editorSurface{position:absolute;inset:78px 2.5vw 2.2vh;overflow:hidden;border:3px solid #d6efff;border-radius:22px;background:#fff;box-shadow:0 10px 25px #064d783a}
+.editor{inset:0;width:100%;height:100%;border:0;background:#fff}
+
+@media(max-width:760px){
+    .toolbar{height:98px}
+    .exit{left:8px;top:6px;width:36px;height:36px;flex-basis:36px}
+    .spaceSelector{left:48px;top:6px;width:36px;height:36px;font-size:21px}
+    .brand{left:50%;top:3px;width:142px;height:41px;padding:2px 8px;border-radius:0 0 15px 15px}
+    .modes{left:7px;right:7px;top:48px;justify-content:center;gap:3px;padding:3px}
+    .modeButton{height:38px;min-width:78px;padding:0 9px}
+    .actions{right:8px;top:6px;gap:4px}
+    .storyPicker,.connect{width:37px;height:37px;justify-content:center;padding:0}
+    .storyPicker>span:last-child,.connect>span:last-child{display:none}
+    .mapChoices{gap:1px;padding:2px}
+    .mapChoice{width:29px;height:31px;font-size:16px}
+    .editorSurface{inset:98px 5px 5px;border-width:2px;border-radius:17px}
+}
+@media(max-width:390px){
+    .modeButton{min-width:68px;padding:0 6px;font-size:11px}
+    .modeButton>span:first-child{font-size:16px}
+    .actions{right:6px}
+    .mapChoice{width:25px}
+}
+
+/* Keep the mode selector green after the original Tactile layout overrides. */
+nav.modes{border-color:#bce5c7;background:#e8f7eb}
+nav.modes .modeButton{color:#477257}
+nav.modes .modeActive,
+.workspace[data-mode="robot"] nav.modes .modeActive,
+.workspace[data-mode="free"] nav.modes .modeActive{color:#218249}
+
+.voiceToggle{width:40px;height:40px;flex:0 0 40px;display:flex;align-items:center;justify-content:center;border:2px solid #bce5c7;border-radius:14px;background:#fff;color:#267544;font-size:21px;cursor:pointer;box-shadow:0 2px 6px #1f65321a}
+.voiceToggle:hover{background:#effaf1;transform:translateY(-1px)}
+.voiceToggle:active{transform:scale(.94)}
+@media(max-width:760px){.voiceToggle{width:34px;height:34px;flex-basis:34px;border-radius:11px;font-size:18px}}
+@media(max-width:480px){.voiceToggle{width:30px;height:30px;flex-basis:30px;font-size:16px}}
+
+.renameToggle{width:40px;height:40px;flex:0 0 40px;display:flex;align-items:center;justify-content:center;border:2px solid #bce5c7;border-radius:14px;background:#fff;color:#267544;font-size:20px;cursor:pointer;box-shadow:0 2px 6px #1f65321a}
+.renameToggle:hover{background:#effaf1;transform:translateY(-1px)}
+.renameShade{position:absolute;z-index:20;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;background:#183d2e80;backdrop-filter:blur(3px)}
+.renameModal{width:min(460px,100%);padding:28px;border:4px solid #d5f0dc;border-radius:26px;background:#fff;color:#28583b;box-shadow:0 18px 55px #18382c45}
+.renameModal h2{margin:0 0 18px;color:#237c43;font-size:27px;font-weight:900}
+.renameModal label{display:block;margin-bottom:8px;color:#52715d;font-size:15px;font-weight:800}
+.renameModal input{width:100%;height:54px;box-sizing:border-box;padding:0 14px;border:3px solid #cfe8d5;border-radius:15px;background:#fbfefb;color:#28583b;font-family:inherit;font-size:20px;font-weight:800;outline:none}
+.renameModal input:focus{border-color:#4eae69;box-shadow:0 0 0 4px #4eae6924}
+.renameActions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+.renameActions button{min-width:108px;height:46px;padding:0 16px;border:0;border-radius:14px;background:#edf5ef;color:#355e42;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer}
+.renameActions .renameSave{background:#218249;color:#fff;box-shadow:0 3px 0 #176437}
+.renameActions .renameSave:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+@media(max-width:760px){.renameToggle{width:34px;height:34px;flex-basis:34px;border-radius:11px;font-size:18px}}
+@media(max-width:480px){.renameToggle{width:30px;height:30px;flex-basis:30px;font-size:16px}.renameModal{padding:22px 18px}}

@@ -1,0 +1,335 @@
+/* The native editor owns its measured geometry; STBlock applies its visual skin. */
+html[data-stblock-kids="true"] #topbar {
+    background-color: #ffd34e;
+    border-color: #e4b62d;
+    box-shadow: 0 2px 8px rgba(41, 62, 77, .12);
+}
+
+html[data-stblock-kids="true"] #topbar button,
+html[data-stblock-kids="true"] #topbar a {
+    border-radius: 12px;
+}
+
+html[data-stblock-kids="true"] #blockspalette {
+    border-color: #c8e0eb;
+}
+
+html[data-stblock-kids="true"] .scripts {
+    background-color: #fbfdff;
+    background-image: radial-gradient(circle, #d6e7ef 1.3px, transparent 1.3px);
+    background-size: 22px 22px;
+}
+
+html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #topbar {
+    background-color: #ffd34e;
+}
+
+html[data-stblock-kids="true"] body {
+    background: #f0f8fc;
+    color: #24435b;
+}
+
+html[data-stblock-kids="true"] #frame {
+    background: #f0f8fc;
+}
+
+html[data-stblock-kids="true"] #topsection {
+    background: linear-gradient(145deg, #e7f5fc, #f7fbff);
+}
+
+html[data-stblock-kids="true"] #flip { display: none !important; }
+
+html[data-stblock-kids="true"] #stageframe .stage {
+    overflow: hidden;
+    border: 4px solid #fff;
+    border-radius: 20px;
+    box-shadow: 0 7px 20px #294a5c28;
+}
+
+html[data-stblock-kids="true"] #blockspalette {
+    background: #fff;
+    border: 0;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -4px 16px #294a5c12;
+}
+
+html[data-stblock-kids="true"] .scripts {
+    border: 0;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -4px 18px #294a5c12;
+}
+
+/* Robot mode keeps ScratchJr's own editor and geometry, while hiding authoring
+   controls that do not belong to a one-robot movement task. */
+body[data-stblock-kids-mode="robot"] #topsection .leftpanel,
+body[data-stblock-kids-mode="robot"] #topsection .rightpanel {
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+body[data-stblock-kids-mode="robot"] #selectors [aria-label="Looks"],
+body[data-stblock-kids-mode="robot"] #selectors [aria-label="Sound"] {
+    display: none !important;
+}
+
+body[data-stblock-kids-mode="robot"] #selectors [aria-label="Flow"] {
+    left: 123px !important;
+}
+
+body[data-stblock-kids-mode="robot"] #selectors [aria-label="End"] {
+    left: 177px !important;
+}
+
+body[data-stblock-kids-mode="robot"] #stageframe .stagepage > div:nth-child(2) img,
+body[data-stblock-kids-mode="robot"] #stageframe .stagepage > div:nth-child(2) canvas {
+    visibility: hidden !important;
+}
+
+body[data-stblock-kids-mode="robot"] #stageframe .stagepage > div:nth-child(2) {
+    overflow: visible !important;
+}
+
+body[data-stblock-kids-mode="robot"] #stageframe .stagepage > div:nth-child(2)::after {
+    content: "";
+    position: absolute;
+    width: 150px;
+    height: 150px;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: block;
+    background: url("svglibrary/StblockRobot.svg") center / contain no-repeat;
+    visibility: visible;
+    pointer-events: none;
+    filter: drop-shadow(0 5px 2px #23445b35);
+}
+
+/* Direct delete controls make sprite and page removal discoverable for young users. */
+body[data-stblock-kids-mode] .spritethumb .deletespritethumb {
+    top: 4px !important;
+    right: 4px !important;
+    left: auto !important;
+    width: 28px !important;
+    height: 28px !important;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background-color: #fff;
+    background-image: url("assets/ui/closeit.svg");
+    background-size: contain;
+    box-shadow: 0 2px 5px #23445b40;
+    z-index: 8;
+}
+
+body[data-stblock-kids-mode] .pagethumb .deletethumb.on {
+    visibility: visible !important;
+}
+
+body[data-stblock-kids-mode="robot"] #stageframe .stagepage > div:nth-child(n+3) {
+    display: none !important;
+}
+
+body[data-stblock-kids-mode="robot"] #stageframe .stagepage > div:first-child {
+    overflow: hidden;
+}
+
+body[data-stblock-kids-mode="robot"] #stageframe .stagepage > div:first-child img {
+    display: none !important;
+}
+
+body[data-stblock-kids-mode="robot"] #stageframe .stagepage > div:first-child::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+body[data-stblock-kids-mode="robot"][data-kids-map="classroom"] #stageframe .stagepage > div:first-child::after {
+    background-image: url("map-classroom.svg");
+}
+
+body[data-stblock-kids-mode="robot"][data-kids-map="city"] #stageframe .stagepage > div:first-child::after {
+    background-image: url("map-city.svg");
+}
+
+body[data-stblock-kids-mode="robot"][data-kids-map="garden"] #stageframe .stagepage > div:first-child::after {
+    background-image: url("map-garden.svg");
+}
+
+/* Tactile-style coding surface inside the native ScratchJr editor. */
+
+html[data-stblock-kids="true"] #frame {
+    background: #fff !important;
+}
+
+html[data-stblock-kids="true"] #topsection {
+    background: linear-gradient(145deg, #eaf7fd, #f8fcff) !important;
+}
+
+html[data-stblock-kids="true"] #stageframe .stage {
+    border: 4px solid #fff;
+    border-radius: 20px;
+    box-shadow: 0 7px 20px rgba(41, 74, 92, .16);
+}
+
+html[data-stblock-kids="true"] #blockspalette {
+    background: #1684bb !important;
+    border: 0;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -3px 14px rgba(41, 74, 92, .13);
+}
+
+html[data-stblock-kids="true"] #blockspalette .papercut {
+    background: #d7effb;
+    box-shadow: none;
+}
+
+html[data-stblock-kids="true"] #blockspalette .papercut .withstyle {
+    opacity: .55;
+}
+
+html[data-stblock-kids="true"] .scripts {
+    background-color: #fff !important;
+    background-image: radial-gradient(circle, #c6d6e2 1.5px, transparent 1.6px) !important;
+    background-size: 28px 28px !important;
+    border: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -4px 16px rgba(41, 74, 92, .1);
+}
+
+html[data-stblock-kids="true"] #scriptscontainer {
+    background: transparent !important;
+}
+
+/* Green and white skin shared by story, free-play and robot modes. */
+html[data-stblock-kids="true"] body,
+html[data-stblock-kids="true"] #frame { background:#f5fbf6 !important; color:#28583b; }
+html[data-stblock-kids="true"] #topbar,
+html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #topbar {
+    background:#e5f5e9 !important;
+    border-color:#c5e8cd !important;
+}
+html[data-stblock-kids="true"] #topsection { background:linear-gradient(145deg,#e8f6eb,#f7fbf8) !important; }
+html[data-stblock-kids="true"] #blockspalette { background:#25874c !important; }
+html[data-stblock-kids="true"] #blockspalette .papercut { background:#d8efde; }
+html[data-stblock-kids="true"] .scripts {
+    background-color:#fff !important;
+    background-image:radial-gradient(circle,#cbded0 1.5px,transparent 1.6px) !important;
+}
+html[data-stblock-kids="true"] #stageframe .stage { box-shadow:0 7px 20px rgba(35,105,57,.17); }
+
+/* Robot projects only drive the robot: text and backdrop editing are removed. */
+body[data-stblock-kids-mode="robot"] #addtext,
+body[data-stblock-kids-mode="robot"] #setbkg { display:none !important; }
+
+/* Dock ScratchJr controls around its centered stage, inside .centerpanel. */
+html[data-stblock-kids="true"] .centerpanel {
+    position:absolute !important;
+    top:0 !important;
+    left:0 !important;
+    width:100% !important;
+    overflow:visible !important;
+}
+html[data-stblock-kids="true"] .stblock-kids-left-actions,
+html[data-stblock-kids="true"] .stblock-kids-right-actions {
+    position:absolute !important;
+    top:50% !important;
+    z-index:50 !important;
+    display:flex !important;
+    flex-direction:column !important;
+    align-items:center !important;
+    justify-content:center !important;
+    gap:10px !important;
+    transform:translateY(-50%) !important;
+}
+html[data-stblock-kids="true"] .stblock-kids-left-actions { left:12px !important; }
+html[data-stblock-kids="true"] .stblock-kids-right-actions { right:12px !important; }
+html[data-stblock-kids="true"] .stblock-kids-left-actions > #setbkg,
+html[data-stblock-kids="true"] .stblock-kids-left-actions > #addtext,
+html[data-stblock-kids="true"] .stblock-kids-left-actions > #grid,
+html[data-stblock-kids="true"] .stblock-kids-right-actions > #go,
+html[data-stblock-kids="true"] .stblock-kids-right-actions > #resetall,
+html[data-stblock-kids="true"] .stblock-kids-right-actions > #full {
+    position:relative !important;
+    inset:auto !important;
+    display:block !important;
+    flex:0 0 54px !important;
+    width:54px !important;
+    height:54px !important;
+    margin:0 !important;
+    border:3px solid #d5efdb !important;
+    border-radius:18px !important;
+    background-color:#fff !important;
+    background-size:contain !important;
+    box-shadow:0 4px 10px #1f613331 !important;
+    cursor:pointer !important;
+    transition:transform .15s ease,box-shadow .15s ease !important;
+}
+html[data-stblock-kids="true"] .stblock-kids-left-actions > #setbkg:hover,
+html[data-stblock-kids="true"] .stblock-kids-left-actions > #addtext:hover,
+html[data-stblock-kids="true"] .stblock-kids-left-actions > #grid:hover,
+html[data-stblock-kids="true"] .stblock-kids-right-actions > #go:hover,
+html[data-stblock-kids="true"] .stblock-kids-right-actions > #resetall:hover,
+html[data-stblock-kids="true"] .stblock-kids-right-actions > #full:hover {
+    transform:translateY(-2px) scale(1.04) !important;
+    box-shadow:0 7px 14px #1f61334a !important;
+}
+html[data-stblock-kids="true"] .stblock-kids-react-actions {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+}
+html[data-stblock-kids="true"] .stblock-kids-side-button {
+    display:flex;
+    flex:0 0 62px;
+    width:68px;
+    min-height:62px;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+    padding:3px;
+    border:3px solid #b8e1c1;
+    border-radius:20px;
+    background:#fff;
+    color:#267544;
+    box-shadow:0 4px 10px #1f613331;
+    font:800 11px/1.1 "Nunito","Trebuchet MS",sans-serif;
+    cursor:pointer;
+    transition:transform .15s ease,box-shadow .15s ease;
+}
+html[data-stblock-kids="true"] .stblock-kids-side-button:hover {
+    transform:translateY(-2px) scale(1.04);
+    box-shadow:0 7px 14px #1f61334a;
+}
+html[data-stblock-kids="true"] .stblock-kids-side-button > span:first-child { font-size:25px; line-height:1; }
+html[data-stblock-kids="true"] .stblock-kids-world-button { border-color:#b8e1c1; }
+html[data-stblock-kids="true"] .stblock-kids-connect-button { border-color:#b6dcf2; color:#2c7198; }
+@media(max-width:760px) {
+    html[data-stblock-kids="true"] .stblock-kids-left-actions { left:4px !important; }
+    html[data-stblock-kids="true"] .stblock-kids-right-actions { right:4px !important; }
+    html[data-stblock-kids="true"] .stblock-kids-left-actions > #setbkg,
+    html[data-stblock-kids="true"] .stblock-kids-left-actions > #addtext,
+    html[data-stblock-kids="true"] .stblock-kids-left-actions > #grid,
+    html[data-stblock-kids="true"] .stblock-kids-right-actions > #go,
+    html[data-stblock-kids="true"] .stblock-kids-right-actions > #resetall,
+    html[data-stblock-kids="true"] .stblock-kids-right-actions > #full { flex-basis:44px !important; width:44px !important; height:44px !important; border-radius:15px !important; }
+    html[data-stblock-kids="true"] .stblock-kids-side-button { flex-basis:52px; width:54px; min-height:52px; border-radius:16px; font-size:9px; }
+    html[data-stblock-kids="true"] .stblock-kids-side-button > span:first-child { font-size:20px; }
+}
+
+/* Kids project library has only its project controls: no ScratchJr brand/help bar. */
+html[data-stblock-kids="true"] #topbar ul.topbar-nav li.logo,
+html[data-stblock-kids="true"] #topbar ul.topbar-nav li.home,
+html[data-stblock-kids="true"] #topbar ul.topbar-nav li.help,
+html[data-stblock-kids="true"] #topbar ul.topbar-nav > div { display:none !important; }
+
+/* Historia starts directly on the scene and block workspace. */
+body[data-stblock-kids-mode="story"] #topsection .leftpanel,
+body[data-stblock-kids-mode="story"] #topsection .rightpanel,
+body[data-stblock-kids-mode="story"] #library,
+body[data-stblock-kids-mode="story"] #pagecc {
+    display:none !important;
+}

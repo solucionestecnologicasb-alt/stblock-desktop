@@ -43,17 +43,49 @@ if (-not $releaseExists) {
     gh release create $Tag --repo $Repo --title "STBlock $Version" --notes $Notes
 }
 
-if ($AssetDir -and (Test-Path -LiteralPath $AssetDir)) {
-    # Subir archivos uno por uno para evitar problemas con wildcards
-    $assets = Get-ChildItem -LiteralPath $AssetDir -File
-    foreach ($asset in $assets) {
-        Write-Host "Subiendo: $($asset.Name)..."
-        gh release upload $Tag --repo $Repo $asset.FullName --clobber
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "WARN: Error al subir $($asset.Name)" -ForegroundColor Yellow
-        }
+function Upload-Asset {
+    param([string] $Path, [string] $Name)
+    $sizeMb = [math]::Round((Get-Item -LiteralPath $Path).Length / 1MB, 1)
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        Write-Host "Subiendo: $Name ($sizeMb MB, intento $attempt). Si es grande puede tardar varios minutos; no cierres la terminal."
+        gh release upload $Tag --repo $Repo $Path --clobber
+        if ($LASTEXITCODE -eq 0) { return }
+        Write-Host "WARN: Error al subir $Name" -ForegroundColor Yellow
+        Start-Sleep -Seconds 5
     }
+    Write-Host "ERROR: No se pudo subir $Name al release $Tag" -ForegroundColor Red
+    exit 1
 }
 
-gh release upload $Tag --repo $Repo $temp --clobber
+$latestAsset = $null
+if ($AssetDir -and (Test-Path -LiteralPath $AssetDir)) {
+    # Subir primero instalador/firma; latest.json al final para no publicar un
+    # puntero de version cuya descarga todavia no existe (error 404 en la app).
+    $assets = Get-ChildItem -LiteralPath $AssetDir -File | Where-Object { $_.Name -ne 'latest.json' }
+    foreach ($asset in $assets) {
+        Upload-Asset -Path $asset.FullName -Name $asset.Name
+    }
+    $latestAsset = Get-ChildItem -LiteralPath $AssetDir -File -Filter 'latest.json' -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+}
+
+Upload-Asset -Path $temp -Name 'policy.json'
+
+if ($latestAsset) {
+    Upload-Asset -Path $latestAsset.FullName -Name $latestAsset.Name
+}
+
+# Verificar que todos los assets quedaron publicados antes de dar exito.
+$published = (gh release view $Tag --repo $Repo --json assets | ConvertFrom-Json).assets
+$publishedNames = @($published | ForEach-Object { $_.name })
+$expectedNames = @('policy.json')
+if ($AssetDir -and (Test-Path -LiteralPath $AssetDir)) {
+    $expectedNames += @(Get-ChildItem -LiteralPath $AssetDir -File | ForEach-Object { $_.Name })
+}
+$missing = @($expectedNames | Where-Object { $publishedNames -notcontains $_ })
+if ($missing.Count -gt 0) {
+    Write-Host "ERROR: Faltan assets en el release ${Tag}: $($missing -join ', ')" -ForegroundColor Red
+    exit 1
+}
+
 Write-Host "Policy publicada en https://github.com/$Repo/releases/latest/download/policy.json"

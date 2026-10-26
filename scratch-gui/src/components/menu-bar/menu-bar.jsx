@@ -716,7 +716,9 @@ class MenuBar extends React.Component {
                     styles.menuBar
                 )}
             >
-                <div className={styles.mainMenu}>
+                <div className={classNames(styles.mainMenu, {
+                    [styles.mainMenuWithExperienceHome]: this.props.onBackToExperienceSelector
+                })}>
                     <div className={styles.fileGroup}>
                         <ModeToggle
                             mode={this.props.deviceMode}
@@ -947,6 +949,18 @@ class MenuBar extends React.Component {
                 ) : null)}
                 <div className={styles.accountInfoGroup} />
 
+                {this.props.onBackToExperienceSelector ? (
+                    <button
+                        className={styles.experienceHome}
+                        type="button"
+                        onClick={this.props.onBackToExperienceSelector}
+                        aria-label="Volver a elegir STBlock o STBlock Kids"
+                        title="Cambiar espacio"
+                    >
+                        🏠
+                    </button>
+                ) : null}
+
                 {aboutButton}
 
             </Box>
@@ -955,6 +969,7 @@ class MenuBar extends React.Component {
 }
 
 MenuBar.propTypes = {
+    onBackToExperienceSelector: PropTypes.func,
     aboutMenuOpen: PropTypes.bool,
     authorId: PropTypes.oneOfType([PropTypes.string, PropTypes.bool]),
     authorThumbnailUrl: PropTypes.string,

@@ -1,0 +1,68 @@
+.app { min-height: 100%; width: 100%; overflow: auto; box-sizing: border-box; background: #f3f9ff; color: #1d3552; font-family: "Nunito", "Trebuchet MS", sans-serif; }
+.topbar { height: 68px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(16px, 4vw, 48px); background: #fff; box-shadow: 0 3px 12px #234b6b0d; }
+.backButton, .restartButton { border: 0; width: 44px; height: 44px; border-radius: 15px; background: #e8f4ff; color: #2363a6; font-size: 26px; font-weight: 900; cursor: pointer; }
+.restartButton { background: #fff0d9; color: #d97817; font-size: 29px; }
+.kidsBrand { display: flex; align-items: center; gap: 8px; font-size: 19px; }
+.kidsBrand img { width: 41px; height: 41px; object-fit: contain; }
+.kidsBrand strong { color: #2363a6; }.kidsBrand strong span { color: #ed8723; }
+.topDecor { color: #f6b643; font-size: 25px; }
+.homeContent { max-width: 940px; margin: 0 auto; padding: 22px 24px 34px; text-align: center; }
+.welcomeMascot { display: flex; justify-content: center; align-items: center; gap: 8px; color: #ed8423; font-size: 15px; font-weight: 900; }
+.welcomeMascot img { height: 57px; width: 57px; object-fit: contain; animation: bob 2.8s ease-in-out infinite; }
+.homeContent h1, .challengeHeader h1 { margin: 8px 0 0; font-size: clamp(25px, 3vw, 35px); font-weight: 900; letter-spacing: -.6px; }
+.homeSubtitle { color: #71859a; font-size: 16px; margin: 7px 0 22px; }
+.missionCards { display: grid; grid-template-columns: repeat(2, minmax(250px, 1fr)); gap: 19px; text-align: left; }
+.missionCard { border: 3px solid transparent; border-radius: 25px; min-height: 243px; padding: 17px 20px 16px; display: flex; flex-direction: column; align-items: flex-start; color: #1d3552; cursor: pointer; font: inherit; box-shadow: 0 7px 0 #24466c16, 0 14px 24px #24466c0d; transition: transform .18s, box-shadow .18s; }
+.missionCard:hover, .missionCard:focus-visible { transform: translateY(-4px); outline: none; box-shadow: 0 11px 0 #24466c14, 0 18px 27px #24466c16; }
+.missionBlue { background: linear-gradient(145deg, #fff, #e4f4ff); border-color: #9bd3f5; }
+.missionPeach { background: linear-gradient(145deg, #fff, #fff0dc); border-color: #ffd18d; }
+.cardArt { width: 100%; height: 105px; display: flex; justify-content: space-around; align-items: center; border-radius: 18px; background: #cfeeff; font-size: 45px; margin-bottom: 14px; }
+.freeArt { background: #ffe7bb; }
+.cardArt span:nth-child(2) { font-size: 36px; }.cardArt span:nth-child(3) { font-size: 39px; }
+.cardTitle { font-size: 21px; font-weight: 900; }
+.cardText { color: #637d96; margin-top: 4px; font-size: 14px; font-weight: 700; }
+.cardGo { margin-top: 12px; color: #2363a6; font-size: 12px; font-weight: 900; letter-spacing: .7px; }
+.missionPeach .cardGo { color: #d97817; }.cardGo b { font-size: 17px; margin-left: 5px; }
+.grownupNote { color: #8b9caf; font-size: 12px; font-weight: 700; margin: 22px 0 0; }
+.playContent { width: min(100% - 32px, 840px); margin: 0 auto; padding: 13px 0 24px; text-align: center; }
+.challengeBadge { display: inline-flex; align-items: center; border-radius: 99px; background: #fff0ce; padding: 7px 13px; color: #aa6a11; font-size: 11px; font-weight: 1000; letter-spacing: .6px; }
+.challengeHeader h1 { font-size: clamp(21px, 2.6vw, 29px); }
+.challengeHeader p { margin: 6px 0 12px; color: #6c8198; font-size: 14px; }
+.playArea { height: clamp(175px, 30vh, 240px); position: relative; overflow: hidden; border: 3px solid #c7e7f8; border-radius: 24px; background: linear-gradient(#dff4ff 0 65%, #d9efcc 65%); box-shadow: inset 0 -6px 0 #b7d8a7; }
+.cloud { position: absolute; font-size: 34px; opacity: .7; }.cloudOne { top: 15px; left: 12%; }.cloudTwo { top: 33px; right: 15%; }
+.sceneLabels { position: absolute; z-index: 1; top: 12px; left: 7%; right: 7%; display: flex; justify-content: space-between; color: #66869d; font-size: 10px; font-weight: 1000; letter-spacing: .8px; }
+.path { height: 92px; position: absolute; left: 7%; right: 7%; top: 50%; transform: translateY(-30%); display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; }
+.tile { position: relative; height: 59px; margin: 0 3px; border-radius: 15px; background: #c2dda9; border: 2px solid #a6c992; }
+.river { background: #75c7ec; border-color: #51afd9; box-shadow: inset 0 5px 0 #9be0f7; }
+.activeTile { outline: 4px solid #ffd36d; outline-offset: 2px; }
+.turtle { position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -58%); font-size: clamp(31px, 5vw, 42px); filter: drop-shadow(0 3px 1px #355b3440); transition: left .3s; }
+.tileObject { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -55%); font-size: 31px; }
+.winMessage { position: absolute; z-index: 5; inset: auto 0 10px; color: #fff; font-size: 20px; font-weight: 1000; text-shadow: 0 2px 5px #24684b; animation: pop .5s ease-out both; }
+.actionPanel { margin: 13px auto 0; padding: 12px 16px 13px; border-radius: 21px; background: #fff; box-shadow: 0 5px 17px #24466c12; text-align: left; }
+.actionHeading { display: flex; align-items: center; justify-content: space-between; color: #37536f; font-size: 14px; }
+.actionHeading span { color: #8b9daf; font-size: 12px; font-weight: 800; }
+.actionRow { display: flex; align-items: center; gap: 9px; overflow-x: auto; min-height: 69px; padding: 8px 1px; }
+.actionRow button { width: 65px; height: 63px; flex: 0 0 65px; border: 2px solid #bddff1; border-radius: 16px; background: #edf8ff; color: #36536f; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.actionRow button:nth-child(2) { border-color: #ffd18d; background: #fff5e6; }
+.actionRow button span { font-size: 25px; line-height: 1; }.actionRow small { font-size: 9px; font-weight: 900; }
+.actionRow button:disabled { opacity: .55; cursor: default; }
+.queuedAction { height: 43px; min-width: 43px; display: grid; place-items: center; border-radius: 13px; background: #e8f6eb; border: 2px solid #b9dfc2; font-size: 23px; animation: pop .2s ease-out both; }
+.playControls { display: flex; justify-content: flex-end; gap: 10px; }
+.clearButton, .playButton { height: 42px; border: 0; border-radius: 14px; padding: 0 17px; cursor: pointer; font: inherit; font-weight: 900; }
+.clearButton { color: #72869c; background: #f1f5f8; }.clearButton:disabled, .playButton:disabled { opacity: .45; cursor: default; }
+.playButton { color: #fff; background: #53b76b; box-shadow: 0 4px 0 #3b9951; font-size: 14px; }.playButton span { margin-right: 6px; }
+.hint { margin: 10px 0 0; color: #7a8ea3; font-size: 12px; font-weight: 700; }
+@keyframes bob { 0%, 100% { transform: translateY(1px) rotate(-2deg); } 50% { transform: translateY(-5px) rotate(2deg); } }
+@keyframes pop { from { transform: scale(.85); opacity: .2; } to { transform: scale(1); opacity: 1; } }
+@media (max-width: 600px) {
+    .topbar { height: 59px; padding: 0 13px; }.backButton, .restartButton { width: 40px; height: 40px; }
+    .homeContent { padding: 12px 16px 24px; }.welcomeMascot img { width: 47px; height: 47px; }
+    .homeContent h1 { margin-top: 2px; }.homeSubtitle { margin: 5px 0 15px; }
+    .missionCards { grid-template-columns: 1fr; gap: 13px; }.missionCard { min-height: 195px; padding: 13px 15px; }
+    .cardArt { height: 75px; font-size: 35px; margin-bottom: 9px; }.cardArt span:nth-child(2) { font-size: 29px; }.cardArt span:nth-child(3) { font-size: 31px; }
+    .cardTitle { font-size: 18px; }.cardText { font-size: 12px; margin-top: 2px; }.cardGo { margin-top: 6px; }
+    .grownupNote { margin-top: 14px; }.playContent { width: calc(100% - 22px); padding-top: 11px; }
+    .playArea { height: 205px; }.path { left: 4%; right: 4%; }.tile { height: 49px; margin: 0 2px; border-radius: 12px; }
+    .actionPanel { padding: 10px 11px; }.actionRow button { width: 59px; height: 57px; flex-basis: 59px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

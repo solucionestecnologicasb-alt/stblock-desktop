@@ -33,6 +33,7 @@ updates/release-assets/
 .cache/
 .webpack/
 .eslintcache
+scratch-gui/static/scratchjr/
 
 # OS/editor temporary files
 nul

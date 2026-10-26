@@ -250,6 +250,7 @@ BluetoothModal.propTypes = {
     error: PropTypes.string,
     loading: PropTypes.bool,
     onRequestClose: PropTypes.func.isRequired,
+    onClose: PropTypes.func,
     portName: PropTypes.string,
     ports: PropTypes.arrayOf(PropTypes.object),
     setBluetoothConfig: PropTypes.func.isRequired,
@@ -274,8 +275,11 @@ const mapStateToProps = state => ({
     error: getBluetoothError(state)
 });
 
-const mapDispatchToProps = dispatch => ({
-    onRequestClose: () => dispatch(closeBluetoothModal()),
+const mapDispatchToProps = (dispatch, ownProps) => ({
+    onRequestClose: () => {
+        dispatch(closeBluetoothModal());
+        if (ownProps.onClose) ownProps.onClose();
+    },
     bluetoothScanStart: () => dispatch(bluetoothScanStart()),
     bluetoothPortsUpdate: ports => dispatch(bluetoothPortsUpdate(ports)),
     bluetoothConnecting: () => dispatch(bluetoothConnecting()),

@@ -1,0 +1,3 @@
+[submodule "vendor/scratchjr-reborn"]
+	path = vendor/scratchjr-reborn
+	url = https://github.com/richiesamlie/ScratchJr-Desktop-Reborn.git

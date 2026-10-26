@@ -146,6 +146,7 @@ function Ensure-UpdaterMetadata {
     param(
         [System.IO.FileInfo] $Installer,
         [string] $Version,
+        [string] $Tag,
         [string] $Repo,
         [string] $AssetDir,
         [string] $Notes
@@ -200,7 +201,9 @@ function Ensure-UpdaterMetadata {
         platforms = [ordered]@{
             'windows-x86_64' = [ordered]@{
                 signature = $signature
-                url = "https://github.com/$Repo/releases/latest/download/$($Installer.Name)"
+                # Usar la URL del tag (no /latest/) para que la descarga siga
+                # apuntando a este release aunque se publique una version nueva.
+                url = "https://github.com/$Repo/releases/download/$Tag/$($Installer.Name)"
             }
         }
     }
@@ -339,7 +342,7 @@ if ($versionFiles) {
         }
         Write-Warn "No se encontro instalador x64; se omite generar latest.json."
     } else {
-        Ensure-UpdaterMetadata -Installer $primaryInstaller -Version $version -Repo $ReleaseRepo -AssetDir $releaseAssetDir -Notes $Notes
+        Ensure-UpdaterMetadata -Installer $primaryInstaller -Version $version -Tag $tag -Repo $ReleaseRepo -AssetDir $releaseAssetDir -Notes $Notes
     }
 }
 

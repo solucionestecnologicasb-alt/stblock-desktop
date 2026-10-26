@@ -1,0 +1,42 @@
+.shell {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    overflow: hidden;
+    background: #fff;
+}
+
+.editor {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #fff;
+}
+
+.backButton {
+    position: absolute;
+    z-index: 2;
+    left: 12px;
+    top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 42px;
+    padding: 0 14px;
+    border: 2px solid #c5e4f6;
+    border-radius: 16px;
+    background: #fff;
+    color: #2363a6;
+    box-shadow: 0 3px 10px rgba(31, 69, 101, .16);
+    font: 800 14px "Nunito", "Trebuchet MS", sans-serif;
+    cursor: pointer;
+}
+
+.backButton span { font-size: 22px; line-height: 1; }
+.backButton:hover, .backButton:focus-visible { outline: 3px solid #ffc66e; outline-offset: 2px; }
+
+@media (max-width: 600px) {
+    .backButton { left: 8px; top: 8px; min-height: 38px; font-size: 12px; border-radius: 13px; }
+}

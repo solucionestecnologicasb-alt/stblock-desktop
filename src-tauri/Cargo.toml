@@ -1,6 +1,6 @@
 [package]
 name = "stblock-desktop"
-version = "0.1.49"
+version = "0.1.50"
 description = "STBlock desktop application for visual programming, electronics and robotics"
 authors = ["STB Academy"]
 license = "AGPL-3.0-only"

@@ -83,6 +83,8 @@ import {getDeviceProfile} from '../../lib/device-profiles';
 import TabBar from '../tab-bar/tab-bar.jsx';
 import SplitContainer from '../split-container/split-container.jsx';
 import MentorGuide from '../mentor-guide/mentor-guide.jsx';
+import ExperienceSelector from '../experience-selector/experience-selector.jsx';
+import KidsExperience from '../kids-experience/scratchjr-kids-workspace.jsx';
 import DeviceModeGUI from '../device-mode/device-mode-gui.jsx';
 import {activateDeviceExtension, deactivateDeviceExtension} from '../../lib/device-extension-activator';
 import {
@@ -144,7 +146,7 @@ import {
     PythonExecutor
 } from '../../lib/python';
 import {ArduinoUploader, STBLOCK_LINK_DOWNLOAD_URL} from '../../lib/arduino-uploader';
-import {openConnectionModal} from '../../reducers/modals';
+import {openBluetoothModal, openConnectionModal} from '../../reducers/modals';
 import {setConnectionModalExtensionId} from '../../reducers/connection-modal';
 
 const messages = defineMessages({
@@ -371,6 +373,9 @@ const GUIComponent = props => {
         onSetConnectionState,
         onSetDevicePort,
         onOpenConnectionModal,
+        onOpenBluetoothModal,
+        bluetoothConnected,
+        bluetoothPortName,
         onSetConnectionExtensionId,
         onSetCodeViewContent,
         onSetCodeLocked,
@@ -475,6 +480,8 @@ const GUIComponent = props => {
     const sketchforgeCaptureTimerRef = useRef(null); // debounce de captura
     const sketchforgeRestoredRef = useRef(false); // evita re-importar el .skf restaurado
     const [sketchforgeReady, setSketchforgeReady] = useState(false);
+    const [selectedExperience, setSelectedExperience] = useState(null);
+    const [kidsBluetoothModalOpen, setKidsBluetoothModalOpen] = useState(false);
     const sketchforgeLatestReduxRef = useRef(sketchforgeSkf);
     sketchforgeLatestReduxRef.current = sketchforgeSkf;
     const [workspaceHandle, setWorkspaceHandle] = useState(null);
@@ -4064,6 +4071,27 @@ const GUIComponent = props => {
 
     // isPythonEditMode ya está calculado más arriba en el componente
 
+    if (!isPlayerOnly && !classroomState.active && selectedExperience === null && !loading) {
+        return <ExperienceSelector onSelect={setSelectedExperience} />;
+    }
+    if (!isPlayerOnly && !classroomState.active && selectedExperience === 'kids') {
+        return (
+            <React.Fragment>
+                <KidsExperience
+                    basePath={basePath}
+                    onExit={() => setSelectedExperience(null)}
+                    onConnectRobot={() => setKidsBluetoothModalOpen(true)}
+                    vm={vm}
+                    bluetoothConnected={bluetoothConnected}
+                    bluetoothPortName={bluetoothPortName}
+                />
+                {kidsBluetoothModalOpen ? (
+                    <BluetoothModal vm={vm} onClose={() => setKidsBluetoothModalOpen(false)} />
+                ) : null}
+            </React.Fragment>
+        );
+    }
+
     return isPlayerOnly ? (
         <StageWrapper
             isFullScreen={isFullScreen}
@@ -4406,7 +4434,10 @@ const GUIComponent = props => {
                     }}
                     onOpenSettings={() => {}}
                     onOpenAbout={onClickAbout}
-                    onOpenHome={() => setMobileHubOpen(true)}
+                    onOpenHome={() => {
+                        setMobileHubOpen(false);
+                        setSelectedExperience(null);
+                    }}
                     isHomeOpen={mobileHubOpen}
                     canSave={canSave && classroomCanSave}
                     mobileStageMode={isMobilePipActive ? 'pip' : isMobileFullscreenActive ? 'fullscreen' : 'hidden'}
@@ -4442,6 +4473,7 @@ const GUIComponent = props => {
                 />
             ) : (
                 <MenuBar
+                    onBackToExperienceSelector={() => setSelectedExperience(null)}
                     authorId={authorId}
                     authorThumbnailUrl={authorThumbnailUrl}
                     authorUsername={authorUsername}
@@ -4681,6 +4713,8 @@ const GUIComponent = props => {
 };
 
 GUIComponent.propTypes = {
+    bluetoothConnected: PropTypes.bool,
+    bluetoothPortName: PropTypes.string,
     activeTabIndex: PropTypes.number,
     authorId: PropTypes.oneOfType([PropTypes.string, PropTypes.bool]),
     authorThumbnailUrl: PropTypes.string,
@@ -4738,6 +4772,7 @@ GUIComponent.propTypes = {
     onSetConnectionState: PropTypes.func,
     onSetDevicePort: PropTypes.func,
     onOpenConnectionModal: PropTypes.func,
+    onOpenBluetoothModal: PropTypes.func,
     onSetConnectionExtensionId: PropTypes.func,
     onSetCodeViewContent: PropTypes.func,
     onSetCodeLocked: PropTypes.func,
@@ -4859,6 +4894,7 @@ const mapDispatchToProps = dispatch => ({
     onSetConnectionState: connectionState => dispatch(setConnectionState(connectionState)),
     onSetDevicePort: port => dispatch(setDevicePort(port)),
     onOpenConnectionModal: () => dispatch(openConnectionModal()),
+    onOpenBluetoothModal: () => dispatch(openBluetoothModal()),
     onSetConnectionExtensionId: extensionId => dispatch(setConnectionModalExtensionId(extensionId)),
     onSetCodeViewContent: content => dispatch(setCodeViewContent(content)),
     onSetCodeLocked: isLocked => dispatch(setCodeLocked(isLocked)),

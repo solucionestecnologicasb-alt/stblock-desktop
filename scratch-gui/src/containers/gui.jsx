@@ -40,7 +40,9 @@ import {
     bluetoothConnecting,
     bluetoothConnected,
     bluetoothDisconnected,
-    bluetoothError
+    bluetoothError,
+    getBluetoothConnected,
+    getBluetoothPortName
 } from '../reducers/bluetooth';
 
 import FontLoaderHOC from '../lib/font-loader-hoc.jsx';
@@ -230,6 +232,8 @@ const mapStateToProps = state => {
     const loadingState = state.scratchGui.projectState.loadingState;
     return {
         activeTabIndex: state.scratchGui.editorTab.activeTabIndex,
+        bluetoothConnected: getBluetoothConnected(state),
+        bluetoothPortName: getBluetoothPortName(state),
         secondaryTabIndex: state.scratchGui.editorTab.secondaryTabIndex,
         splitPrimaryIndex: state.scratchGui.editorTab.splitPrimaryIndex,
         splitMode: state.scratchGui.editorTab.secondaryTabIndex !== null,
