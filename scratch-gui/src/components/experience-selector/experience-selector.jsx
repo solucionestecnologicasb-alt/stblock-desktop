@@ -2,7 +2,12 @@ import React from 'react';
 import mascotImage from '../../lib/default-project/stblock-mascot.png';
 import styles from './experience-selector.css';
 
-const ExperienceSelector = ({onSelect}) => (
+const ExperienceSelector = ({onSelect}) => {
+    const selectKids = () => {
+        onSelect('kids');
+    };
+
+    return (
     <main className={styles.screen}>
         <div className={styles.confetti} aria-hidden="true">
             <span>✦</span><span>●</span><span>✦</span><span>●</span><span>✦</span>
@@ -30,7 +35,7 @@ const ExperienceSelector = ({onSelect}) => (
                     <span className={styles.choiceDescription}>Programación, electrónica y creación</span>
                     <span className={styles.choiceArrow} aria-hidden="true">➜</span>
                 </button>
-                <button className={`${styles.choice} ${styles.kids}`} onClick={() => onSelect('kids')}>
+                <button className={`${styles.choice} ${styles.kids}`} onClick={selectKids}>
                     <span className={styles.choiceIcon} aria-hidden="true">🌈</span>
                     <span className={styles.choiceName}>STBlock Kids</span>
                     <span className={styles.choiceDescription}>Aventuras para imaginar y descubrir</span>
@@ -40,6 +45,7 @@ const ExperienceSelector = ({onSelect}) => (
             <p className={styles.footer}>Toca una tarjeta para comenzar</p>
         </section>
     </main>
-);
+    );
+};
 
 export default ExperienceSelector;

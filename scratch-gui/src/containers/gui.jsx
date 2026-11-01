@@ -12,6 +12,7 @@ import {
     getIsError,
     getIsShowingProject
 } from '../reducers/project-state';
+import {setProjectTitle} from '../reducers/project-title';
 import {
     activateTab,
     setSecondaryTab,
@@ -293,7 +294,8 @@ const mapDispatchToProps = dispatch => ({
     onSwapTabs: () => dispatch(swapTabs()),
     onReorderTabs: order => dispatch(reorderTabs(order)),
     onClearExplain: () => dispatch(setExplainPending(null)),
-    onSetProjectKey: key => dispatch(setProjectKey(key))
+    onSetProjectKey: key => dispatch(setProjectKey(key)),
+    onSetProjectTitle: title => dispatch(setProjectTitle(title))
 });
 
 const ConnectedGUI = injectIntl(connect(

@@ -1,8 +1,8 @@
 {
     "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName":  "STBlock",
-    "version":  "0.1.50",
-    "identifier":  "com.stbacademy.stblock",
+    "version":  "0.1.53",
+    "identifier":  "stblock.app",
     "build":  {
                   "frontendDist":  "../scratch-gui/build",
                   "devUrl":  "http://localhost:8601",

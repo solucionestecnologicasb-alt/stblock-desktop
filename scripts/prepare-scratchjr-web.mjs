@@ -1,4 +1,5 @@
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,10 +58,20 @@ await writeFile(
 
 // La copia embebida siempre utiliza el backend web. La navegación de ScratchJr
 // cambia de index.html a home.html/editor.html y no conserva query parameters.
+const rendererFiles = (await readdir(resolve(target, 'app/dist'))).filter(file => file.endsWith('.js')).sort();
+const rendererFingerprint = await Promise.all(rendererFiles.map(async file => {
+  const content = await readFile(resolve(target, 'app/dist', file));
+  return `${file}:${createHash('sha256').update(content).digest('hex')}`;
+}));
+const hostClientBytes = await readFile(resolve(target, 'hostClient.js'));
+rendererFingerprint.push(`hostClient:${createHash('sha256').update(hostClientBytes).digest('hex')}`);
+const rendererRevision = createHash('sha256').update(rendererFingerprint.join('\n')).digest('hex').slice(0, 12);
 for (const page of ['index.html', 'home.html', 'editor.html', 'gettingstarted.html']) {
   const pagePath = resolve(target, 'app', page);
   let html = await readFile(pagePath, 'utf8');
   html = html.replace(/^\s*<link rel="preload" href="\.\.\/sql-wasm\.wasm"[^>]*>\s*$/m, '');
+  html = html.replace(/src=(["'])\.\.\/hostClient\.js(?:\?[^"']*)?\1/, (_match, quote) => `src=${quote}../hostClient.js?v=${rendererRevision}${quote}`);
+  html = html.replace(/src="(\.\/)?dist\/app\.bundle\.js(?:\?[^\"]*)?"/, (_match, relativePrefix = '') => `src="${relativePrefix}dist/app.bundle.js?v=${rendererRevision}"`);
   html = html.replace('</head>', '    <link rel="stylesheet" href="stblock-kids-workspace.css">\n    <script src="stblock-kids-bridge.js" defer></script>\n</head>');
   await writeFile(pagePath, html, 'utf8');
 }

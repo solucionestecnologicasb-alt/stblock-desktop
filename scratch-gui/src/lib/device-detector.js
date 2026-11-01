@@ -3,13 +3,30 @@
  * Ensures complete, strict isolation between Desktop (Windows/Mac/Linux/Chromebook) and Mobile (Android).
  */
 
+export const isChromebook = () => {
+    if (typeof window === 'undefined') return false;
+    if (window.location && (window.location.search.includes('platform=chromebook') || window.location.search.includes('simulate_chromebook=true'))) {
+        return true;
+    }
+    if (window.__IS_CHROMEBOOK__ === true) return true;
+    if (window.AndroidBridge && typeof window.AndroidBridge.isChromebook === 'function') {
+        try {
+            if (window.AndroidBridge.isChromebook()) return true;
+        } catch (_) {}
+    }
+    const ua = navigator.userAgent || '';
+    return /CrOS|Chromebook|STBlockChromebook/i.test(ua);
+};
+
 export const isAndroid = () => {
     if (typeof window === 'undefined') return false;
+    if (isChromebook()) return false;
     return /Android/i.test(navigator.userAgent);
 };
 
 export const isDesktopOS = () => {
     if (typeof window === 'undefined') return true;
+    if (isChromebook()) return true;
     const ua = navigator.userAgent || '';
     // Si contiene Android, iPhone, iPod, Windows Phone, no es desktop
     if (/Android|iPhone|iPod|Windows Phone/i.test(ua)) return false;
@@ -33,13 +50,18 @@ export const isMobileDevice = () => {
         }
     }
 
-    // 2. Si es un sistema operativo de PC (Windows, Mac, Linux, Chromebook),
+    // 2. Si es Chromebook, NUNCA es móvil: debe tener el estilo visual completo de PC/escritorio.
+    if (isChromebook()) {
+        return false;
+    }
+
+    // 3. Si es un sistema operativo de PC (Windows, Mac, Linux, Chromebook),
     // NUNCA es móvil. En PC siempre se mantiene la versión original de escritorio intacta,
     // independientemente de que la pantalla de la PC sea táctil o de que se redimensione la ventana.
     if (isDesktopOS()) {
         return false;
     }
 
-    // 3. Dispositivos móviles reales (Android / iOS)
+    // 4. Dispositivos móviles reales (Android teléfonos/tablets / iOS)
     return isAndroid() || /iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 };

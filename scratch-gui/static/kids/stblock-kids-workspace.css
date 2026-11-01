@@ -20,6 +20,176 @@ html[data-stblock-kids="true"] .scripts {
     background-size: 22px 22px;
 }
 
+/* Keep ScratchJr's native sprite library centered in its narrow rail on
+   landscape phones; the desktop layout's slide offset otherwise pushes it
+   across the edge of the character column. */
+@media (max-width: 900px) and (orientation: landscape) {
+    body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library {
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+    }
+
+    body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #pages {
+        transform: none !important;
+    }
+
+    body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #stageframe .stagepage > div:first-child {
+        top: 0 !important;
+        left: 50% !important;
+        width: 510px !important;
+        height: 360px !important;
+        transform: translateX(-50%) !important;
+    }
+}
+
+/* The host marks its phone layout explicitly because the embedded ScratchJr
+   artboard is scaled and can have a desktop-sized CSS viewport. */
+body[data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library {
+    left: auto !important;
+    transform: none !important;
+}
+
+body[data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #pages {
+    transform: none !important;
+}
+
+/* Free-mode phone: the character rail shares the page rail's box. Stretch its
+   inner list to fill that box and give the thumbnails the same height as the
+   page rail, instead of keeping ScratchJr's narrow native rail width. */
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library,
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library .spritethumbs,
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library .spritethumbs .spritecc,
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library .spritethumb,
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library .addsprite {
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+}
+
+/* Only the tiles themselves get the fixed page-rail height. Forcing it on
+   .spritethumbs/.spritecc shrank the scroll viewport to a single tile, so a
+   newly added character scrolled the list and appeared on top of the previous
+   one instead of stacking below it. */
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library .spritethumb {
+    height: 110px !important;
+}
+
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library .spritethumb.on,
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library .spritethumb.on.target,
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library .spritethumb.off,
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library .spritethumb.off.target {
+    background-size: 100% 100% !important;
+}
+
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library .scrollbar {
+    left: auto !important;
+    right: 0 !important;
+}
+
+/* #flip is hidden in Kids mode, so #library no longer needs the 9.38vh gap
+   that ScratchJr reserves for the flip button. Nudge it up and let it fill the
+   whole rail so the character box matches the page rail instead of sitting
+   lower and shorter. */
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #library {
+    top: 13px !important;
+    height: 100% !important;
+}
+
+body[data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #stageframe .stagepage > div:first-child {
+    top: 0 !important;
+    left: -7.14465px !important;
+    width: 494.2893px !important;
+    height: 360px !important;
+}
+
+/* Keep the ScratchJr presentation controls above the stage on landscape
+   phones. ScratchJr reparents #go and #full into #frame in presentation mode;
+   give both controls a large, easy-to-tap target at opposite top corners. */
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"]:has(#frame > #stage.fullscreen) #frame > #full.presentationmode,
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"]:has(#frame > #stage.fullscreen) #frame > #go.presentationmode {
+    position: absolute !important;
+    top: 18px !important;
+    z-index: 10000 !important;
+    width: 120px !important;
+    height: 120px !important;
+    min-width: 120px !important;
+    min-height: 120px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    background-color: #fff !important;
+    background-size: contain !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .28) !important;
+    touch-action: manipulation !important;
+    cursor: pointer !important;
+}
+
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"]:has(#frame > #stage.fullscreen) #frame > #full.presentationmode {
+    left: 18px !important;
+    right: auto !important;
+}
+
+body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"]:has(#frame > #stage.fullscreen) #frame > #go.presentationmode {
+    left: auto !important;
+    right: 18px !important;
+}
+
+/* The add-character picker is #libframe (not the #library sprite rail).
+   Its CSS viewport can remain artboard-sized on phones, so key this layout off
+   the host's explicit mobile flag instead of a max-width media query. */
+@media (orientation: landscape) {
+    body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #libframe {
+        position: fixed !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        transform: none !important;
+        transform-origin: top left !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #libframe .innerlibrary {
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+        overflow: hidden !important;
+    }
+
+    body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #libframe #scrollarea {
+        box-sizing: border-box !important;
+        max-width: calc(100% - 24px) !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+
+    body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #libframe .assetbox {
+        box-sizing: border-box !important;
+        width: 140px !important;
+        height: 140px !important;
+        padding: 8px !important;
+        overflow: hidden !important;
+    }
+
+    body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #libframe .assetbox > img,
+    body[data-scratchjr-page="editor"][data-stblock-kids-mode="free"][data-stblock-kids-mobile="true"] #libframe .assetbox > canvas {
+        position: static !important;
+        display: block !important;
+        flex: 0 1 auto !important;
+        width: auto !important;
+        height: auto !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+        object-fit: contain !important;
+        margin: 0 auto !important;
+    }
+}
+
 html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #topbar {
     background-color: #ffd34e;
 }
@@ -307,19 +477,6 @@ html[data-stblock-kids="true"] .stblock-kids-side-button:hover {
 html[data-stblock-kids="true"] .stblock-kids-side-button > span:first-child { font-size:25px; line-height:1; }
 html[data-stblock-kids="true"] .stblock-kids-world-button { border-color:#b8e1c1; }
 html[data-stblock-kids="true"] .stblock-kids-connect-button { border-color:#b6dcf2; color:#2c7198; }
-@media(max-width:760px) {
-    html[data-stblock-kids="true"] .stblock-kids-left-actions { left:4px !important; }
-    html[data-stblock-kids="true"] .stblock-kids-right-actions { right:4px !important; }
-    html[data-stblock-kids="true"] .stblock-kids-left-actions > #setbkg,
-    html[data-stblock-kids="true"] .stblock-kids-left-actions > #addtext,
-    html[data-stblock-kids="true"] .stblock-kids-left-actions > #grid,
-    html[data-stblock-kids="true"] .stblock-kids-right-actions > #go,
-    html[data-stblock-kids="true"] .stblock-kids-right-actions > #resetall,
-    html[data-stblock-kids="true"] .stblock-kids-right-actions > #full { flex-basis:44px !important; width:44px !important; height:44px !important; border-radius:15px !important; }
-    html[data-stblock-kids="true"] .stblock-kids-side-button { flex-basis:52px; width:54px; min-height:52px; border-radius:16px; font-size:9px; }
-    html[data-stblock-kids="true"] .stblock-kids-side-button > span:first-child { font-size:20px; }
-}
-
 /* Kids project library has only its project controls: no ScratchJr brand/help bar. */
 html[data-stblock-kids="true"] #topbar ul.topbar-nav li.logo,
 html[data-stblock-kids="true"] #topbar ul.topbar-nav li.home,
@@ -332,4 +489,257 @@ body[data-stblock-kids-mode="story"] #topsection .rightpanel,
 body[data-stblock-kids-mode="story"] #library,
 body[data-stblock-kids-mode="story"] #pagecc {
     display:none !important;
+}
+
+/* Los niveles cooperativos muestran el selector fijo de STB y Mistral. */
+body[data-stblock-kids-mode="story"] #topsection .leftpanel.stblock-story-multicharacter {
+    display:inline-block !important;
+    visibility:visible !important;
+}
+body[data-stblock-kids-mode="story"] #library.stblock-story-multicharacter {
+    display:inline-block !important;
+    visibility:visible !important;
+}
+
+/* Phone editor: stage above, compact character/page rails below. */
+@media (max-width:760px) {
+    html[data-stblock-kids="true"] .libframe {
+        position:fixed !important; inset:0 !important; width:100vw !important; height:100dvh !important;
+        overflow:hidden !important; box-sizing:border-box !important;
+    }
+    html[data-stblock-kids="true"] .libframe .topbar {
+        position:absolute !important; inset:0 0 auto !important; width:100% !important; height:58px !important;
+        padding:6px !important; box-sizing:border-box !important;
+    }
+    html[data-stblock-kids="true"] .libframe .innerlibrary {
+        position:absolute !important; inset:58px 0 0 !important; padding:8px !important;
+        overflow:hidden !important; box-sizing:border-box !important;
+    }
+    html[data-stblock-kids="true"] .libframe .classification {
+        display:flex !important; flex-wrap:nowrap !important; gap:6px !important; max-width:100% !important;
+        overflow-x:auto !important; padding:3px 2px 8px !important;
+    }
+    html[data-stblock-kids="true"] .libframe .scrollarea {
+        position:absolute !important; top:78px !important; bottom:8px !important; left:8px !important; right:8px !important;
+        height:auto !important; overflow:auto !important;
+    }
+    html[data-stblock-kids="true"] .libframe .assetbox {
+        width:min(42vw,150px) !important; height:min(42vw,150px) !important; margin:5px !important;
+        box-sizing:border-box !important;
+    }
+    html[data-stblock-kids="true"] .libframe .assetbox canvas,
+    html[data-stblock-kids="true"] .libframe .assetbox img {
+        max-width:100% !important; max-height:100% !important; object-fit:contain !important;
+    }
+}
+
+@media (max-width:420px) {
+}
+
+/* STBlock Kids works as a landscape game on phones: give the world and the
+   selected character the broad center, with slim sprite and page rails. */
+@media (max-width:900px) and (orientation:landscape) and (max-height:600px) {
+}
+
+/* Paint editor on phones: reachable tool rows and a centered drawing canvas. */
+@media (max-width:760px) {
+    html[data-stblock-kids="true"] .paintframe {
+        position:fixed !important; inset:0 !important; width:100vw !important; height:100dvh !important;
+        overflow:hidden !important; background-size:cover !important; box-sizing:border-box !important;
+    }
+    html[data-stblock-kids="true"] .paintframe .paintop {
+        position:absolute !important; top:0 !important; left:0 !important; width:100% !important;
+        height:52px !important; z-index:30 !important; background:rgba(255,255,255,.96) !important;
+    }
+    html[data-stblock-kids="true"] .paintframe .paintdone {
+        position:absolute !important; top:4px !important; right:6px !important; float:none !important;
+        width:42px !important; height:42px !important; margin:0 !important;
+    }
+    html[data-stblock-kids="true"] .paintframe .maincanvas {
+        position:absolute !important; left:50% !important; top:50% !important; width:432px !important; height:384px !important;
+        margin:0 !important; transform:translate(-50%,-50%) scale(.72) !important;
+        transform-origin:center center !important;
+    }
+    html[data-stblock-kids="true"] .paintframe.stblock-kids-mobile-paint .maincanvas {
+        left:calc(50% - 24px) !important;
+    }
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #paintpalette,
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #selectortools,
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #edittools,
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #filltools {
+        position:absolute !important; left:6px !important; right:6px !important; top:auto !important;
+        bottom:6px !important; width:auto !important; height:48px !important; max-height:48px !important;
+        display:flex !important; flex-direction:row !important; align-items:center !important; gap:4px !important;
+        overflow-x:auto !important; overflow-y:hidden !important; padding:4px !important;
+        border-radius:14px !important; background:rgba(255,255,255,.96) !important;
+        box-shadow:0 2px 12px rgba(34,66,81,.16) !important; z-index:25 !important; box-sizing:border-box !important;
+    }
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #selectortools { bottom:58px !important; }
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #edittools { bottom:110px !important; }
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #filltools { bottom:162px !important; }
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #paintpalette .section { display:flex !important; flex-direction:row !important; align-items:center !important; }
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) .paintpalette .element {
+        flex:0 0 42px !important; width:42px !important; height:42px !important; min-width:42px !important;
+        margin:0 !important; background-size:contain !important;
+    }
+    html[data-stblock-kids="true"] .paintframe .spriteform {
+        position:absolute !important; top:54px !important; left:50% !important; z-index:28 !important;
+        width:min(70vw,250px) !important; height:42px !important; margin:0 !important; transform:translateX(-50%) !important;
+    }
+    html[data-stblock-kids="true"] .paintframe .spriteform input {
+        width:100% !important; height:38px !important; font-size:16px !important; box-sizing:border-box !important;
+    }
+}
+
+@media (max-width:420px) {
+    html[data-stblock-kids="true"] .paintframe .maincanvas {
+        transform:translate(-50%,-50%) scale(.60) !important;
+    }
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #paintpalette,
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #selectortools,
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #edittools,
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) #filltools { height:48px !important; max-height:48px !important; }
+    html[data-stblock-kids="true"] .paintframe:not(.stblock-kids-mobile-paint) .paintpalette .element {
+        flex-basis:38px !important; width:38px !important; height:38px !important; min-width:38px !important;
+    }
+}
+
+@media (max-width:900px) and (orientation:landscape) and (max-height:340px) {
+}
+
+/* Native ScratchJr settings opened from the Kids sidebar. Keep its existing
+   controls, but size the page for touch screens in either orientation. */
+@media (max-width:760px) {
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #wrapc {
+        position:absolute !important; inset:0 !important; width:100% !important; height:100% !important;
+        overflow:auto !important; -webkit-overflow-scrolling:touch !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #htmlcontents.settings {
+        width:min(94vw,720px) !important; height:auto !important; min-height:0 !important;
+        margin:12px auto 20px !important; padding:10px 12px 18px !important;
+        box-sizing:border-box !important; overflow:visible !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #htmlcontents.settings .localizationtitle {
+        margin:8px 0 6px !important; font-size:clamp(17px,4.5vw,23px) !important;
+        line-height:1.2 !important; text-align:left !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #htmlcontents.settings .languagebuttons {
+        display:grid !important; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)) !important;
+        gap:8px !important; width:100% !important; margin:8px auto 14px !important;
+        float:none !important; clear:both !important; box-sizing:border-box !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #htmlcontents.settings .localizationselect {
+        display:flex !important; float:none !important; align-items:center !important; justify-content:center !important;
+        width:auto !important; min-width:0 !important; min-height:44px !important; height:auto !important;
+        margin:0 !important; padding:8px 10px !important; border-radius:13px !important;
+        box-sizing:border-box !important; font-size:clamp(13px,3.5vw,17px) !important; line-height:1.15 !important;
+        overflow-wrap:anywhere !important; touch-action:manipulation !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #htmlcontents.settings .localizationselect.selected:after {
+        width:24px !important; height:24px !important; right:-5px !important; top:-5px !important;
+        background-size:24px 24px !important;
+    }
+}
+
+@media (max-width:900px) and (orientation:landscape) and (max-height:600px) {
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #htmlcontents.settings {
+        width:min(92vw,850px) !important; margin:3px auto 8px !important; padding:5px 12px 10px !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #htmlcontents.settings .localizationtitle {
+        margin:4px 0 !important; font-size:17px !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #htmlcontents.settings .languagebuttons {
+        grid-template-columns:repeat(auto-fit,minmax(105px,1fr)) !important; gap:6px !important; margin:5px auto 8px !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] #htmlcontents.settings .localizationselect {
+        min-height:36px !important; padding:5px 8px !important; font-size:13px !important;
+    }
+}
+
+/* Mobile free mode follows ScratchJr's familiar horizontal code palette. The
+   stage gets most of the height; code stays in one compact strip below it. */
+@media (max-width:900px) and (orientation:landscape) and (max-height:600px) {
+}
+
+@media (max-width:900px) and (orientation:landscape) and (max-height:340px) {
+}
+/* Mobile landscape: dedicate the upper area to the stage and the lower strip to code. */
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 600px) {
+}
+
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 340px) {
+}
+
+/* The embedded editor scales its 1380 x 740 artboard to the phone viewport.
+   These rules intentionally key off the mode on body and use artboard-sized
+   controls so they remain usable after that outer scale is applied. */
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 600px) {
+}
+
+/* ===== Unified colourful Kids lobby (mobile) =====
+   The lobby used to mix the blue "tactile" theme with coloured management
+   states that changed its look on long-press. These rules apply the same
+   colourful identity as the React mobile home at every mobile size and keep
+   the cards stable when a project is selected. */
+@media (max-width:760px),
+       (max-width:900px) and (orientation:landscape) and (max-height:560px),
+       (pointer:coarse) and (max-height:600px) {
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] div.frame {
+        background: linear-gradient(155deg,#d5f5df 0%,#f6f9ff 54%,#fff0c2 100%) !important;
+        background-image: linear-gradient(155deg,#d5f5df 0%,#f6f9ff 54%,#fff0c2 100%) !important;
+    }
+    /* Projects board, mirroring the React "Mis proyectos" card. */
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .htmlcontents.home .inner {
+        width: 100% !important;
+        margin: 0 auto !important;
+        padding: 14px !important;
+        box-sizing: border-box !important;
+        border: 2px solid #fff !important;
+        border-radius: 23px !important;
+        background: linear-gradient(135deg,#fff4c9 0%,#ffe09b 100%) !important;
+        box-shadow: 0 7px 0 #e7b94d, 0 12px 22px #83601d1c !important;
+    }
+    /* Cards: stable rounded tiles that do not morph when selected or pressed. */
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .aproject {
+        border-radius: 14px !important;
+        border: 2px solid #fff !important;
+        box-shadow: 0 3px 0 #dfc477 !important;
+        transform: none !important;
+        filter: none !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .projectthumb.is-managing .aproject {
+        animation: none !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .aproject.open::after {
+        background-color: #fffdf5 !important;
+        border-radius: 10px !important;
+    }
+    /* Empty/new project tile: friendly green, no animated morph. */
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .aproject.empty {
+        background: #dcf7df !important;
+        background-image: none !important;
+        border: 3px dashed #98d39e !important;
+        box-shadow: 0 3px 0 #98d39e !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .aproject.empty::before {
+        color: #2f9e55 !important;
+        animation: none !important;
+    }
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .projecttitle h4 {
+        color: #4d451e !important;
+    }
+    /* Management buttons keep their colour but no hover/active zoom. */
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .closex:hover,
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .closex:active,
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .duplicatebtn:hover,
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .duplicatebtn:active,
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .exportbtn:hover,
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .exportbtn:active {
+        transform: none !important;
+    }
+    /* Header band uses the same green as the React brand bar. */
+    html[data-stblock-kids="true"] body[data-scratchjr-page="home"] .topsection.home > div.tabtitle {
+        background: #18a853 !important;
+        border-bottom: 3px solid #fff !important;
+    }
 }

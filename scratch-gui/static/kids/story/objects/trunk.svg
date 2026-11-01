@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 112" role="img" aria-label="Tronco">
+  <g transform="rotate(-22 80 56)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M23 34Q25 23 39 23h84q14 0 15 12v43q-2 12-16 12H39Q24 88 23 77Z" fill="#8b4e28" stroke="#58351f" stroke-width="6"/>
+    <path d="M39 30h79q9 0 9 9v8H31v-7q0-10 8-10Z" fill="#bf7a3e" stroke="#704323" stroke-width="3"/>
+    <path d="M34 57h96M39 73h79M47 35v10m19-10v10m23-10v10m20-10v10" fill="none" stroke="#e0a15b" stroke-width="4" opacity=".8"/>
+    <ellipse cx="27" cy="56" rx="14" ry="25" fill="#d59a58" stroke="#704323" stroke-width="5"/>
+    <ellipse cx="27" cy="56" rx="8" ry="17" fill="none" stroke="#9a6336" stroke-width="3"/>
+    <path d="M25 45q8 10 0 21m8-16q5 6 0 12" fill="none" stroke="#9a6336" stroke-width="2.5"/>
+    <path d="M132 37q8 4 3 11m-4 25q-7 5-1 10" fill="none" stroke="#56351f" stroke-width="3"/>
+  </g>
+</svg>

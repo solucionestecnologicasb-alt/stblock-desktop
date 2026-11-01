@@ -19,6 +19,7 @@ import MenuBar from '../menu-bar/menu-bar.jsx';
 import MobileMenuBar from '../menu-bar/mobile-menu-bar.jsx';
 import HomeHub from './home-hub.jsx';
 import {isMobileDevice} from '../../lib/device-detector';
+import {getProject as getMobileProject, listProjects as listMobileProjects, requestPersistentStorage, saveProject as saveMobileProject} from '../../lib/mobile-project-store';
 import CostumeLibrary from '../../containers/costume-library.jsx';
 import BackdropLibrary from '../../containers/backdrop-library.jsx';
 import SpriteLibrary from '../../containers/sprite-library.jsx';
@@ -448,6 +449,7 @@ const GUIComponent = props => {
         onReorderTabs,
         onClearExplain,
         onSetProjectKey,
+        onSetProjectTitle,
         onSetHasBeenSaved,
         projectTitle,
         reduxProjectTitle,
@@ -481,6 +483,23 @@ const GUIComponent = props => {
     const sketchforgeRestoredRef = useRef(false); // evita re-importar el .skf restaurado
     const [sketchforgeReady, setSketchforgeReady] = useState(false);
     const [selectedExperience, setSelectedExperience] = useState(null);
+    useEffect(() => {
+        // Android ignores ScreenOrientation.lock on some installed WebViews.
+        // Let the native activity own orientation so every way back to the
+        // experience selector restores portrait mode.
+        const bridge = window.AndroidBridge;
+        if (bridge && typeof bridge.setOrientation === 'function') {
+            bridge.setOrientation(selectedExperience === 'kids' ? 'landscape' : 'portrait');
+            return;
+        }
+        const orientation = window.screen && window.screen.orientation;
+        if (!orientation) return;
+        if (selectedExperience === 'kids' && typeof orientation.lock === 'function') {
+            orientation.lock('landscape').catch(() => undefined);
+        } else if (!selectedExperience && typeof orientation.unlock === 'function') {
+            orientation.unlock();
+        }
+    }, [selectedExperience]);
     const [kidsBluetoothModalOpen, setKidsBluetoothModalOpen] = useState(false);
     const sketchforgeLatestReduxRef = useRef(sketchforgeSkf);
     sketchforgeLatestReduxRef.current = sketchforgeSkf;
@@ -505,6 +524,12 @@ const GUIComponent = props => {
     const [updateInstalling, setUpdateInstalling] = useState(false);
     const [updateProgress, setUpdateProgress] = useState(null);
     const [mobileHubOpen, setMobileHubOpen] = useState(() => isMobileDevice());
+    const [mobileProjects, setMobileProjects] = useState([]);
+    const [mobileProjectError, setMobileProjectError] = useState('');
+    const mobileProjectIdRef = useRef(null);
+    const mobileProjectNameRef = useRef('');
+    const mobileProjectSaveTimerRef = useRef(null);
+    const mobileProjectSaveChainRef = useRef(Promise.resolve());
     const [mobileStageMode, setMobileStageMode] = useState(() => (isMobileDevice() ? 'pip' : 'hidden')); // 'hidden' | 'pip' | 'fullscreen'
     const [mobileActiveTab, setMobileActiveTab] = useState('code');
     // Posición arrastrable del PiP (esquina superior izquierda en px) o null para la posición por defecto (arriba-derecha).
@@ -2760,6 +2785,234 @@ const GUIComponent = props => {
         return null;
     }, [circuitData]);
 
+    const isWebMobileProjectStore = useCallback(() => {
+        if (!isMobileDevice() || typeof window === 'undefined') return false;
+        return !window.AndroidBridge && !window.__TAURI__ && !window.__TAURI_INTERNALS__;
+    }, []);
+
+    const refreshMobileProjects = useCallback(async () => {
+        if (!isWebMobileProjectStore()) return;
+        try {
+            setMobileProjects(await listMobileProjects());
+            setMobileProjectError('');
+        } catch (error) {
+            setMobileProjectError(error.message || 'No se pudo leer la lista local de proyectos.');
+        }
+    }, [isWebMobileProjectStore]);
+
+    const captureMobileProject = useCallback(async () => {
+        if (!vm) throw new Error('El editor todavía no está listo.');
+        if (typeof vm.saveProjectFlynt !== 'function') {
+            return vm.saveProjectSb3();
+        }
+        const workspaceState = await requestWorkspaceState();
+        const circuit = await requestCircuitState();
+        const circuit3d = await requestCircuit3DState();
+        const sketchforge = await requestSketchforgeSkf();
+        const aiData = {};
+        try {
+            const training = localStorage.getItem('ai_training_data');
+            if (training) aiData.training = JSON.parse(training);
+            const session = localStorage.getItem('ai_session');
+            if (session) aiData.session = JSON.parse(session);
+            const conversation = localStorage.getItem('ai_conversation');
+            if (conversation) aiData.conversation = JSON.parse(conversation);
+            const provider = localStorage.getItem('ai_provider') || '';
+            aiData.settings = {
+                provider,
+                model: provider ? (localStorage.getItem(`${provider}_model`) || '') : '',
+                trainingEnabled: localStorage.getItem('ai_training_enabled')
+            };
+        } catch (error) {
+            // A malformed optional AI preference must not prevent project backup.
+        }
+        const deviceData = {};
+        const projects = workspaceState && workspaceState.deviceProjects ? workspaceState.deviceProjects : deviceModeProjects;
+        if (projects && Object.keys(projects).length) deviceData.deviceProjects = projects;
+        return vm.saveProjectFlynt(
+            aiData,
+            deviceData,
+            circuit,
+            sketchforge,
+            workspaceState && workspaceState.programmingProject,
+            workspaceState && workspaceState.programmingProjectArchive,
+            workspaceState && {
+                pythonCodes: workspaceState.pythonCodes,
+                pythonKeyLock: workspaceState.pythonKeyLock || null
+            },
+            circuit3d
+        );
+    }, [vm, requestWorkspaceState, requestCircuitState, requestCircuit3DState, requestSketchforgeSkf, deviceModeProjects]);
+
+    const persistMobileProject = useCallback(async (id, name) => {
+        if (!isWebMobileProjectStore() || !id) return;
+        const saveOperation = mobileProjectSaveChainRef.current.catch(() => {}).then(async () => {
+            const blob = await captureMobileProject();
+            if (!blob || !blob.size) throw new Error('El proyecto generado está vacío; se conserva la copia anterior.');
+            await saveMobileProject({
+                id,
+                name: String(name || 'Proyecto STBlock').trim() || 'Proyecto STBlock',
+                blob,
+                format: typeof vm.saveProjectFlynt === 'function' ? 'flynt' : 'sb3',
+                createdAt: Date.now()
+            });
+            await refreshMobileProjects();
+        });
+        mobileProjectSaveChainRef.current = saveOperation.catch(() => {});
+        return saveOperation;
+    }, [isWebMobileProjectStore, captureMobileProject, vm, refreshMobileProjects]);
+
+    const createMobileProject = useCallback(async () => {
+        let name = 'Mi proyecto';
+        if (typeof window !== 'undefined' && typeof window.prompt === 'function') {
+            const enteredName = window.prompt('¿Cómo se llamará tu proyecto?', name);
+            if (enteredName === null) return;
+            name = enteredName.trim() || name;
+        }
+        if (isWebMobileProjectStore() && !mobileHubOpen) {
+            const previousId = mobileProjectIdRef.current || `stb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const previousName = mobileProjectNameRef.current ||
+                (typeof projectTitle === 'string' && projectTitle.trim()) ||
+                (typeof reduxProjectTitle === 'string' && reduxProjectTitle.trim()) || 'Proyecto STBlock';
+            try {
+                await persistMobileProject(previousId, previousName);
+            } catch (error) {
+                setMobileProjectError(`Primero no se pudo respaldar el proyecto actual: ${error.message || error}`);
+                return;
+            }
+        }
+        const id = `stb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        mobileProjectIdRef.current = id;
+        mobileProjectNameRef.current = name;
+        if (onSetProjectTitle) onSetProjectTitle(name);
+        if (isWebMobileProjectStore()) await requestPersistentStorage();
+        setMobileHubOpen(false);
+        setMobileActiveTab('code');
+        setDeviceTabId('code');
+        try {
+            await startNewProject();
+            await persistMobileProject(id, name);
+            setMobileProjectError('');
+        } catch (error) {
+            mobileProjectIdRef.current = null;
+            setMobileProjectError(`No se pudo guardar “${name}”: ${error.message || error}`);
+            setMobileHubOpen(true);
+        }
+    }, [startNewProject, persistMobileProject, isWebMobileProjectStore, onSetProjectTitle, mobileHubOpen, projectTitle, reduxProjectTitle]);
+
+    const openMobileProject = useCallback(async id => {
+        try {
+            const record = await getMobileProject(id);
+            if (!record || !record.blob || !record.blob.size) throw new Error('No se encontró una copia válida de este proyecto.');
+            mobileProjectIdRef.current = id;
+            mobileProjectNameRef.current = record.name;
+            if (onSetProjectTitle) onSetProjectTitle(record.name);
+            onSetDeviceMode('game');
+            const archive = await record.blob.arrayBuffer();
+            let flyntData = null;
+            const VMClass = vm && vm.constructor;
+            if (record.format === 'flynt' && VMClass && typeof VMClass.extractFlyntAll === 'function') {
+                try {
+                    flyntData = await VMClass.extractFlyntAll(archive);
+                } catch (error) {
+                    throw new Error(`El archivo local no se pudo verificar: ${error.message || error}`);
+                }
+            }
+            const pythonData = flyntData && flyntData.pythonData;
+            try {
+                if (pythonData && pythonData.pythonCodes) {
+                    localStorage.setItem('stblock_python_project_codes', JSON.stringify(pythonData.pythonCodes));
+                } else {
+                    localStorage.removeItem('stblock_python_project_codes');
+                }
+                if (pythonData && pythonData.pythonKeyLock) {
+                    localStorage.setItem('stblock_python_project_key_lock', String(pythonData.pythonKeyLock));
+                } else {
+                    localStorage.removeItem('stblock_python_project_key_lock');
+                }
+            } catch (error) {
+                // Storage policy can block optional editor metadata; the project archive still opens.
+            }
+            await vm.loadProject(archive);
+            const aiData = flyntData && flyntData.aiData;
+            try {
+                if (aiData && aiData.training) localStorage.setItem('ai_training_data', JSON.stringify(aiData.training));
+                if (aiData && aiData.session) localStorage.setItem('ai_session', JSON.stringify(aiData.session));
+                if (aiData && aiData.conversation) localStorage.setItem('ai_conversation', JSON.stringify(aiData.conversation));
+                if (aiData && aiData.settings) {
+                    const settings = aiData.settings;
+                    if (settings.provider) localStorage.setItem('ai_provider', settings.provider);
+                    if (settings.provider && settings.model) localStorage.setItem(`${settings.provider}_model`, settings.model);
+                    if (settings.trainingEnabled !== undefined) localStorage.setItem('ai_training_enabled', settings.trainingEnabled);
+                }
+            } catch (error) {
+                // Optional AI preferences do not prevent restoring the programming project.
+            }
+            const deviceData = flyntData && flyntData.deviceData;
+            if (deviceData) {
+                if (deviceData.deviceProjects && onRestoreDeviceProject) {
+                    Object.keys(deviceData.deviceProjects).forEach(deviceId => {
+                        const saved = deviceData.deviceProjects[deviceId];
+                        onRestoreDeviceProject(deviceId, saved.projectData, saved.hasBlocks);
+                    });
+                }
+                if (deviceData.circuitData && onSetCircuitData) onSetCircuitData(deviceData.circuitData);
+                if (deviceData.circuit3dData && onSetCircuit3dData) onSetCircuit3dData(deviceData.circuit3dData);
+                if (deviceData.connectionState && onRestoreDeviceState) onRestoreDeviceState(deviceData.connectionState);
+                if (Array.isArray(deviceData.terminalHistory) && onAppendTerminal) {
+                    deviceData.terminalHistory.forEach(line => onAppendTerminal(line));
+                }
+            }
+            if (flyntData && flyntData.sketchforgeData && onSetSketchforgeData) {
+                onSetSketchforgeData(flyntData.sketchforgeData);
+            }
+            setMobileProjectError('');
+            setMobileActiveTab('code');
+            setDeviceTabId('code');
+            setMobileStageMode('pip');
+            setMobileHubOpen(false);
+        } catch (error) {
+            setMobileProjectError(`No se pudo abrir el proyecto: ${error.message || error}`);
+        }
+    }, [vm, onSetDeviceMode, onSetProjectTitle, onRestoreDeviceProject, onSetCircuitData, onSetCircuit3dData, onRestoreDeviceState, onAppendTerminal, onSetSketchforgeData]);
+
+    useEffect(() => {
+        if (isWebMobileProjectStore()) refreshMobileProjects();
+    }, [isWebMobileProjectStore, refreshMobileProjects]);
+
+    useEffect(() => {
+        if (!isWebMobileProjectStore() || !vm) return undefined;
+        const scheduleSave = () => {
+            if (mobileHubOpen) return;
+            if (vm.runtime && vm.runtime._steppingInterval !== null) return;
+            if (!mobileProjectIdRef.current) {
+                mobileProjectIdRef.current = `stb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            }
+            if (mobileProjectSaveTimerRef.current) clearTimeout(mobileProjectSaveTimerRef.current);
+            mobileProjectSaveTimerRef.current = setTimeout(async () => {
+                mobileProjectSaveTimerRef.current = null;
+                try {
+                    const currentName = mobileProjectNameRef.current || (typeof projectTitle === 'string' && projectTitle.trim()) ||
+                        (typeof reduxProjectTitle === 'string' && reduxProjectTitle.trim()) || 'Proyecto STBlock';
+                    await persistMobileProject(mobileProjectIdRef.current, currentName);
+                } catch (error) {
+                    setMobileProjectError(`No se pudo completar el auto-guardado: ${error.message || error}`);
+                }
+            }, 1800);
+        };
+        vm.on('PROJECT_CHANGED', scheduleSave);
+        vm.on('workspaceUpdate', scheduleSave);
+        vm.on('targetsUpdate', scheduleSave);
+        vm.on('PROJECT_RUN_STOP', scheduleSave);
+        return () => {
+            vm.removeListener('PROJECT_CHANGED', scheduleSave);
+            vm.removeListener('workspaceUpdate', scheduleSave);
+            vm.removeListener('targetsUpdate', scheduleSave);
+            vm.removeListener('PROJECT_RUN_STOP', scheduleSave);
+            if (mobileProjectSaveTimerRef.current) clearTimeout(mobileProjectSaveTimerRef.current);
+        };
+    }, [isWebMobileProjectStore, vm, mobileHubOpen, persistMobileProject, projectTitle, reduxProjectTitle]);
+
     // Listener de mensajes del iframe de SketchForge (shell + editor).
     useEffect(() => {
         // Guarda una exportación de SketchForge con el diálogo nativo "Guardar
@@ -4072,7 +4325,10 @@ const GUIComponent = props => {
     // isPythonEditMode ya está calculado más arriba en el componente
 
     if (!isPlayerOnly && !classroomState.active && selectedExperience === null && !loading) {
-        return <ExperienceSelector onSelect={setSelectedExperience} />;
+        return <ExperienceSelector onSelect={experience => {
+            setSelectedExperience(experience);
+            if (experience === 'jr' && isMobileDevice()) setMobileHubOpen(true);
+        }} />;
     }
     if (!isPlayerOnly && !classroomState.active && selectedExperience === 'kids') {
         return (
@@ -4279,10 +4535,11 @@ const GUIComponent = props => {
                         }
                     }}
                     onClickNew={() => {
-                        const confirmMsg = '¿Deseas iniciar un nuevo proyecto? Se perderán los cambios que no hayas guardado.';
-                        const proceed = typeof window !== 'undefined' && typeof window.confirm === 'function' ?
-                            window.confirm(confirmMsg) : true;
-                        if (proceed) startNewProject();
+                        if (isWebMobileProjectStore()) {
+                            createMobileProject();
+                        } else {
+                            startNewProject();
+                        }
                     }}
                     onClickSave={async () => {
                         try {
@@ -4435,7 +4692,35 @@ const GUIComponent = props => {
                     onOpenSettings={() => {}}
                     onOpenAbout={onClickAbout}
                     onOpenHome={() => {
+                        const openHome = async () => {
+                            if (isWebMobileProjectStore() && mobileProjectIdRef.current) {
+                                const title = mobileProjectNameRef.current || projectTitle || reduxProjectTitle || 'Proyecto STBlock';
+                                try {
+                                    await persistMobileProject(mobileProjectIdRef.current, title);
+                                } catch (error) {
+                                    setMobileProjectError(`No se pudo respaldar el proyecto antes de volver a Inicio: ${error.message || error}`);
+                                    return;
+                                }
+                            }
+                            setMobileHubOpen(true);
+                            setIsAiOpen(false);
+                            setMobileStageMode('hidden');
+                            refreshMobileProjects();
+                        };
+                        openHome();
+                    }}
+                    onBackToExperienceSelector={async () => {
+                        if (isWebMobileProjectStore() && mobileProjectIdRef.current) {
+                            const title = mobileProjectNameRef.current || projectTitle || reduxProjectTitle || 'Proyecto STBlock';
+                            try {
+                                await persistMobileProject(mobileProjectIdRef.current, title);
+                            } catch (error) {
+                                setMobileProjectError(`No se pudo respaldar el proyecto antes de cambiar de versión: ${error.message || error}`);
+                                return;
+                            }
+                        }
                         setMobileHubOpen(false);
+                        setIsAiOpen(false);
                         setSelectedExperience(null);
                     }}
                     isHomeOpen={mobileHubOpen}
@@ -4512,34 +4797,17 @@ const GUIComponent = props => {
             )}
             {isMobileDevice() && mobileHubOpen && (
                 <HomeHub
-                    onSelectMode={(mode) => {
+                    onNewProject={createMobileProject}
+                    onOpenProject={() => {
                         setMobileHubOpen(false);
-                        if (mode === 'device') {
-                            if (onRequestOpenDeviceLibrary) {
-                                onRequestOpenDeviceLibrary();
-                            } else if (deviceMode !== 'device') {
-                                onSetDeviceMode('device');
-                            }
-                        } else {
-                            if (deviceMode !== mode) {
-                                onSetDeviceMode(mode);
-                            }
-                            if (mode === 'game') {
-                                setMobileActiveTab('code');
-                                setMobileStageMode('pip');
-                            }
-                        }
+                        onSetDeviceMode('game');
+                        setMobileActiveTab('code');
+                        setMobileStageMode('pip');
+                        onStartSelectingFileUpload();
                     }}
-                    onNewProject={() => {
-                        startNewProject();
-                    }}
-                    onOpenProject={onStartSelectingFileUpload}
-                    onClose={() => {
-                        setMobileHubOpen(false);
-                        if (deviceMode === 'game') {
-                            setMobileStageMode('pip');
-                        }
-                    }}
+                    projects={mobileProjects}
+                    saveError={mobileProjectError}
+                    onOpenSavedProject={openMobileProject}
                 />
             )}
             {deviceMode === 'device' ? renderDeviceMode() : deviceMode === 'diseno' ? renderDiseno3DMode() : deviceMode === 'evaluacion' ? renderEvaluacionMode() : renderEditor()}

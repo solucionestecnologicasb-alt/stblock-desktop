@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { basename, extname, join, relative, resolve, sep } from "node:path";
+import { extname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { patchSketchforgeDirectory } from "./patch-sketchforge-relative.mjs";
 
@@ -7,6 +7,8 @@ const rootDir = resolve(process.cwd());
 const sourceDir = resolve(rootDir, "scratch-gui/build");
 const targetDir = resolve(rootDir, "scratch-gui/build-android");
 const assetPackDir = resolve(rootDir, "src-tauri/gen/android/models3d_pack/src/main/assets");
+const androidAppDir = resolve(rootDir, "src-tauri/gen/android/app");
+const includeStaticInBaseForLocalApk = process.env.STBLOCK_ANDROID_TEST_APK === "1";
 
 console.log("[prepare-android-build] ===============================================");
 console.log("[prepare-android-build] Configurando Play Asset Delivery para STBlock...");
@@ -91,51 +93,95 @@ async function pruneFiles(directory) {
 await pruneFiles(targetDir);
 console.log(`[prepare-android-build] Eliminados ${removedCount} mapas de depuración / backups (${(removedBytes / 1024 / 1024).toFixed(2)} MB).`);
 
-// 5. Trasladar exclusivamente modelos 3D pesados (.glb, .gltf) hacia el Asset Pack de Google Play
-// NOTA IMPORTANTE: static/assets y static/scratch-assets deben permanecer en el paquete base
-// para que el WebView de Tauri cargue correctamente logos, tarjetas de placas, disfraces e iconos.
-console.log("[prepare-android-build] [3/5] Extrayendo modelos 3D pesados hacia models3d_pack (Play Asset Delivery)...");
-
-// Trasladar modelos 3D (.glb, .gltf)
-let movedModelsCount = 0;
-let movedModelsBytes = 0;
-
-async function extract3dModels(directory) {
-  if (!existsSync(directory)) return;
-  const entries = await readdir(directory, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      await extract3dModels(fullPath);
-      continue;
-    }
-
-    const ext = extname(entry.name).toLowerCase();
-    if (ext === ".glb" || ext === ".gltf") {
-      const relPath = relative(targetDir, fullPath);
-      // IMPORTANTE: Los modelos de electronics-lab DEBEN permanecer en build-android
-      // para que el simulador 3D de circuitos los cargue en el WebView de Android.
-      if (relPath.startsWith("static" + sep + "electronics-lab") || relPath.startsWith("static/electronics-lab")) {
-        continue;
+// 5. En AAB los estáticos van por PAD. En el APK local de QA se dejan en
+// el módulo base, porque assemble APK no instala los asset packs del AAB.
+console.log(includeStaticInBaseForLocalApk
+  ? "[prepare-android-build] [3/5] Conservando static/ en el APK local de QA..."
+  : "[prepare-android-build] [3/5] Trasladando static/ completo al pack install-time...");
+const staticDir = join(targetDir, "static");
+let movedStaticBytes = 0;
+let movedStaticFiles = 0;
+if (existsSync(staticDir)) {
+  async function countFiles(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const fullPath = join(directory, entry.name);
+      if (entry.isDirectory()) await countFiles(fullPath);
+      else {
+        movedStaticFiles += 1;
+        movedStaticBytes += (await stat(fullPath)).size;
       }
-
-      const destPath = join(assetPackDir, relPath);
-      const destParent = resolve(destPath, "..");
-      await mkdir(destParent, { recursive: true });
-
-      const s = await stat(fullPath);
-      movedModelsBytes += s.size;
-      movedModelsCount += 1;
-
-      // Copiar al Asset Pack de Android y eliminar del bundle de Rust
-      await cp(fullPath, destPath);
-      await rm(fullPath, { force: true });
     }
   }
+  await countFiles(staticDir);
+  if (includeStaticInBaseForLocalApk) {
+    // Keep the install-time asset pack empty; the WebView loads these files
+    // from the APK's regular assets during local QA.
+  } else {
+    await cp(staticDir, join(assetPackDir, "static"), { recursive: true, force: true });
+    await rm(staticDir, { recursive: true, force: true });
+  }
 }
+console.log(includeStaticInBaseForLocalApk
+  ? `[prepare-android-build] -> ${movedStaticFiles} archivos (${(movedStaticBytes / 1024 / 1024).toFixed(2)} MB) incluidos en el APK local.`
+  : `[prepare-android-build] -> ${movedStaticFiles} archivos (${(movedStaticBytes / 1024 / 1024).toFixed(2)} MB) entregados por PAD.`);
 
-await extract3dModels(targetDir);
-console.log(`[prepare-android-build] -> ${movedModelsCount} modelos 3D (.glb/.gltf) trasladados al Asset Pack (${(movedModelsBytes / 1024 / 1024).toFixed(2)} MB).`);
+// Preparar el puente PAD y parchear las clases Android generadas por Tauri.
+const mainActivityPath = join(androidAppDir, "src", "main", "java", "stblock", "app", "MainActivity.kt");
+const gradlePath = join(androidAppDir, "build.gradle.kts");
+const padHelperTemplate = join(rootDir, "scripts", "PadAssetDelivery.kt.template");
+if (existsSync(mainActivityPath) && existsSync(gradlePath) && existsSync(padHelperTemplate)) {
+  const helperPath = join(androidAppDir, "src", "main", "java", "stblock", "app", "PadAssetDelivery.kt");
+  await mkdir(resolve(helperPath, ".."), { recursive: true });
+  await writeFile(helperPath, await readFile(padHelperTemplate, "utf8"));
+
+  let mainActivity = await readFile(mainActivityPath, "utf8");
+  if (!mainActivity.includes("PadAssetDelivery.initialize(this)")) {
+    const anchor = "    this.appWebView = webView";
+    if (!mainActivity.includes(anchor)) throw new Error("No se encontró el punto de integración MainActivity.onWebViewCreate.");
+    mainActivity = mainActivity.replace(anchor, `${anchor}\n    PadAssetDelivery.initialize(this)`);
+    await writeFile(mainActivityPath, mainActivity);
+  }
+
+  // Tauri may regenerate these Android sources before every build. Keep the
+  // native orientation bridge in this preparation step so the patch survives.
+  if (!mainActivity.includes("fun setOrientation(value: String)")) {
+    mainActivity = mainActivity.replace(
+      "import android.content.Intent",
+      "import android.content.Intent\nimport android.content.pm.ActivityInfo"
+    );
+    const bridgeAnchor = "  fun isAndroid(): Boolean = true";
+    if (!mainActivity.includes(bridgeAnchor)) throw new Error("No se encontró AndroidBridge.isAndroid.");
+    mainActivity = mainActivity.replace(
+      bridgeAnchor,
+      `${bridgeAnchor}\n\n  @JavascriptInterface\n  fun setOrientation(value: String) {\n    activity.runOnUiThread {\n      activity.requestedOrientation = if (value.equals("landscape", ignoreCase = true)) {\n        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE\n      } else {\n        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT\n      }\n    }\n  }`
+    );
+    await writeFile(mainActivityPath, mainActivity);
+  }
+
+  let gradle = await readFile(gradlePath, "utf8");
+  if (!gradle.includes("com.google.android.play:asset-delivery:")) {
+    const anchor = 'dependencies {';
+    if (!gradle.includes(anchor)) throw new Error("No se encontró el bloque dependencies de Android.");
+    gradle = gradle.replace(anchor, `${anchor}\n    implementation("com.google.android.play:asset-delivery:2.3.0")`);
+    await writeFile(gradlePath, gradle);
+  }
+
+  const rustClientPath = join(androidAppDir, "src", "main", "java", "stblock", "app", "generated", "RustWebViewClient.kt");
+  if (existsSync(rustClientPath)) {
+    let rustClient = await readFile(rustClientPath, "utf8");
+    const injection = "        PadAssetDelivery.intercept(request)?.let { return it }\n";
+    const anchor = "        lastInterceptedUrl = request.url\n";
+    if (!rustClient.includes("PadAssetDelivery.intercept(request)")) {
+      if (!rustClient.includes(anchor)) throw new Error("No se encontró el punto de interceptación de recursos en RustWebViewClient.");
+      rustClient = rustClient.replace(anchor, injection + anchor);
+      await writeFile(rustClientPath, rustClient);
+    }
+  } else {
+    throw new Error(`No se encontró el cliente WebView de Tauri: ${rustClientPath}`);
+  }
+} else {
+  throw new Error("No se pudo preparar PAD: faltan archivos del proyecto Android generado o el template PadAssetDelivery.kt.template.");
+}
 
 // 6. Aplicar parche de rutas relativas a SketchForge
 console.log("[prepare-android-build] [4/5] Parcheando SketchForge con rutas relativas...");
@@ -166,7 +212,7 @@ const baseBundleSize = await computeTotalSize(targetDir);
 const assetPackSize = await computeTotalSize(assetPackDir);
 
 console.log("[prepare-android-build] ===============================================");
-console.log(`[prepare-android-build] Módulo Base (Rust/UI): ${(baseBundleSize / 1024 / 1024).toFixed(2)} MB (Límite Google Play: 150 MB)`);
-console.log(`[prepare-android-build] Asset Pack (PAD):       ${(assetPackSize / 1024 / 1024).toFixed(2)} MB (Límite Google Play: 1024 MB)`);
+console.log(`[prepare-android-build] Módulo Base (Rust/UI): ${(baseBundleSize / 1024 / 1024).toFixed(2)} MB (Límite Google Play: 500 MB comprimidos)`);
+console.log(`[prepare-android-build] Asset Pack (PAD):       ${(assetPackSize / 1024 / 1024).toFixed(2)} MB (Límite Google Play: 1536 MB comprimidos por pack)`);
 console.log("[prepare-android-build] Play Asset Delivery preparado con éxito.");
 console.log("[prepare-android-build] ===============================================");

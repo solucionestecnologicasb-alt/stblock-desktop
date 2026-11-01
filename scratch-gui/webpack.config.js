@@ -185,7 +185,13 @@ const buildConfig = baseConfig.clone()
         patterns: [
             {
                 from: 'static',
-                to: 'static'
+                to: 'static',
+                // En `webpack serve`, CopyWebpackPlugin copia static/ a memfs una
+                // sola vez al arrancar, de modo que los cambios posteriores en
+                // static/scratchjr (npm run prepare:scratchjr-web) nunca llegaban
+                // al navegador. Excluimos scratchjr del copiado en dev para que
+                // `devServer.static` lo sirva directamente desde disco.
+                globOptions: process.argv.includes('serve') ? {ignore: ['**/scratchjr/**']} : undefined
             },
             {
                 from: 'extensions/**',

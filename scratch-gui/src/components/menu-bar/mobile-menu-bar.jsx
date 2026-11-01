@@ -14,13 +14,13 @@ const MobileMenuBar = ({
     deviceMode,
     onModeChange,
     onClickNew,
-    onClickSave,
     onStartSelectingFileUpload,
     onGreenFlag,
     onStopAll,
     onOpenSettings,
     onOpenAbout,
     onOpenHome,
+    onBackToExperienceSelector,
     isHomeOpen,
     canSave,
     mobileStageVisible,
@@ -75,16 +75,16 @@ const MobileMenuBar = ({
         if (onOpenHome) onOpenHome();
     };
 
+    const handleChangeExperience = (e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        setDrawerOpen(false);
+        if (onBackToExperienceSelector) onBackToExperienceSelector();
+    };
+
     const handleNewClick = (e) => {
         if (e && e.stopPropagation) e.stopPropagation();
         setDrawerOpen(false);
         if (onClickNew) onClickNew();
-    };
-
-    const handleSaveClick = (e) => {
-        if (e && e.stopPropagation) e.stopPropagation();
-        setDrawerOpen(false);
-        if (onClickSave) onClickSave();
     };
 
     const handleLoadClick = (e) => {
@@ -108,18 +108,9 @@ const MobileMenuBar = ({
         if (onModeChange) onModeChange(mode);
     };
 
-    const handleSelectGame = () => handleModeSelect('game');
-    const handleSelectDevice = () => handleModeSelect('device');
-    const handleSelectDiseno = () => handleModeSelect('diseno');
-    const handleSelectEvaluacion = () => handleModeSelect('evaluacion');
     const handleSelectDeviceModal = () => {
         setDrawerOpen(false);
         if (onRequestOpenDeviceLibrary) onRequestOpenDeviceLibrary();
-    };
-
-    const handleAiClick = () => {
-        setDrawerOpen(false);
-        if (onToggleAi) onToggleAi();
     };
 
     const handleOpenAiSettings = (e) => {
@@ -290,7 +281,7 @@ const MobileMenuBar = ({
             </header>
 
             {/* Bottom Navigation Bar: Ergonómica para pulgares en móviles */}
-            <nav className={styles.mobileBottomNav} aria-label="Navegación de Modos">
+            {!isHomeOpen && <nav className={styles.mobileBottomNav} aria-label="Navegación de Modos">
                 <button
                     type="button"
                     className={classNames(styles.mobileBottomNavItem, {
@@ -343,7 +334,7 @@ const MobileMenuBar = ({
                         <span className={styles.mobileBottomNavLabel}>IA</span>
                     </button>
                 )}
-            </nav>
+            </nav>}
 
             {drawerOpen && (
                 <div
@@ -356,7 +347,7 @@ const MobileMenuBar = ({
                     >
                         <div className={styles.mobileDrawerHeader}>
                             <div className={styles.mobileDrawerTitleGroup}>
-                                <span className={styles.mobileDrawerTitle}>Menú STBlock</span>
+                                <span className={styles.mobileDrawerTitle}>STBlock</span>
                             </div>
                             <button
                                 type="button"
@@ -373,11 +364,21 @@ const MobileMenuBar = ({
                                 {onOpenHome && (
                                     <button
                                         type="button"
-                                        className={styles.mobileDrawerItem}
+                                        className={classNames(styles.mobileDrawerItem, styles.mobileDrawerReturnItem)}
                                         onClick={handleHomeClick}
                                     >
                                         <span className={styles.mobileDrawerItemIcon}>🏠</span>
-                                        <span className={styles.mobileDrawerItemText}>Pantalla de Inicio (Hub)</span>
+                                        <span className={styles.mobileDrawerItemText}>Inicio</span>
+                                    </button>
+                                )}
+                                {onBackToExperienceSelector && (
+                                    <button
+                                        type="button"
+                                        className={styles.mobileDrawerItem}
+                                        onClick={handleChangeExperience}
+                                    >
+                                        <span className={styles.mobileDrawerItemIcon}>🔄</span>
+                                        <span className={styles.mobileDrawerItemText}>Cambiar versión</span>
                                     </button>
                                 )}
                                 <button
@@ -386,15 +387,7 @@ const MobileMenuBar = ({
                                     onClick={handleNewClick}
                                 >
                                     <span className={styles.mobileDrawerItemIcon}>📄</span>
-                                    <span className={styles.mobileDrawerItemText}>Nuevo Proyecto</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className={styles.mobileDrawerItem}
-                                    onClick={handleSaveClick}
-                                >
-                                    <span className={styles.mobileDrawerItemIcon}>💾</span>
-                                    <span className={styles.mobileDrawerItemText}>Guardar Proyecto</span>
+                                    <span className={styles.mobileDrawerItemText}>Nuevo proyecto</span>
                                 </button>
                                 <button
                                     type="button"
@@ -402,53 +395,13 @@ const MobileMenuBar = ({
                                     onClick={handleLoadClick}
                                 >
                                     <span className={styles.mobileDrawerItemIcon}>📂</span>
-                                    <span className={styles.mobileDrawerItemText}>Cargar desde Celular</span>
+                                        <span className={styles.mobileDrawerItemText}>Cargar desde ordenador</span>
                                 </button>
                             </div>
 
-                            <div className={styles.mobileDrawerSection}>
-                                <span className={styles.mobileDrawerSectionLabel}>MODO DE TRABAJO</span>
-                                <button
-                                    type="button"
-                                    className={classNames(styles.mobileDrawerItem, {
-                                        [styles.drawerItemActive]: deviceMode === 'game'
-                                    })}
-                                    onClick={handleSelectGame}
-                                >
-                                    <span className={styles.mobileDrawerItemIcon}>🧩</span>
-                                    <span className={styles.mobileDrawerItemText}>Programación Visual</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className={classNames(styles.mobileDrawerItem, {
-                                        [styles.drawerItemActive]: deviceMode === 'device'
-                                    })}
-                                    onClick={handleSelectDevice}
-                                >
-                                    <span className={styles.mobileDrawerItemIcon}>⚡</span>
-                                    <span className={styles.mobileDrawerItemText}>Electrónica & Simulación</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className={classNames(styles.mobileDrawerItem, {
-                                        [styles.drawerItemActive]: deviceMode === 'diseno'
-                                    })}
-                                    onClick={handleSelectDiseno}
-                                >
-                                    <span className={styles.mobileDrawerItemIcon}>🧊</span>
-                                    <span className={styles.mobileDrawerItemText}>Taller 3D (SketchForge)</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    className={classNames(styles.mobileDrawerItem, {
-                                        [styles.drawerItemActive]: deviceMode === 'evaluacion'
-                                    })}
-                                    onClick={handleSelectEvaluacion}
-                                >
-                                    <span className={styles.mobileDrawerItemIcon}>🎓</span>
-                                    <span className={styles.mobileDrawerItemText}>Evaluaciones</span>
-                                </button>
-                                {onRequestOpenDeviceLibrary && (
+                            {onRequestOpenDeviceLibrary && (
+                                <div className={styles.mobileDrawerSection}>
+                                    <span className={styles.mobileDrawerSectionLabel}>DISPOSITIVO</span>
                                     <button
                                         type="button"
                                         className={styles.mobileDrawerItem}
@@ -456,26 +409,14 @@ const MobileMenuBar = ({
                                     >
                                         <span className={styles.mobileDrawerItemIcon}>🎛️</span>
                                         <span className={styles.mobileDrawerItemText}>
-                                            {selectedDevice && selectedDevice.name ? `Cambiar Placa (${selectedDevice.name})` : 'Seleccionar Placa / Tarjeta'}
+                                            {selectedDevice && selectedDevice.name ? `Cambiar placa (${selectedDevice.name})` : 'Seleccionar placa o tarjeta'}
                                         </span>
                                     </button>
-                                )}
-                            </div>
+                                </div>
+                            )}
 
                             <div className={styles.mobileDrawerSection}>
-                                <span className={styles.mobileDrawerSectionLabel}>INTELIGENCIA ARTIFICIAL</span>
-                                {onToggleAi && (
-                                    <button
-                                        type="button"
-                                        className={classNames(styles.mobileDrawerItem, {
-                                            [styles.drawerItemActive]: isAiOpen
-                                        })}
-                                        onClick={handleAiClick}
-                                    >
-                                        <span className={styles.mobileDrawerItemIcon}>✨</span>
-                                        <span className={styles.mobileDrawerItemText}>Asistente de IA (Tutor)</span>
-                                    </button>
-                                )}
+                                <span className={styles.mobileDrawerSectionLabel}>ASISTENTE</span>
                                 <button
                                     type="button"
                                     className={styles.mobileDrawerItem}
@@ -557,13 +498,13 @@ MobileMenuBar.propTypes = {
     deviceMode: PropTypes.string,
     onModeChange: PropTypes.func,
     onClickNew: PropTypes.func,
-    onClickSave: PropTypes.func,
     onStartSelectingFileUpload: PropTypes.func,
     onGreenFlag: PropTypes.func,
     onStopAll: PropTypes.func,
     onOpenSettings: PropTypes.func,
     onOpenAbout: PropTypes.func,
     onOpenHome: PropTypes.func,
+    onBackToExperienceSelector: PropTypes.func,
     isHomeOpen: PropTypes.bool,
     canSave: PropTypes.bool,
     mobileStageVisible: PropTypes.bool,

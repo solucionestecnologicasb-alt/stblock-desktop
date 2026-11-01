@@ -1,0 +1,110 @@
+package stblock.app
+
+import android.content.Context
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.MimeTypeMap
+import com.google.android.play.core.assetpacks.AssetPackManager
+import com.google.android.play.core.assetpacks.AssetPackManagerFactory
+import java.io.File
+import java.io.InputStream
+import java.net.URLConnection
+
+/** Serves install-time PAD files under the same static resource URLs as the web build. */
+object PadAssetDelivery {
+  private const val PACK_NAME = "models3d_pack"
+  @Volatile private var manager: AssetPackManager? = null
+  @Volatile private var packRoot: File? = null
+
+  fun initialize(context: Context) {
+    try {
+      manager = AssetPackManagerFactory.getInstance(context.applicationContext)
+      resolveRoot()
+    } catch (_: Exception) {
+      packRoot = null
+    }
+  }
+
+  fun intercept(request: WebResourceRequest): WebResourceResponse? {
+    val uri = request.url
+    if (uri.path?.startsWith("/static/") != true) return null
+    val root = packRoot ?: resolveRoot() ?: return null
+    val relativePath = uri.path!!.removePrefix("/")
+    val target = File(root, relativePath).canonicalFile
+    val canonicalRoot = root.canonicalFile
+    if (!target.toPath().startsWith(canonicalRoot.toPath()) || !target.isFile) return null
+
+    return try {
+      rangedResponse(target, request.requestHeaders["Range"])
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  @Synchronized private fun resolveRoot(): File? {
+    packRoot?.let { if (it.isDirectory) return it }
+    return try {
+      val assetPath = manager?.getPackLocation(PACK_NAME)?.assetsPath() ?: return null
+      File(assetPath).canonicalFile.also { if (it.isDirectory) packRoot = it }
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  private fun rangedResponse(file: File, rangeHeader: String?): WebResourceResponse {
+    val extension = file.extension.lowercase()
+    val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+      ?: URLConnection.guessContentTypeFromName(file.name)
+      ?: "application/octet-stream"
+    val headers = linkedMapOf(
+      "Accept-Ranges" to "bytes",
+      "Cache-Control" to "public, max-age=31536000",
+      "Content-Length" to file.length().toString()
+    )
+
+    if (rangeHeader?.startsWith("bytes=") != true) {
+      return WebResourceResponse(mime, null, 200, "OK", headers, file.inputStream())
+    }
+
+    val range = rangeHeader.removePrefix("bytes=").substringBefore(',').trim()
+    val parts = range.split('-', limit = 2)
+    if (parts.size != 2) return WebResourceResponse(mime, null, 200, "OK", headers, file.inputStream())
+    val length = file.length()
+    var start = parts[0].toLongOrNull() ?: 0L
+    var end = parts[1].toLongOrNull() ?: (length - 1)
+    if (parts[0].isEmpty()) {
+      val suffixLength = parts[1].toLongOrNull() ?: 0L
+      start = (length - suffixLength).coerceAtLeast(0L)
+      end = length - 1
+    }
+    if (start >= length || end < start) {
+      return WebResourceResponse(mime, null, 416, "Range Not Satisfiable", mapOf("Content-Range" to "bytes */$length"), "".byteInputStream())
+    }
+    end = end.coerceAtMost(length - 1)
+    val contentLength = end - start + 1
+    headers["Content-Length"] = contentLength.toString()
+    headers["Content-Range"] = "bytes $start-$end/$length"
+    return WebResourceResponse(mime, null, 206, "Partial Content", headers, boundedStream(file, start, contentLength))
+  }
+
+  private fun boundedStream(file: File, offset: Long, count: Long): InputStream {
+    val stream = file.inputStream()
+    var skipped = 0L
+    while (skipped < offset) {
+      val step = stream.skip(offset - skipped)
+      if (step <= 0) break
+      skipped += step
+    }
+    return object : InputStream() {
+      private var remaining = count
+      override fun read(): Int = if (remaining <= 0) -1 else stream.read().also { if (it >= 0) remaining-- }
+      override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (remaining <= 0) return -1
+        val read = stream.read(buffer, offset, minOf(length.toLong(), remaining).toInt())
+        if (read > 0) remaining -= read
+        return read
+      }
+      override fun close() = stream.close()
+    }
+  }
+}
