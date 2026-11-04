@@ -7,7 +7,27 @@ const ACTOR_IMAGES = {
     vega: 'characters/vega.svg'
 };
 
-const storyAsset = (basePath, path) => `${basePath}static/kids/story/${path}`;
+// `basePath` suele ser './', pero estas imágenes se consumen dentro del iframe
+// de ScratchJr; una ruta relativa se resolvería contra `/static/scratchjr/app/`
+// y daría 404. Generamos la URL absoluta en el documento padre.
+const resolveStoryUrl = path => {
+    if (!path || typeof path !== 'string') {
+        return path;
+    }
+    if (/^(?:[a-z]+:)?\/\//i.test(path) || path.startsWith('data:') || path.startsWith('blob:')) {
+        return path;
+    }
+    if (typeof window === 'undefined') {
+        return path;
+    }
+    try {
+        return new URL(path.replace(/^\.\//, ''), window.location.href).href;
+    } catch (_error) {
+        return path;
+    }
+};
+
+const storyAsset = (basePath, path) => resolveStoryUrl(`${basePath}static/kids/story/${path}`);
 const actor = (id, name, icon, col, row, options = {}, basePath = '/') => ({
     id, name, icon, image: storyAsset(basePath, ACTOR_IMAGES[id]), role: id, col, row, scale: 1, locked: true, motion: 'idle', ...options
 });
@@ -342,9 +362,17 @@ export const getStoryChallenge = (level, saved = {}, basePath = '/') => {
         // base para que las calibraciones guardadas antiguas (con Vega quieta en
         // la meta) no impidan recogerla.
         ? {...entity, carryable: true} : entity) : actors;
-    const resolveAsset = path => typeof path === 'string' && path.startsWith('/static/kids/story/')
-        ? `${basePath}${path.slice(1)}`
-        : path;
+    const resolveAsset = path => {
+        if (typeof path !== 'string' || !path.includes('static/kids/story/')) {
+            return path;
+        }
+        if (/^(?:[a-z]+:)?\/\//i.test(path) || path.startsWith('data:') || path.startsWith('blob:')) {
+            return path;
+        }
+        return resolveStoryUrl(path.startsWith('/')
+            ? `${basePath}${path.slice(1)}`
+            : `${basePath}${path.replace(/^\.\//, '')}`);
+    };
     return {
         ...base,
         ...saved,

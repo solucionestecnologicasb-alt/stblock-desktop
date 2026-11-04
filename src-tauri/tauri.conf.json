@@ -1,7 +1,7 @@
 {
     "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName":  "STBlock",
-    "version":  "0.1.56",
+    "version":  "0.1.57",
     "identifier":  "stblock.app",
     "build":  {
                   "frontendDist":  "../scratch-gui/build",
@@ -72,7 +72,11 @@
                                                              "libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37",
                                                              "libgtk-3-0",
                                                              "libayatana-appindicator3-1 | libappindicator3-1",
-                                                             "librsvg2-2"
+                                                             "librsvg2-2",
+                                                             "gstreamer1.0-plugins-base",
+                                                             "gstreamer1.0-plugins-good",
+                                                             "gstreamer1.0-plugins-bad",
+                                                             "gstreamer1.0-libav"
                                                          ],
                                              "section":  "education",
                                              "priority":  "optional",

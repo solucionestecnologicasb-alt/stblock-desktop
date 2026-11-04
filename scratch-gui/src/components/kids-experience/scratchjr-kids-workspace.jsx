@@ -113,7 +113,77 @@ STORY_WORLDS[10] = {
 };
 
 const projectKeyFor = mode => `${PROJECT_KEY}.${mode}`;
-const storyMapPath = (world, basePath) => `${basePath}static/kids/story/maps/${world.mapAsset || `${world.id}.jpg`}`;
+// `basePath` llega como './', pero las rutas se consumen dentro del iframe de
+// ScratchJr (p. ej. `/static/scratchjr/app/editor.html`), así que una ruta
+// relativa termina en 404. Resolvemos la URL absoluta en el documento padre.
+const resolveKidsUrl = path => {
+    if (!path || /^(?:[a-z]+:)?\/\//i.test(path) || path.startsWith('data:') || path.startsWith('blob:')) {
+        return path;
+    }
+    if (typeof window === 'undefined') {
+        return path;
+    }
+    try {
+        return new URL(path.replace(/^\.\//, ''), window.location.href).href;
+    } catch (_error) {
+        return path;
+    }
+};
+const storyMapPath = (world, basePath) => resolveKidsUrl(`${basePath}static/kids/story/maps/${world.mapAsset || `${world.id}.jpg`}`);
+// El protocolo `tauri://` sirve archivos completos e ignora `Range`; WebKitGTK
+// necesita Range para reproducir MP4, así que descargamos el video en el
+// documento padre y lo reproducimos desde un blob. Si el fetch falla usamos
+// la URL directa como respaldo.
+const StoryVideo = ({src, ...props}) => {
+    const videoRef = useRef(null);
+    const [blobSrc, setBlobSrc] = useState(null);
+    const [directSrc, setDirectSrc] = useState(false);
+    useEffect(() => {
+        let cancelled = false;
+        let objectUrl = null;
+        const controller = new AbortController();
+        setBlobSrc(null);
+        setDirectSrc(false);
+        fetch(src, {signal: controller.signal})
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                if (cancelled) {
+                    return;
+                }
+                objectUrl = URL.createObjectURL(blob);
+                setBlobSrc(objectUrl);
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setDirectSrc(true);
+                }
+            });
+        return () => {
+            cancelled = true;
+            controller.abort();
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, [src]);
+    const effectiveSrc = blobSrc || (directSrc ? src : undefined);
+    useEffect(() => {
+        const element = videoRef.current;
+        if (!element || !effectiveSrc || !props.autoPlay) {
+            return;
+        }
+        const playing = element.play();
+        if (playing && typeof playing.catch === 'function') {
+            playing.catch(() => {});
+        }
+    }, [effectiveSrc, props.autoPlay]);
+    return <video ref={videoRef} src={effectiveSrc} {...props} />;
+};
 // Ending cinematics shown once world 20 is solved, in this order.
 const FINAL_VIDEO_FILES = ['final.mp4', 'final-2.mp4'];
 const WORLD5_BLOCKED_CELLS = [[2, 4], [3, 4], [2, 2], [3, 2], [3, 1]];
@@ -374,7 +444,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     };
     const [frameUrl, setFrameUrl] = useState(() => makeFrameUrl('free', null));
     const staleFrameRetriesRef = useRef(new Set());
-    const logoUrl = `${basePath}static/kids/stblock-kids-logo.jpg`;
+    const logoUrl = resolveKidsUrl(`${basePath}static/kids/stblock-kids-logo.jpg`);
 
     // Cubre el iframe mientras ScratchJr cambia de modo: durante la recarga el
     // documento se ve en blanco y la toolbar aparece/desaparece. La capa se
@@ -1579,7 +1649,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                 {mode === 'story' && storyScreen === 'loading' && <div className={styles.storyLoading} role="status">✨ Preparando tu aventura…</div>}
                 {mode === 'story' && storyScreen === 'route' && (
                     <div className={styles.storyRoute}>
-                        <img className={styles.storyRouteImage} src={`${basePath}static/kids/story/route.jpg`} alt="Mapa ilustrado de la Ruta de aventura" />
+                        <img className={styles.storyRouteImage} src={resolveKidsUrl(`${basePath}static/kids/story/route.jpg`)} alt="Mapa ilustrado de la Ruta de aventura" />
                         <section className={styles.storyRoutePanel} aria-label="Mundos de la aventura">
                             <div className={styles.storyRouteHeading}><span>⭐ {starsAvailable(storyProgress)}</span><h2>Ruta de aventura</h2><p>Gana estrellas en cada mundo y cámbialas por pistas.</p><button className={styles.storyPointsLink} onClick={() => setStoryScreen('scores')} type="button">🏆 Mis puntos · {storyPoints}</button></div>
                             <div className={styles.storyWorldList}>
@@ -1602,14 +1672,14 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                             <header className={styles.storyIntroHeader}><p className={styles.storyEyebrow}>MUNDO {storyLevel} · {STORY_WORLDS[storyLevel - 1].chapter}</p><h2>{STORY_WORLDS[storyLevel - 1].title}</h2></header>
                             <div className={styles.storyIntroContent}>
                                 {!storyVideoError && (!isMobileLayout || !storyIntroVideoDone) ? (
-                                    <video
+                                    <StoryVideo
                                         key={`story-intro-${storyLevel}`}
                                         className={styles.storyVideo}
                                         autoPlay
                                         controls={!isMobileLayout}
                                         playsInline
                                         preload={isMobileLayout ? 'auto' : 'none'}
-                                        src={`${basePath}static/kids/story/videos/${storyLevel}.mp4`}
+                                        src={resolveKidsUrl(`${basePath}static/kids/story/videos/${storyLevel}.mp4`)}
                                         onLoadedMetadata={event => {event.currentTarget.playbackRate = 1.05; event.currentTarget.preservesPitch = true; event.currentTarget.webkitPreservesPitch = true; if (isMobileLayout) {const playing = event.currentTarget.play(); playing && playing.catch(() => {});}}}
                                         onClick={isMobileLayout ? event => {const playing = event.currentTarget.play(); playing && playing.catch(() => {});} : undefined}
                                         onError={() => {setStoryVideoError(true); setStoryIntroVideoDone(true); speakStory(STORY_WORLDS[storyLevel - 1].story);}}
@@ -1630,14 +1700,14 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                             <header className={styles.storyIntroHeader}><p className={styles.storyEyebrow}>¡AVENTURA COMPLETADA!</p><h2>El Faro del Cielo</h2></header>
                             <div className={styles.storyIntroContent}>
                                 {!finalVideoError ? (
-                                    <video
+                                    <StoryVideo
                                         key={finalVideoStep}
                                         className={styles.storyVideo}
                                         autoPlay
                                         controls
                                         playsInline
                                         preload="auto"
-                                        src={`${basePath}static/kids/story/videos/${FINAL_VIDEO_FILES[finalVideoStep]}`}
+                                        src={resolveKidsUrl(`${basePath}static/kids/story/videos/${FINAL_VIDEO_FILES[finalVideoStep]}`)}
                                         onEnded={handleStoryFinalEnded}
                                         onError={() => {
                                             if (finalVideoStep < FINAL_VIDEO_FILES.length - 1) {
@@ -1669,7 +1739,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                 )}
                 {mode === 'story' && storyScreen === 'scores' && (
                     <div className={styles.storyRoute}>
-                        <img className={styles.storyRouteImage} src={`${basePath}static/kids/story/route.jpg`} alt="Mapa de la aventura" />
+                        <img className={styles.storyRouteImage} src={resolveKidsUrl(`${basePath}static/kids/story/route.jpg`)} alt="Mapa de la aventura" />
                         <section className={styles.storyScorePanel} aria-label="Puntuación de la aventura">
                             <h2>🏆 Mis puntos</h2>
                             <label htmlFor="storyStudentName">Mi nombre (opcional)</label>
@@ -1771,7 +1841,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                         <section className={styles.mobileStoryHero} aria-labelledby="mobileStoryTitle">
                             <div className={styles.mobileStoryBrand}><img src={logoUrl} alt="STBlock Kids" /><span>📖 HISTORIA</span></div>
                             <div className={styles.mobileStoryAdventureContent}>
-                                <div className={styles.mobileStoryMascot} aria-hidden="true"><img src={`${basePath}static/kids/stblock-kids-character.svg`} alt="" /></div>
+                                <div className={styles.mobileStoryMascot} aria-hidden="true"><img src={resolveKidsUrl(`${basePath}static/kids/stblock-kids-character.svg`)} alt="" /></div>
                                 {mobileStoryProjectExists && !mobileSavedStory ? (
                                     <div className={styles.mobileStoryLoading}><span>✨</span><strong>Buscando tu aventura guardada…</strong></div>
                                 ) : mobileSavedStory ? (
