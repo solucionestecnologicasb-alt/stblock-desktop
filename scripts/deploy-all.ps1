@@ -30,7 +30,8 @@ param(
     [switch] $SkipGitPush,
     [switch] $SkipReleasePublish,
     [switch] $SkipPluginCopy,
-    [switch] $SkipGitCommit
+    [switch] $SkipGitCommit,
+    [switch] $SkipDebDownload
 )
 
 $ErrorActionPreference = 'Stop'
@@ -211,6 +212,123 @@ function Ensure-UpdaterMetadata {
     Write-JsonFile -Path (Join-Path $AssetDir 'latest.json') -Value $latest -Depth 10
     Write-OK "latest.json generado para $($Installer.Name)"
 }
+function Get-SourceRepo {
+    param([string] $Root)
+    $url = (git -C $Root remote get-url origin 2>$null)
+    if ($url -match 'github\.com[:/](?<owner>[^/]+)/(?<repo>[^/]+?)(?:\.git)?$') {
+        return "$($Matches.owner)/$($Matches.repo)"
+    }
+    return 'solucionestecnologicasb-alt/stblock-desktop'
+}
+
+function Get-WorkflowRun {
+    param(
+        [string] $Workflow,
+        [string] $Tag,
+        [string] $CommitSha,
+        [string] $SourceRepo,
+        [string[]] $ExcludeIds = @(),
+        [datetime] $NotBefore = [datetime]::MinValue
+    )
+    $raw = gh run list --repo $SourceRepo --workflow $Workflow --limit 40 --json databaseId,headBranch,headSha,status,conclusion,event,createdAt,url 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $raw) { return $null }
+    # En PowerShell 5.1, ConvertFrom-Json emite el array como un unico objeto:
+    # hay que guardarlo antes de filtrar para que el pipeline lo enumere.
+    $parsed = $raw | ConvertFrom-Json
+    if (-not $parsed) { return $null }
+    $runs = $parsed | Where-Object {
+        $ExcludeIds -notcontains ([string] $_.databaseId) -and
+        ([datetime] $_.createdAt) -ge $NotBefore -and
+        $_.headSha -eq $CommitSha -and (
+            ($_.event -eq 'push' -and $_.headBranch -eq $Tag) -or
+            $_.event -eq 'workflow_dispatch'
+        )
+    } | Sort-Object -Property createdAt -Descending
+    return ($runs | Select-Object -First 1)
+}
+
+function Wait-BuildRun {
+    param(
+        [string] $Workflow,
+        [string] $Tag,
+        [string] $CommitSha,
+        [string] $SourceRepo,
+        [string[]] $ExcludeIds = @(),
+        [datetime] $NotBefore = [datetime]::MinValue,
+        [int] $FindTimeoutSeconds = 180,
+        [int] $RunTimeoutMinutes = 60
+    )
+
+    $findDeadline = (Get-Date).AddSeconds($FindTimeoutSeconds)
+    $run = $null
+    while ((Get-Date) -lt $findDeadline) {
+        $run = Get-WorkflowRun -Workflow $Workflow -Tag $Tag -CommitSha $CommitSha -SourceRepo $SourceRepo -ExcludeIds $ExcludeIds -NotBefore $NotBefore
+        if ($run) { break }
+        Start-Sleep -Seconds 10
+    }
+    if (-not $run) { return $null }
+
+    Write-Host "Run encontrado: $($run.url)" -ForegroundColor Cyan
+    $deadline = (Get-Date).AddMinutes($RunTimeoutMinutes)
+    while ((Get-Date) -lt $deadline) {
+        $stateRaw = gh run view ([string] $run.databaseId) --repo $SourceRepo --json status,conclusion,url 2>$null
+        if ($LASTEXITCODE -eq 0 -and $stateRaw) {
+            $state = $stateRaw | ConvertFrom-Json
+            if ($state.status -eq 'completed') {
+                return [pscustomobject]@{
+                    databaseId = $run.databaseId
+                    status = $state.status
+                    conclusion = $state.conclusion
+                    url = if ($state.url) { $state.url } else { $run.url }
+                }
+            }
+        }
+        Write-Host "  Build .deb en curso... $((Get-Date).ToString('HH:mm:ss'))"
+        Start-Sleep -Seconds 30
+    }
+    return [pscustomobject]@{
+        databaseId = $run.databaseId
+        status = 'timeout'
+        conclusion = 'timeout'
+        url = $run.url
+    }
+}
+
+function Save-BuildDeb {
+    param(
+        [string] $RunId,
+        [string] $SourceRepo,
+        [string] $Version
+    )
+
+    $downloadDir = Join-Path ([System.IO.Path]::GetTempPath()) "stblock-deb-$Version"
+    $downloaded = $false
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        if (Test-Path -LiteralPath $downloadDir) {
+            Remove-Item -LiteralPath $downloadDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
+        Write-Host "Descargando artefacto .deb (~500 MB, intento $attempt de 3)..."
+        gh run download $RunId --repo $SourceRepo --name 'stblock-chromebook-deb' --dir $downloadDir
+        if ($LASTEXITCODE -eq 0) {
+            $downloaded = $true
+            break
+        }
+        Write-Warn "La descarga fallo; reintentando en 10 segundos."
+        Start-Sleep -Seconds 10
+    }
+    if (-not $downloaded) {
+        Fail "No se pudo descargar el artefacto 'stblock-chromebook-deb' del run $RunId tras 3 intentos."
+    }
+
+    $deb = Get-ChildItem -LiteralPath $downloadDir -Filter '*.deb' -File -Recurse -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if (-not $deb) {
+        Fail "El artefacto del run $RunId no contiene ningun archivo .deb."
+    }
+    return $deb
+}
+
 $RootDir = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $PackagePath = Join-Path $RootDir 'package.json'
 $TauriConfigPath = Join-Path $RootDir 'src-tauri\tauri.conf.json'
@@ -394,8 +512,9 @@ if (-not $SkipPluginCopy) {
         Write-Warn "No existe STBlock.apk en el plugin; se preserva sin compilar."
     }
 
-    # Paquete Linux .deb (Debian / Ubuntu / Chromebook)
-    $debInstaller = Get-ChildItem -Path (Join-Path $RootDir 'src-tauri\target\release\bundle\deb'), (Join-Path $RootDir 'dist-linux') -Filter '*.deb' -Recurse -File -ErrorAction SilentlyContinue |
+    # Paquete Linux .deb (Debian / Ubuntu / Chromebook). Solo de la version
+    # desplegada: si hay un .deb viejo en la carpeta no debe reemplazar al nuevo.
+    $debInstaller = Get-ChildItem -Path (Join-Path $RootDir 'src-tauri\target\release\bundle\deb'), (Join-Path $RootDir 'dist-linux'), (Join-Path $RootDir 'dist-chromebook') -Filter "STBlock_${version}_amd64.deb" -Recurse -File -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
@@ -454,6 +573,103 @@ if (-not $SkipGitCommit) {
     }
 } else {
     Write-Warn "Commit/tag/push saltados por parametro"
+}
+
+# El .deb se compila en GitHub Actions (ubuntu-22.04) al empujar el tag. Antes
+# de publicar la policy esperamos ese build, descargamos el artefacto y lo
+# dejamos disponible en dist-chromebook, en los artefactos del release (nombre
+# exacto que espera policy.json) y en los assets del plugin WordPress.
+$debPackage = $null
+if (-not $SkipDebDownload) {
+    Write-Step "Obteniendo paquete Linux .deb"
+    $sourceRepo = Get-SourceRepo -Root $RootDir
+    $canonicalDebName = "STBlock_${version}_amd64.deb"
+
+    if (-not $SkipGitPush) {
+        # El workflow clona vendor/scratchjr-reborn en el runner. Si el commit
+        # del submódulo no esta publicado, el build falla con ENOENT tras varios
+        # minutos; mejor detectarlo antes de esperar.
+        $submodulePath = Join-Path $RootDir 'vendor\scratchjr-reborn'
+        if (Test-Path -LiteralPath (Join-Path $submodulePath '.git')) {
+            $submoduleDirty = git -C $submodulePath status --porcelain --untracked-files=no 2>$null
+            if ($submoduleDirty) {
+                Fail "El submodulo vendor/scratchjr-reborn tiene cambios sin commitear. El .deb se compila desde el commit publicado, asi que esos cambios no se incluiran. Haz commit y push al fork (rama stblock-2.14.1) antes del deploy."
+            }
+            # Actualizar refs remotas por si el push se hizo fuera de este repo.
+            git -C $submodulePath fetch fork --quiet 2>$null | Out-Null
+            $submoduleHead = (git -C $submodulePath rev-parse HEAD 2>$null).Trim()
+            $remoteContains = git -C $submodulePath branch -r --contains $submoduleHead 2>$null
+            if (-not $remoteContains) {
+                Fail "El submodulo vendor/scratchjr-reborn apunta a $submoduleHead, que no esta publicado en su remoto. Haz commit y push al fork (rama stblock-2.14.1) antes del deploy; si no, el workflow no podra clonarlo."
+            }
+        }
+
+        $commitSha = (git -C $RootDir rev-parse HEAD).Trim()
+        # Ignorar runs anteriores a este deploy (p. ej. un tag reutilizado con
+        # -Bump none o un build fallido de ayer): en ese caso se lanza uno nuevo.
+        $debWaitSince = (Get-Date).AddMinutes(-2)
+        Write-Host "Esperando el build .deb del tag $tag en GitHub Actions..."
+        $run = Wait-BuildRun -Workflow 'build-chromebook.yml' -Tag $tag -CommitSha $commitSha -SourceRepo $sourceRepo -NotBefore $debWaitSince
+
+        if (-not $run) {
+            Write-Warn "No se encontro un run del tag $tag; lanzando el workflow manualmente."
+            $existingIds = @()
+            $existingRaw = gh run list --repo $sourceRepo --workflow 'build-chromebook.yml' --limit 40 --json databaseId 2>$null
+            if ($LASTEXITCODE -eq 0 -and $existingRaw) {
+                $existingParsed = $existingRaw | ConvertFrom-Json
+                $existingIds = @($existingParsed | ForEach-Object { [string] $_.databaseId })
+            }
+            $branch = (git -C $RootDir rev-parse --abbrev-ref HEAD).Trim()
+            gh workflow run build-chromebook.yml --repo $sourceRepo --ref $branch -f publish_release=false
+            if ($LASTEXITCODE -ne 0) {
+                Fail "No se pudo lanzar el workflow build-chromebook.yml."
+            }
+            $run = Wait-BuildRun -Workflow 'build-chromebook.yml' -Tag $tag -CommitSha $commitSha -SourceRepo $sourceRepo -ExcludeIds $existingIds -NotBefore $debWaitSince
+        }
+
+        if (-not $run) {
+            Fail "No se pudo localizar el build .deb en GitHub Actions para $tag."
+        }
+        if ($run.conclusion -ne 'success') {
+            Write-Host "Logs del fallo: gh run view $($run.databaseId) --repo $sourceRepo --log-failed" -ForegroundColor Yellow
+            Fail "El build .deb termino con estado '$($run.conclusion)': $($run.url)"
+        }
+
+        Write-OK "Build .deb completado: $($run.url)"
+        $debPackage = Save-BuildDeb -RunId $run.databaseId -SourceRepo $sourceRepo -Version $version
+        Write-OK "Paquete descargado: $($debPackage.FullName)"
+    } else {
+        $debPackage = Get-ChildItem -Path (Join-Path $RootDir 'src-tauri\target\release\bundle\deb'), (Join-Path $RootDir 'dist-linux'), (Join-Path $RootDir 'dist-chromebook') -Filter $canonicalDebName -Recurse -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+        if ($debPackage) {
+            Write-OK "Git push saltado; usando .deb local: $($debPackage.FullName)"
+        } else {
+            Write-Warn "Git push saltado y no hay .deb local para la version $version."
+        }
+    }
+
+    if ($debPackage) {
+        $distDebDir = Join-Path $RootDir 'dist-chromebook'
+        if (-not (Test-Path -LiteralPath $distDebDir)) {
+            New-Item -ItemType Directory -Path $distDebDir -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $debPackage.FullName -Destination (Join-Path $distDebDir $canonicalDebName) -Force
+        Write-OK "Paquete guardado en $distDebDir\$canonicalDebName"
+
+        if (Test-Path -LiteralPath $releaseAssetDir) {
+            Copy-Item -LiteralPath $debPackage.FullName -Destination (Join-Path $releaseAssetDir $canonicalDebName) -Force
+            Write-OK "Paquete copiado a los artefactos de release: $canonicalDebName"
+        }
+
+        if (-not $SkipPluginCopy -and (Test-Path -LiteralPath $PluginAssetsDir)) {
+            $pluginDeb = Join-Path $PluginAssetsDir 'STBlock-Linux.deb'
+            Copy-Item -LiteralPath $debPackage.FullName -Destination $pluginDeb -Force
+            Write-OK "Paquete Linux copiado a la web del plugin: $pluginDeb"
+        }
+    }
+} else {
+    Write-Warn "Descarga del .deb saltada por parametro"
 }
 
 if (-not $SkipReleasePublish) {

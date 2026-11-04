@@ -65,16 +65,10 @@ jobs:
           # sus propias dependencias (esbuild).
           npm --prefix vendor/scratchjr-reborn ci
 
-      - name: Descargar arduino-cli para Linux 64-bit
+      - name: Preparar bundle de Arduino (AVR + librerías)
         run: |
-          mkdir -p src-tauri/tools/Arduino
-          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR="src-tauri/tools/Arduino" sh
-          chmod +x src-tauri/tools/Arduino/arduino-cli
-          mkdir -p tools/Arduino
-          cp src-tauri/tools/Arduino/arduino-cli tools/Arduino/arduino-cli
-          if [ -d "tools/Arduino/packages" ]; then
-            cp -rn tools/Arduino/* src-tauri/tools/Arduino/ 2>/dev/null || true
-          fi
+          chmod +x scripts/prepare-arduino-bundle.sh
+          ./scripts/prepare-arduino-bundle.sh
 
       - name: Compilar backend Node SEA para Linux
         run: |

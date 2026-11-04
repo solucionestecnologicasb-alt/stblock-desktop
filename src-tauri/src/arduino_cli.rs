@@ -119,6 +119,107 @@ fn bundled_arduino_tools_dir(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
     None
 }
 
+/// Board manager URLs for cores that are not bundled. On Linux they allow
+/// installing additional cores (ESP32, ESP8266, RP2040, ...) when the machine
+/// has internet; the AVR core used offline is already in the bundle.
+const ADDITIONAL_BOARD_URLS: &[&str] = &[
+    "https://espressif.github.io/arduino-esp32/package_esp32_index.json",
+    "https://arduino.esp8266.com/stable/package_esp8266com_index.json",
+    "https://raw.githubusercontent.com/sparkfun/Arduino_Boards/master/IDE_Board_Manager/package_sparkfun_index.json",
+    "http://dl.sipeed.com/MAIX/Maixduino/package_Maixduino_k210_index.json",
+    "https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json",
+    "http://drazzy.com/package_drazzy.com_index.json",
+];
+
+#[cfg(target_os = "linux")]
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let target = dst.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir_recursive(&path, &target)?;
+        } else {
+            fs::copy(&path, &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// On Linux the bundled resources live in a root-owned directory
+/// (`/usr/lib/STBlock`), so arduino-cli cannot write there and `core install`
+/// fails. We use a per-user writable data dir seeded from the bundle:
+///   - every vendor under `packages/` is symlinked (or copied if the symlink
+///     fails) so the bundled cores appear as installed;
+///   - index JSON files are copied because `core update-index` must be able
+///     to rewrite them when there is internet.
+///
+/// Copying the whole packages tree (~200 MB for AVR) on first launch would be
+/// slow and waste disk; symlinks use the bundled core directly and keep
+/// working after the .deb is upgraded.
+#[cfg(target_os = "linux")]
+fn writable_data_dir(tools_arduino: &std::path::Path, user_dir: &std::path::Path) -> PathBuf {
+    let data_dir = user_dir.join("data");
+    let packages_dir = data_dir.join("packages");
+    let _ = fs::create_dir_all(&packages_dir);
+
+    if let Ok(entries) = fs::read_dir(tools_arduino.join("packages")) {
+        for entry in entries.flatten() {
+            let src = entry.path();
+            if !src.is_dir() {
+                continue;
+            }
+            let dst = packages_dir.join(entry.file_name());
+            if fs::symlink_metadata(&dst).is_ok() {
+                if dst.exists() {
+                    continue;
+                }
+                // Broken link (e.g. after reinstalling the .deb): recreate it.
+                let _ = fs::remove_file(&dst);
+            }
+            if std::os::unix::fs::symlink(&src, &dst).is_err() {
+                let _ = copy_dir_recursive(&src, &dst);
+            }
+        }
+    }
+
+    if let Ok(entries) = fs::read_dir(tools_arduino) {
+        for entry in entries.flatten() {
+            let src = entry.path();
+            if !src.is_file() {
+                continue;
+            }
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            let is_index = name_str.ends_with(".json")
+                && (name_str.starts_with("package_") || name_str.as_ref() == "library_index.json");
+            if !is_index {
+                continue;
+            }
+            let dst = data_dir.join(name_str.as_ref());
+            let needs_copy = match (fs::metadata(&src), fs::metadata(&dst)) {
+                (Ok(src_meta), Ok(dst_meta)) => match (src_meta.modified(), dst_meta.modified()) {
+                    (Ok(src_time), Ok(dst_time)) => src_time > dst_time,
+                    _ => src_meta.len() != dst_meta.len(),
+                },
+                (Ok(_), Err(_)) => true,
+                _ => false,
+            };
+            if needs_copy {
+                let _ = fs::copy(&src, &dst);
+            }
+        }
+    }
+
+    data_dir
+}
+
+#[cfg(not(target_os = "linux"))]
+fn writable_data_dir(tools_arduino: &std::path::Path, _user_dir: &std::path::Path) -> PathBuf {
+    tools_arduino.to_path_buf()
+}
+
 /// Build a runtime arduino-cli config file whose `directories` point to the
 /// bundled Arduino tools (preinstalled cores + package indexes) and to writable
 /// per-user folders for downloads/user libraries.
@@ -138,14 +239,29 @@ fn get_arduino_config_path(app_handle: &tauri::AppHandle) -> Option<String> {
     let _ = fs::create_dir_all(&user_dir);
     let _ = fs::create_dir_all(&staging_dir);
 
+    // On Linux this is a writable copy/symlink view of the bundled data dir.
+    let data_dir = writable_data_dir(&tools_arduino, &user_dir);
+
     // YAML single-quoted strings: backslashes stay literal; ' is doubled.
-    let data_path = tools_arduino.to_string_lossy().replace('\'', "''");
+    let data_path = data_dir.to_string_lossy().replace('\'', "''");
     let downloads_path = staging_dir.to_string_lossy().replace('\'', "''");
     let user_path = user_dir.to_string_lossy().replace('\'', "''");
 
+    // Windows keeps the previous behaviour (no extra indexes); Linux gets the
+    // board manager URLs so non-bundled cores can be installed online.
+    let additional_urls = if cfg!(target_os = "linux") {
+        let mut block = String::from("    additional_urls:");
+        for url in ADDITIONAL_BOARD_URLS {
+            block.push_str(&format!("\n        - '{}'", url));
+        }
+        block
+    } else {
+        String::from("    additional_urls: []")
+    };
+
     let config = format!(
         r#"board_manager:
-    additional_urls: []
+{additional}
 build_cache:
     compilations_before_purge: 10
     ttl: 720h0m0s
@@ -171,6 +287,7 @@ sketch:
 updater:
     enable_notification: false
 "#,
+        additional = additional_urls,
         data = data_path,
         downloads = downloads_path,
         user = user_path

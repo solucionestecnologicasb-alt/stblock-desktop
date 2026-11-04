@@ -28,16 +28,8 @@ if command -v apt-get &> /dev/null; then
     fi
 fi
 
-# 2. Descargar o verificar arduino-cli para Linux
-ARDUINO_DIR="$ROOT_DIR/src-tauri/tools/Arduino"
-mkdir -p "$ARDUINO_DIR"
-if [ ! -f "$ARDUINO_DIR/arduino-cli" ]; then
-    echo "Descargando arduino-cli para Linux 64-bit..."
-    curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR="$ARDUINO_DIR" sh
-    chmod +x "$ARDUINO_DIR/arduino-cli"
-    mkdir -p "$ROOT_DIR/tools/Arduino"
-    cp "$ARDUINO_DIR/arduino-cli" "$ROOT_DIR/tools/Arduino/arduino-cli"
-fi
+# 2. Preparar arduino-cli + core AVR + librerías dentro del bundle
+bash "$ROOT_DIR/scripts/prepare-arduino-bundle.sh"
 
 # 3. Compilar backend Node.js
 bash "$ROOT_DIR/scripts/build-backends-linux.sh"
