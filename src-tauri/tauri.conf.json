@@ -1,7 +1,7 @@
 {
     "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName":  "STBlock",
-    "version":  "0.1.53",
+    "version":  "0.1.56",
     "identifier":  "stblock.app",
     "build":  {
                   "frontendDist":  "../scratch-gui/build",

@@ -1,3 +1,4 @@
 [submodule "vendor/scratchjr-reborn"]
 	path = vendor/scratchjr-reborn
-	url = https://github.com/richiesamlie/ScratchJr-Desktop-Reborn.git
+	url = https://github.com/jeasonbello95/ScratchJr-Desktop-Reborn.git
+	branch = stblock-2.14.1

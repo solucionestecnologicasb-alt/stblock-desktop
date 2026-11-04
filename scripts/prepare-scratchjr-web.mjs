@@ -7,6 +7,8 @@ const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const webDist = resolve(repoRoot, 'vendor/scratchjr-reborn/dist-web');
 const target = resolve(repoRoot, 'scratch-gui/static/scratchjr');
 const kidsAssets = resolve(repoRoot, 'scratch-gui/static/kids');
+const sqlDist = resolve(repoRoot, 'vendor/scratchjr-reborn/node_modules/sql.js/dist');
+const sqlAsmSource = resolve(sqlDist, 'sql-asm.js');
 const rootFiles = [
   'hostClient.js',
   'webav.js',
@@ -24,11 +26,22 @@ for (const file of [...rootFiles, 'app/index.html']) {
   }
 }
 
+try {
+  await readFile(sqlAsmSource);
+} catch (_error) {
+  throw new Error(`Falta ${sqlAsmSource}. Ejecuta npm install en vendor/scratchjr-reborn.`);
+}
+
 await rm(target, {recursive: true, force: true});
 await mkdir(target, {recursive: true});
 for (const file of rootFiles) {
   await cp(resolve(webDist, file), resolve(target, file));
 }
+// Chrome 68 (WebView de las Chromebooks ARC++) no puede decodificar el WASM
+// de SQLite: sql-wasm.wasm usa bulk memory (sección DataCount), que llegó en
+// Chrome 75. El build asm.js de sql.js es JavaScript puro y expone la misma
+// API (initSqlJs), así que lo usamos como motor de base de datos de Kids.
+await cp(sqlAsmSource, resolve(target, 'sql-asm.js'));
 await cp(resolve(webDist, 'app'), resolve(target, 'app'), {recursive: true});
 for (const file of [
   'stblock-kids-bridge.js',
@@ -50,11 +63,29 @@ const tauriMarker = 'var isTauri = Boolean(';
 if (!hostClient.includes(tauriMarker)) {
   throw new Error('El selector del host Tauri de ScratchJr cambió; actualiza este adaptador antes de integrar la nueva versión.');
 }
+const sqlWasmLoader = "load('../sql-wasm.js');";
+const sqlAsmLoader = "load('../sql-asm.js');";
+if (!hostClient.includes(sqlWasmLoader)) {
+  throw new Error('El cargador de sql.js de ScratchJr cambió; actualiza este adaptador antes de integrar la nueva versión.');
+}
 await writeFile(
   hostClientPath,
-  hostClient.replace(/var isTauri = Boolean\([\s\S]*?\n    \);/, 'var isTauri = false;'),
+  hostClient
+    .replace(/var isTauri = Boolean\([\s\S]*?\n    \);/, 'var isTauri = false;')
+    .replace(sqlWasmLoader, sqlAsmLoader),
   'utf8'
 );
+
+// El service worker sólo se registra fuera de STBlock, pero debe precachear el
+// motor que realmente se carga para que la PWA siga funcionando offline.
+const swPath = resolve(target, 'app/sw.js');
+let swSource = await readFile(swPath, 'utf8');
+if (swSource.includes("'../sql-wasm.js',")) {
+  swSource = swSource
+    .replace("'../sql-wasm.js',", "'../sql-asm.js',")
+    .replace(/^\s*'\.\.\/sql-wasm\.wasm',\s*$/m, '');
+  await writeFile(swPath, swSource, 'utf8');
+}
 
 // La copia embebida siempre utiliza el backend web. La navegación de ScratchJr
 // cambia de index.html a home.html/editor.html y no conserva query parameters.
@@ -70,6 +101,16 @@ for (const page of ['index.html', 'home.html', 'editor.html', 'gettingstarted.ht
   const pagePath = resolve(target, 'app', page);
   let html = await readFile(pagePath, 'utf8');
   html = html.replace(/^\s*<link rel="preload" href="\.\.\/sql-wasm\.wasm"[^>]*>\s*$/m, '');
+  // Chrome 68 (WebView de las Chromebooks ARC++) no conoce
+  // 'wasm-unsafe-eval' (Chrome 97): en CSP2 el WebAssembly y el eval de
+  // sql.js sólo se permiten con 'unsafe-eval'. Sin esto Kids se queda en
+  // blanco al fallar initSqlJs. En navegadores modernos no cambia nada.
+  if (!html.includes("'wasm-unsafe-eval' 'unsafe-eval'")) {
+    html = html.replace(
+      "script-src 'self' 'wasm-unsafe-eval'",
+      "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'"
+    );
+  }
   html = html.replace(/src=(["'])\.\.\/hostClient\.js(?:\?[^"']*)?\1/, (_match, quote) => `src=${quote}../hostClient.js?v=${rendererRevision}${quote}`);
   html = html.replace(/src="(\.\/)?dist\/app\.bundle\.js(?:\?[^\"]*)?"/, (_match, relativePrefix = '') => `src="${relativePrefix}dist/app.bundle.js?v=${rendererRevision}"`);
   html = html.replace('</head>', '    <link rel="stylesheet" href="stblock-kids-workspace.css">\n    <script src="stblock-kids-bridge.js" defer></script>\n</head>');

@@ -19,6 +19,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # build:gui ejecuta prepare:scratchjr-web, que compila
+          # vendor/scratchjr-reborn. Sin el submódulo el build falla con ENOENT.
+          submodules: recursive
 
       - name: Instalar Node.js
         uses: actions/setup-node@v4

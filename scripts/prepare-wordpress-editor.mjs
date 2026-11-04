@@ -31,6 +31,33 @@ await rm(destination, { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
 await cp(source, destination, { recursive: true, force: true });
 
+// The WordPress host does not expose the development-only /api/circuit-state
+// disk-sync endpoint. Keep Electronics Lab persistence in localStorage and the
+// existing parent-frame bridge, and avoid its repeated 404 polling requests.
+const electronicsAssets = join(destination, "static", "electronics-lab", "assets");
+try {
+  await stat(electronicsAssets);
+  const entries = await readdir(electronicsAssets, { withFileTypes: true });
+  const bundles = entries.filter((entry) => entry.isFile() && /^index-.*\.js$/i.test(entry.name));
+  if (bundles.length === 0) throw new Error(`No se encontró el bundle de Electronics Lab en ${electronicsAssets}.`);
+
+  let patchedBundles = 0;
+  for (const bundle of bundles) {
+    const bundlePath = join(electronicsAssets, bundle.name);
+    const original = await readFile(bundlePath, "utf8");
+    const signature = /async function Rb\(c\)\{[\s\S]*?\}function sW\(c\)\{[\s\S]*?\}function dh\(c\)/;
+    if (!signature.test(original)) {
+      throw new Error(`El bundle ${bundle.name} cambió; no se aplicó el ajuste de circuit-state. Revisa la lógica antes de desplegar.`);
+    }
+    const replacement = `async function Rb(c){if(_b)return!1;try{const e=JSON.stringify(c);localStorage.setItem("electronics_lab_circuit_state_file",e);typeof window<"u"&&window.parent&&window.parent.postMessage({type:"STBLOCK_SAVE_CIRCUIT_FILE",filename:"circuit-state.json",payload:c},"*");return!0}catch{return!1}}function sW(c){return()=>{}}function dh(c)`;
+    await writeFile(bundlePath, original.replace(signature, replacement), "utf8");
+    patchedBundles += 1;
+  }
+  console.log(`[wordpress-editor] Electronics Lab preparado: guardado local/bridge habilitado, polling /api/circuit-state desactivado (${patchedBundles} bundle${patchedBundles === 1 ? "" : "s"}).`);
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
+
 const rootOnlyArtifacts = new Set([
   "blocks-only.html",
   "blocksonly.js",

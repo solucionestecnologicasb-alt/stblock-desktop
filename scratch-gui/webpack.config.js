@@ -65,9 +65,55 @@ const baseConfig = new ScratchWebpackConfigBuilder(
     })
     .addModuleRule({
         test: /\.(ttf|woff|woff2|eot)$/,
+        exclude: /scratch-render-fonts/,
         type: 'asset/resource',
         generator: {
             filename: 'static/fonts/[name].[hash][ext]'
+        }
+    })
+    .addModuleRule({
+        // scratch-render-fonts inlines its TTFs with the `base64-loader!` prefix so
+        // they can be injected as @font-face data URIs. Asset modules ignore inline
+        // loaders, which turned those data URIs into invalid "data:...;base64,<url>"
+        // requests. Keep these files as JavaScript so the inline loader still runs.
+        test: /scratch-render-fonts[\\/].*\.(ttf|otf)$/,
+        type: 'javascript/auto'
+    })
+    .addModuleRule({
+        // Chromebooks (ARC++) ship Android System WebView 68, and the @tauri-apps
+        // packages that scratch-gui imports are published with optional chaining
+        // and nullish coalescing (ES2020). The base Babel rule excludes
+        // node_modules, so those files reached the bundle untranspiled and the
+        // WebView aborted while evaluating gui.js (blank screen). Transpile them
+        // down to Chrome 68 while keeping ES modules for webpack.
+        test: /\.[cm]?js$/,
+        include: /[\\/]@tauri-apps[\\/]/,
+        use: {
+            loader: 'babel-loader',
+            options: {
+                babelrc: false,
+                configFile: false,
+                presets: [['@babel/preset-env', {
+                    targets: {chrome: '68'},
+                    modules: false
+                }]]
+            }
+        }
+    })
+    .addModuleRule({
+        // Chrome 68 del WebView de la Chromebook no entiende `inset`,
+        // `dvh`, `env(safe-area-inset-*)` ni `min()/max()/clamp()`. El plugin
+        // sólo antepone declaraciones de respaldo, así que los navegadores
+        // modernos siguen usando los valores originales. Se ejecuta antes de
+        // la cadena postcss del builder (que resuelve @import y variables).
+        test: /\.css$/,
+        use: {
+            loader: 'postcss-loader',
+            options: {
+                postcssOptions: {
+                    plugins: [require('./scripts/postcss-chrome68-legacy.cjs')]
+                }
+            }
         }
     })
     .addPlugin(new webpack.DefinePlugin({

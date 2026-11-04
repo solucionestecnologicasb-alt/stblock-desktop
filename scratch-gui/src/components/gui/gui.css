@@ -11,6 +11,108 @@
     background-color: $ui-primary;
 }
 
+.mobile-project-name-backdrop {
+    position: fixed;
+    z-index: 100000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(13, 29, 20, 0.58);
+    backdrop-filter: blur(5px);
+}
+
+.mobile-project-name-dialog {
+    width: min(420px, 100%);
+    padding: 26px;
+    border: 1px solid #d7eadb;
+    border-radius: 24px;
+    background: linear-gradient(155deg, #ffffff, #f2faf4);
+    box-shadow: 0 24px 70px rgba(12, 35, 20, 0.3);
+    color: #193b26;
+    text-align: center;
+}
+
+.mobile-project-name-icon {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 12px;
+    border-radius: 17px;
+    background: #e1f5e5;
+    color: #238649;
+    font-size: 28px;
+}
+
+.mobile-project-name-dialog h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.mobile-project-name-dialog p {
+    margin: 8px 0 18px;
+    color: #607568;
+    font-size: 14px;
+}
+
+.mobile-project-name-dialog input {
+    width: 100%;
+    min-height: 50px;
+    padding: 0 15px;
+    border: 2px solid #c8e3ce;
+    border-radius: 14px;
+    outline: none;
+    background: white;
+    color: #193b26;
+    font: inherit;
+    font-size: 16px;
+    box-sizing: border-box;
+}
+
+.mobile-project-name-dialog input:focus {
+    border-color: #37a35d;
+    box-shadow: 0 0 0 3px rgba(55, 163, 93, 0.15);
+}
+
+.mobile-project-name-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.mobile-project-name-actions button {
+    min-width: 104px;
+    min-height: 44px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 13px;
+    font: inherit;
+    font-weight: 750;
+}
+
+.mobile-project-cancel {
+    background: #eaf2ec;
+    color: #486353;
+}
+
+.mobile-project-create {
+    background: linear-gradient(135deg, #34a85f, #168044);
+    color: #fff;
+    box-shadow: 0 5px 12px rgba(27, 132, 68, 0.22);
+}
+
+@media (max-height: 440px) and (orientation: landscape) {
+    .mobile-project-name-dialog { padding: 16px 20px; border-radius: 18px; }
+    .mobile-project-name-icon { width: 38px; height: 38px; margin-bottom: 6px; font-size: 22px; }
+    .mobile-project-name-dialog h2 { font-size: 18px; }
+    .mobile-project-name-dialog p { margin: 5px 0 10px; }
+    .mobile-project-name-dialog input { min-height: 42px; }
+    .mobile-project-name-actions { margin-top: 10px; }
+}
+
 .body-wrapper * {
     box-sizing: border-box;
 }
@@ -65,6 +167,15 @@
 .blocks-wrapper {
     flex-grow: 1;
     position: relative;
+    /* Chrome 68 (WebView antiguo) no resuelve height:100% dentro de un flex
+       item con altura automatica, por lo que el workspace de Blockly quedaba
+       con 0px de alto. Con altura explicita + flex la cadena queda definida
+       tanto en motores antiguos como modernos. */
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
 }
 
 .extension-button-container {
@@ -1091,3 +1202,238 @@ $fade-out-distance: 15px;
 
 
 
+:global(.is-mobile-app) .mobileProjectNameBackdrop {
+    position: fixed;
+    z-index: 20000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    box-sizing: border-box;
+    background: rgba(12, 29, 21, .62);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: mobile-project-modal-fade .18s ease-out;
+}
+
+:global(.is-mobile-app) .mobileProjectNameDialog {
+    position: relative;
+    width: min(440px, 100%);
+    max-height: calc(100dvh - 40px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px clamp(20px, 6vw, 34px) 24px;
+    border: 1px solid rgba(255, 255, 255, .9);
+    border-radius: 28px;
+    box-sizing: border-box;
+    background: linear-gradient(155deg, #fff 0%, #f7fcf8 100%);
+    color: #193c28;
+    text-align: center;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, .3), 0 5px 0 #d8eadd;
+    animation: mobile-project-modal-rise .22s cubic-bezier(.2,.8,.2,1);
+}
+
+:global(.is-mobile-app) .mobileProjectNameClose {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border: 1px solid #d9e8dc;
+    border-radius: 50%;
+    background: #f2f8f3;
+    color: #4d6b57;
+    font-family: inherit;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+:global(.is-mobile-app) .mobileProjectNameClose:active {
+    background: #e4f1e7;
+    color: #1f7043;
+}
+
+:global(.is-mobile-app) .mobileProjectNameIcon {
+    width: 58px;
+    height: 58px;
+    display: grid;
+    place-items: center;
+    margin: 0 0 12px;
+    border-radius: 20px;
+    background: linear-gradient(145deg, #e1f7e7, #bfeaca);
+    color: #168243;
+    font-size: 31px;
+    box-shadow: inset 0 0 0 1px #b2dfbe;
+}
+
+:global(.is-mobile-app) .mobileProjectNameEyebrow {
+    color: #348153;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .14em;
+}
+
+:global(.is-mobile-app) .mobileProjectNameDialog h2 {
+    margin: 8px 0 0;
+    color: #173d27;
+    font-size: clamp(22px, 5vw, 28px);
+    font-weight: 900;
+    line-height: 1.15;
+}
+
+:global(.is-mobile-app) .mobileProjectNameDialog > p {
+    max-width: 330px;
+    margin: 9px 0 20px;
+    color: #6d8173;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+:global(.is-mobile-app) .mobileProjectNameField {
+    width: 100%;
+    display: grid;
+    gap: 8px;
+    color: #3a6248;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+:global(.is-mobile-app) .mobileProjectNameField input {
+    width: 100%;
+    min-height: 54px;
+    padding: 0 16px;
+    border: 2px solid #d5e8d9;
+    border-radius: 16px;
+    outline: 0;
+    box-sizing: border-box;
+    background: #fff;
+    color: #173d27;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.2;
+    box-shadow: 0 3px 0 #edf4ee;
+}
+
+:global(.is-mobile-app) .mobileProjectNameField input:focus {
+    border-color: #38a65d;
+    box-shadow: 0 0 0 4px rgba(56, 166, 93, .14);
+}
+
+:global(.is-mobile-app) .mobileProjectNameFieldLabel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+:global(.is-mobile-app) .mobileProjectNameFieldLabel small {
+    color: #8aa392;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .02em;
+}
+
+:global(.is-mobile-app) .mobileProjectNameSuggestions {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 7px;
+    margin-top: 12px;
+}
+
+:global(.is-mobile-app) .mobileProjectNameSuggestions button {
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid #d7e9db;
+    border-radius: 999px;
+    background: #f4faf5;
+    color: #3d6a4d;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+:global(.is-mobile-app) .mobileProjectNameSuggestions button:active,
+:global(.is-mobile-app) .mobileProjectNameSuggestions .mobileProjectNameSuggestionActive {
+    border-color: #38a65d;
+    background: #e6f7ea;
+    color: #16763e;
+}
+
+:global(.is-mobile-app) .mobileProjectNameActions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1.25fr;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+:global(.is-mobile-app) .mobileProjectNameActions button {
+    min-height: 50px;
+    border: 1px solid #d9e8dc;
+    border-radius: 15px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 900;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+:global(.is-mobile-app) .mobileProjectCancel {
+    background: #f5f8f5;
+    color: #526a59;
+}
+
+:global(.is-mobile-app) .mobileProjectCreate {
+    border-color: #228446 !important;
+    background: linear-gradient(135deg, #2daa59, #168243) !important;
+    color: #fff !important;
+    box-shadow: 0 4px 0 #116d36;
+}
+
+:global(.is-mobile-app) .mobileProjectCreate:disabled {
+    border-color: #cbdcce !important;
+    background: #d6e4d9 !important;
+    color: #7d9184 !important;
+    box-shadow: none !important;
+    cursor: default;
+    transform: none;
+}
+
+:global(.is-mobile-app) .mobileProjectNameActions button:active {
+    transform: translateY(2px);
+    box-shadow: none;
+}
+
+@keyframes mobile-project-modal-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes mobile-project-modal-rise {
+    from { opacity: 0; transform: translateY(12px) scale(.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :global(.is-mobile-app) .mobileProjectNameBackdrop,
+    :global(.is-mobile-app) .mobileProjectNameDialog {
+        animation: none;
+    }
+}

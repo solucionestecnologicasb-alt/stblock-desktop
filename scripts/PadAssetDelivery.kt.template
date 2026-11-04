@@ -1,6 +1,9 @@
 package stblock.app
 
 import android.content.Context
+import android.content.res.AssetManager
+import android.net.Uri
+import android.webkit.WebView
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.MimeTypeMap
@@ -9,67 +12,250 @@ import com.google.android.play.core.assetpacks.AssetPackManagerFactory
 import java.io.File
 import java.io.InputStream
 import java.net.URLConnection
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Serves install-time PAD files under the same static resource URLs as the web build. */
 object PadAssetDelivery {
   private const val PACK_NAME = "models3d_pack"
+  private const val DEBUG_FILE = "stblock-mobile-debug.jsonl"
+  private const val MAX_DEBUG_BYTES = 4L * 1024L * 1024L
   @Volatile private var manager: AssetPackManager? = null
-  @Volatile private var packRoot: File? = null
+  @Volatile private var appContext: Context? = null
+  private val debugLock = Any()
+  private val bootstrapInstalled = AtomicBoolean(false)
 
   fun initialize(context: Context) {
+    appContext = context.applicationContext
+    record("native", "initialized package=${context.packageName} sdk=${android.os.Build.VERSION.SDK_INT} model=${android.os.Build.MODEL}")
     try {
       manager = AssetPackManagerFactory.getInstance(context.applicationContext)
-      resolveRoot()
-    } catch (_: Exception) {
-      packRoot = null
+      val location = manager?.getPackLocation(PACK_NAME)
+      record("pad", "pack=$PACK_NAME status=${location?.packStorageMethod() ?: "not-installed"} assetsPath=${location?.assetsPath() ?: "<null>"}")
+    } catch (error: Exception) {
+      manager = null
+      record("pad", "manager-init-failed ${error.javaClass.simpleName}: ${error.message}")
     }
   }
+
+  fun record(category: String, message: String) {
+    // El archivo de diagnóstico sólo se escribe en builds debug: en release no
+    // debe consumir almacenamiento ni E/S en los dispositivos de los usuarios.
+    if (!BuildConfig.DEBUG) return
+    val context = appContext ?: return
+    try {
+      synchronized(debugLock) {
+        val directory = context.getExternalFilesDir("debug") ?: context.filesDir
+        if (!directory.exists()) directory.mkdirs()
+        val file = File(directory, DEBUG_FILE)
+        if (file.length() > MAX_DEBUG_BYTES) {
+          val previous = File(directory, "$DEBUG_FILE.1")
+          previous.delete()
+          file.renameTo(previous)
+        }
+        val safeMessage = message.replace('\n', ' ').replace('\r', ' ').take(4000)
+        file.appendText("${System.currentTimeMillis()}\t$category\t$safeMessage\n")
+      }
+    } catch (_: Exception) {}
+  }
+
+  fun installDiagnostics(webView: WebView) {
+    // El safe-area es funcional y corre siempre; las sondas de diagnóstico
+    // (DOM, Blockly, iframes) sólo se inyectan en builds debug.
+    applySafeArea(webView)
+    if (!BuildConfig.DEBUG) return
+    bootstrapInstalled.set(false)
+    webView.postDelayed({
+      applySafeArea(webView)
+      if (bootstrapInstalled.compareAndSet(false, true)) {
+        webView.evaluateJavascript(DEBUG_BOOTSTRAP, null)
+      }
+    }, 500)
+  }
+
+  /**
+   * The Android WebView reports env(safe-area-inset-*) as 0 even in edge-to-edge
+   * mode. Publish the real inset (status bar, display cutout and the mandatory
+   * gesture strip) as a CSS variable so the Kids toolbar stays tappable.
+   */
+  private fun applySafeArea(webView: WebView) {
+    try {
+      val density = webView.resources.displayMetrics.density.takeIf { it > 0f } ?: 1f
+      val insets = webView.rootWindowInsets
+      val physicalTop = when {
+        insets == null -> 0
+        android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R -> maxOf(
+          insets.getInsets(android.view.WindowInsets.Type.statusBars()).top,
+          insets.getInsets(android.view.WindowInsets.Type.displayCutout()).top,
+          insets.getInsets(android.view.WindowInsets.Type.mandatorySystemGestures()).top
+        )
+        else -> {
+          @Suppress("DEPRECATION")
+          val legacyTop = insets.systemWindowInsetTop
+          legacyTop
+        }
+      }
+      val cssTop = Math.ceil(physicalTop / density.toDouble()).toInt()
+      webView.evaluateJavascript(
+        "document.documentElement.style.setProperty('--stb-safe-top','${cssTop}px')",
+        null
+      )
+      record("pad", "safe-area top=${physicalTop}px density=$density css=${cssTop}px")
+    } catch (error: Exception) {
+      record("pad", "safe-area-failed ${error.javaClass.simpleName}: ${error.message}")
+    }
+  }
+
+  private class AssetSource(val size: Long, val open: (offset: Long, count: Long) -> InputStream)
 
   fun intercept(request: WebResourceRequest): WebResourceResponse? {
     val uri = request.url
     if (uri.path?.startsWith("/static/") != true) return null
-    val root = packRoot ?: resolveRoot() ?: return null
-    val relativePath = uri.path!!.removePrefix("/")
-    val target = File(root, relativePath).canonicalFile
-    val canonicalRoot = root.canonicalFile
-    if (!target.toPath().startsWith(canonicalRoot.toPath()) || !target.isFile) return null
+    val path = uri.path!!
+    val relativePath = path.removePrefix("/")
+    if (!relativePath.startsWith("static/") || relativePath.split('/').any { it == ".." }) {
+      record("pad-miss", "url=$uri reason=invalid-static-path")
+      return null
+    }
 
-    return try {
-      rangedResponse(target, request.requestHeaders["Range"])
+    // Preferred route: Play Asset Delivery resolves the exact on-disk offset,
+    // so Range requests for large models can be answered without buffering.
+    val pad = padSource(uri, relativePath)
+    if (pad != null) return serve(uri, relativePath, pad, request.requestHeaders["Range"], "pad-hit")
+
+    // Fallback: some Play deliveries expose the pack through AssetManager
+    // instead of a resolvable path, and the QA APK built with
+    // STBLOCK_ANDROID_TEST_APK=1 keeps static/ inside the base APK.
+    val base = baseAssetSource(uri, relativePath)
+    if (base != null) return serve(uri, relativePath, base, request.requestHeaders["Range"], "asset-hit")
+
+    record("pad-miss", "url=$uri path=$relativePath range=${request.requestHeaders["Range"] ?: "none"}")
+    return null
+  }
+
+  private fun padSource(uri: Uri, relativePath: String): AssetSource? {
+    val asset = try {
+      manager?.getAssetLocation(PACK_NAME, relativePath)
+    } catch (error: Exception) {
+      record("pad-error", "url=$uri lookup=${error.javaClass.simpleName}:${error.message}")
+      null
+    } ?: return null
+    val target = try {
+      File(asset.path()).canonicalFile
+    } catch (error: Exception) {
+      record("pad-error", "url=$uri path=${error.javaClass.simpleName}:${error.message}")
+      return null
+    }
+    if (!target.isFile) {
+      record("pad-error", "url=$uri reason=target-not-file target=$target")
+      return null
+    }
+    return AssetSource(asset.size()) { offset, count ->
+      boundedStream(target, asset.offset() + offset, count)
+    }
+  }
+
+  private fun baseAssetSource(uri: Uri, relativePath: String): AssetSource? {
+    val assets = appContext?.assets ?: return null
+    val descriptor = try {
+      assets.openFd(relativePath)
     } catch (_: Exception) {
+      null
+    }
+    if (descriptor != null) {
+      val length = descriptor.length
+      if (length >= 0L) {
+        record("asset-fd", "url=$uri path=$relativePath size=$length")
+        return AssetSource(length) { offset, count ->
+          boundedStream(descriptor.createInputStream(), offset, count)
+        }
+      }
+      try {
+        descriptor.close()
+      } catch (_: Exception) {}
+    }
+    // Compressed entries cannot report an offset/length. Stream them whole and
+    // ignore Range: those static files are requested once per session.
+    return try {
+      assets.open(relativePath, AssetManager.ACCESS_STREAMING).close()
+      record("asset-stream", "url=$uri path=$relativePath size=unknown")
+      AssetSource(-1L) { _, _ -> assets.open(relativePath, AssetManager.ACCESS_STREAMING) }
+    } catch (error: Exception) {
+      record("pad-miss", "url=$uri path=$relativePath base=${error.javaClass.simpleName}")
       null
     }
   }
 
-  @Synchronized private fun resolveRoot(): File? {
-    packRoot?.let { if (it.isDirectory) return it }
+  private fun serve(
+    uri: Uri,
+    relativePath: String,
+    source: AssetSource,
+    rangeHeader: String?,
+    hitCategory: String
+  ): WebResourceResponse? {
     return try {
-      val assetPath = manager?.getPackLocation(PACK_NAME)?.assetsPath() ?: return null
-      File(assetPath).canonicalFile.also { if (it.isDirectory) packRoot = it }
-    } catch (_: Exception) {
+      val response = rangedResponse(relativePath, source, rangeHeader)
+      record("$hitCategory", "status=${response.statusCode} mime=${response.mimeType} url=$uri size=${source.size} range=${rangeHeader ?: "none"}")
+      response
+    } catch (error: Exception) {
+      record("pad-error", "url=$uri serve=${error.javaClass.simpleName}:${error.message}")
       null
     }
   }
 
-  private fun rangedResponse(file: File, rangeHeader: String?): WebResourceResponse {
-    val extension = file.extension.lowercase()
-    val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
-      ?: URLConnection.guessContentTypeFromName(file.name)
-      ?: "application/octet-stream"
+  private const val DEBUG_BOOTSTRAP = """
+  (function(){
+    if(window.__stblockDiagInstalled)return;window.__stblockDiagInstalled=true;
+    var send=function(type,data){try{if(window.AndroidBridge&&AndroidBridge.writeDebugLog)AndroidBridge.writeDebugLog(JSON.stringify({type:type,time:Date.now(),url:location.href,data:data}));}catch(e){}};
+    var brief=function(v){try{return String(v&&v.stack||v&&v.message||v).slice(0,1800);}catch(e){return String(v);}};
+    try{var early=window.__stbEarlyErrors||[];for(var ei=0;ei<early.length;ei++)send('early-error',early[ei]);window.__stbEarlyErrors=[];}catch(e){}
+    send('page-snapshot',{readyState:document.readyState,title:document.title,baseURI:document.baseURI,viewport:{innerWidth:innerWidth,innerHeight:innerHeight,dpr:devicePixelRatio},ua:navigator.userAgent});
+    var supports=function(a,b){try{if(!window.CSS||!CSS.supports)return false;return b===undefined?CSS.supports(a):CSS.supports(a,b);}catch(e){return false;}};
+    send('css-support',{inset:supports('inset','0'),dvh:supports('height','100dvh'),clamp:supports('width','clamp(1px,2px,3px)'),minMax:supports('width','min(1px,2px)'),flexGap:supports('gap','1px'),env:supports('padding-top','env(safe-area-inset-top)'),backdrop:supports('backdrop-filter','blur(2px)'),aspect:supports('aspect-ratio','4/3'),has:supports('selector(:has(*))')});
+    var viewport=function(reason){try{var root=document.documentElement||{};var body=document.body;var el=document.querySelector('[class*="kids-workspace_workspace"]');var kids=null;if(el){var r=el.getBoundingClientRect();var cs=getComputedStyle(el);kids={x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height),position:cs.position,top:cs.top,inset:cs.inset||'(unset)'};}send('viewport-change',{reason:reason,innerWidth:innerWidth,innerHeight:innerHeight,outerWidth:outerWidth,outerHeight:outerHeight,dpr:devicePixelRatio,screenW:screen.width,screenH:screen.height,availW:screen.availWidth,availH:screen.availHeight,clientW:root.clientWidth||0,clientH:root.clientHeight||0,scrollW:body?body.scrollWidth:0,scrollH:body?body.scrollHeight:0,orientation:screen.orientation?screen.orientation.type:'',kids:kids});}catch(e){send('viewport-error',brief(e));}};
+    viewport('boot');
+    setTimeout(function(){viewport('boot+3s');},3000);
+    setTimeout(function(){viewport('boot+8s');},8000);
+    var resizeTimer=null;
+    window.addEventListener('resize',function(){if(resizeTimer)clearTimeout(resizeTimer);resizeTimer=setTimeout(function(){resizeTimer=null;viewport('resize');},250);});
+    window.addEventListener('orientationchange',function(){setTimeout(function(){viewport('orientationchange');},400);});
+    window.addEventListener('error',function(e){var t=e.target;if(t&&t!==window){send('resource-error',{tag:t.tagName,url:t.currentSrc||t.src||t.href||'',id:t.id||'',className:typeof t.className==='string'?t.className:'',alt:t.alt||'',outerHTML:(t.outerHTML||'').slice(0,500)});}else send('js-error',{message:e.message||'',source:e.filename||'',line:e.lineno||0,column:e.colno||0,error:brief(e.error)});},true);
+    window.addEventListener('unhandledrejection',function(e){send('promise-rejection',{reason:brief(e.reason)});});
+    ['error','warn'].forEach(function(level){var old=console[level];console[level]=function(){try{send('console-'+level,{args:Array.prototype.slice.call(arguments).map(brief).slice(0,8)});}catch(e){}return old.apply(console,arguments);};});
+    var rectOf=function(el){if(!el)return null;try{var r=el.getBoundingClientRect();var cs=getComputedStyle(el);return {x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height),display:cs.display,visibility:cs.visibility,opacity:cs.opacity,position:cs.position,zIndex:cs.zIndex};}catch(e){return null;}};
+    var q1=function(s){try{return document.querySelector(s);}catch(e){return null;}};
+    var qn=function(s){try{return document.querySelectorAll(s).length;}catch(e){return -1;}};
+    var workspaceProbe=function(reason){try{send('workspace-probe',{reason:reason,blocklyGlobal:typeof window.Blockly!=='undefined'?String(window.Blockly.VERSION||'yes'):'missing',scratchBlocksGlobal:typeof window.ScratchBlocks!=='undefined'?'yes':'missing',activePanel:rectOf(q1('[class*="panelActive"]')),blocksRoot:rectOf(q1('[class*="blocks_blocks"]'))||rectOf(q1('.blocks')),wrapper:rectOf(q1('[class*="blocksWrapper"]'))||rectOf(q1('[class*="blocks-wrapper"]')),injectionDiv:rectOf(q1('.injectionDiv')),svg:rectOf(q1('svg.blocklySvg')),toolboxWrapper:rectOf(q1('.blocklyToolboxWrapper')),toolbox:rectOf(q1('.blocklyToolboxDiv')),flyout:rectOf(q1('.blocklyFlyout')),workspaceCanvas:rectOf(q1('.blocklyWorkspace')),counts:{draggable:qn('.blocklyDraggable'),treeRow:qn('.blocklyTreeRow'),catItem:qn('.scratchCategoryMenuItem'),blockCanvas:qn('.blocklyBlockCanvas')},persistentErrors:(window.__stbEarlyErrors||[]).slice(0,5)});}catch(e){send('workspace-probe-error',brief(e));}};
+    var frameProbe=function(reason){try{var frames=Array.prototype.slice.call(document.querySelectorAll('iframe'));var out=[];frames.forEach(function(f){var item={src:f.src,id:f.id,title:f.title,rect:rectOf(f),doc:null};try{var d=f.contentDocument;if(d&&d.body){var txt=(d.body.innerText||'').replace(/\s+/g,' ').slice(0,180);var docInfo={readyState:d.readyState,title:d.title,bodyChildren:d.body.childNodes.length,text:txt,scripts:Array.prototype.slice.call(d.scripts).filter(function(s){return s.src;}).slice(-8).map(function(s){return s.src;}),blockly:typeof f.contentWindow.Blockly!=='undefined'?'yes':'missing',draggable:(function(){try{return d.querySelectorAll('.blocklyDraggable').length;}catch(e){return -1;}})(),treeRow:(function(){try{return d.querySelectorAll('.blocklyTreeRow').length;}catch(e){return -1;}})(),blocklyDiv:!!d.getElementById('blocklyDiv'),canvas:(function(){try{return d.querySelectorAll('canvas').length;}catch(e){return -1;}})(),errors:(f.contentWindow.__stbEarlyErrors||[]).slice(0,5)};item.doc=docInfo;}else{item.doc=d?'no-body':'no-document';}}catch(e){item.doc='blocked:'+brief(e);}out.push(item);});send('frame-probe',{reason:reason,frames:out});}catch(e){send('frame-probe-error',brief(e));}};
+    var inventory=function(reason){try{var imgs=Array.prototype.slice.call(document.images);send('dom-inventory',{reason:reason,images:imgs.length,broken:imgs.filter(function(i){return i.complete&&i.naturalWidth===0;}).slice(0,100).map(function(i){return {src:i.currentSrc||i.src,alt:i.alt,id:i.id,className:typeof i.className==='string'?i.className:''};}),iframes:Array.prototype.slice.call(document.querySelectorAll('iframe')).map(function(i){return {src:i.src,id:i.id,title:i.title,rect:(function(r){return {x:r.x,y:r.y,width:r.width,height:r.height};})(i.getBoundingClientRect())};}),scripts:Array.prototype.slice.call(document.scripts).filter(function(s){return s.src;}).map(function(s){return s.src;}).slice(-60),resourceErrors:performance.getEntriesByType('resource').filter(function(r){return r.responseStatus>=400;}).slice(-80).map(function(r){return {url:r.name,status:r.responseStatus,duration:Math.round(r.duration)};})});}catch(e){send('inventory-error',brief(e));}};
+    window.addEventListener('load',function(){setTimeout(function(){inventory('load+1500');workspaceProbe('load+1500');},1500);setTimeout(function(){inventory('load+6000');workspaceProbe('load+6000');frameProbe('load+6000');},6000);setTimeout(function(){workspaceProbe('load+12000');frameProbe('load+12000');},12000);});
+    var oldFetch=window.fetch;if(oldFetch)window.fetch=function(){var u=String(arguments[0]&&arguments[0].url||arguments[0]||'');return oldFetch.apply(this,arguments).then(function(r){if(!r.ok)send('fetch-http-error',{url:u,status:r.status});return r;},function(e){send('fetch-error',{url:u,error:brief(e)});throw e;});};
+    var oldOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){this.__stbUrl=String(u);return oldOpen.apply(this,arguments);};
+    var oldSend=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.send=function(){this.addEventListener('loadend',function(){if(this.status===0||this.status>=400)send('xhr-error',{url:this.__stbUrl,status:this.status});});return oldSend.apply(this,arguments);};
+    var push=history.pushState;history.pushState=function(){var r=push.apply(this,arguments);send('route-change',{path:location.href});setTimeout(function(){inventory('route-change');workspaceProbe('route-change+2s');frameProbe('route-change+2s');},2000);setTimeout(function(){workspaceProbe('route-change+5s');frameProbe('route-change+5s');},5000);return r;};
+    window.addEventListener('popstate',function(){send('route-change',{path:location.href});setTimeout(function(){inventory('popstate');workspaceProbe('popstate+2s');frameProbe('popstate+2s');},2000);setTimeout(function(){workspaceProbe('popstate+5s');frameProbe('popstate+5s');},5000);});
+  })();
+  """
+
+  private fun rangedResponse(relativePath: String, source: AssetSource, rangeHeader: String?): WebResourceResponse {
+    val mime = mimeTypeFor(relativePath)
+    if (source.size < 0L) {
+      val headers = mapOf("Cache-Control" to "public, max-age=31536000")
+      return WebResourceResponse(mime, null, 200, "OK", headers, source.open(0L, -1L))
+    }
     val headers = linkedMapOf(
       "Accept-Ranges" to "bytes",
       "Cache-Control" to "public, max-age=31536000",
-      "Content-Length" to file.length().toString()
+      "Content-Length" to source.size.toString()
     )
+    val length = source.size
 
     if (rangeHeader?.startsWith("bytes=") != true) {
-      return WebResourceResponse(mime, null, 200, "OK", headers, file.inputStream())
+      return WebResourceResponse(mime, null, 200, "OK", headers, source.open(0L, length))
     }
 
     val range = rangeHeader.removePrefix("bytes=").substringBefore(',').trim()
     val parts = range.split('-', limit = 2)
-    if (parts.size != 2) return WebResourceResponse(mime, null, 200, "OK", headers, file.inputStream())
-    val length = file.length()
+    if (parts.size != 2) return WebResourceResponse(mime, null, 200, "OK", headers, source.open(0L, length))
     var start = parts[0].toLongOrNull() ?: 0L
     var end = parts[1].toLongOrNull() ?: (length - 1)
     if (parts[0].isEmpty()) {
@@ -84,17 +270,41 @@ object PadAssetDelivery {
     val contentLength = end - start + 1
     headers["Content-Length"] = contentLength.toString()
     headers["Content-Range"] = "bytes $start-$end/$length"
-    return WebResourceResponse(mime, null, 206, "Partial Content", headers, boundedStream(file, start, contentLength))
+    return WebResourceResponse(mime, null, 206, "Partial Content", headers, source.open(start, contentLength))
   }
 
-  private fun boundedStream(file: File, offset: Long, count: Long): InputStream {
-    val stream = file.inputStream()
+  private fun mimeTypeFor(relativePath: String): String {
+    val extension = relativePath.substringAfterLast('.', "").lowercase()
+    return when (extension) {
+      "svg" -> "image/svg+xml"
+      "js", "mjs" -> "application/javascript"
+      "css" -> "text/css"
+      "json", "gltf" -> "application/json"
+      "wasm" -> "application/wasm"
+      "glb", "bin" -> "application/octet-stream"
+      else -> null
+    } ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+      ?: URLConnection.guessContentTypeFromName(relativePath)
+      ?: "application/octet-stream"
+  }
+
+  private fun boundedStream(file: File, offset: Long, count: Long): InputStream =
+    boundedStream(file.inputStream(), offset, count)
+
+  private fun boundedStream(input: InputStream, offset: Long, count: Long): InputStream {
     var skipped = 0L
     while (skipped < offset) {
-      val step = stream.skip(offset - skipped)
-      if (step <= 0) break
-      skipped += step
+      val step = input.skip(offset - skipped)
+      if (step > 0) {
+        skipped += step
+        continue
+      }
+      // Some streams (notably AutoCloseInputStream) return 0 instead of -1
+      // when skip() cannot advance; read one byte so we make progress.
+      if (input.read() < 0) break
+      skipped += 1
     }
+    val stream = input
     return object : InputStream() {
       private var remaining = count
       override fun read(): Int = if (remaining <= 0) -1 else stream.read().also { if (it >= 0) remaining-- }

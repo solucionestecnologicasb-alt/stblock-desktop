@@ -526,10 +526,13 @@ const GUIComponent = props => {
     const [mobileHubOpen, setMobileHubOpen] = useState(() => isMobileDevice());
     const [mobileProjects, setMobileProjects] = useState([]);
     const [mobileProjectError, setMobileProjectError] = useState('');
+    const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
+    const [newProjectName, setNewProjectName] = useState('Mi proyecto');
     const mobileProjectIdRef = useRef(null);
     const mobileProjectNameRef = useRef('');
     const mobileProjectSaveTimerRef = useRef(null);
     const mobileProjectSaveChainRef = useRef(Promise.resolve());
+    const newProjectInputRef = useRef(null);
     const [mobileStageMode, setMobileStageMode] = useState(() => (isMobileDevice() ? 'pip' : 'hidden')); // 'hidden' | 'pip' | 'fullscreen'
     const [mobileActiveTab, setMobileActiveTab] = useState('code');
     // Posición arrastrable del PiP (esquina superior izquierda en px) o null para la posición por defecto (arriba-derecha).
@@ -2787,7 +2790,10 @@ const GUIComponent = props => {
 
     const isWebMobileProjectStore = useCallback(() => {
         if (!isMobileDevice() || typeof window === 'undefined') return false;
-        return !window.AndroidBridge && !window.__TAURI__ && !window.__TAURI_INTERNALS__;
+        // AndroidBridge handles file import/export. Saved projects in the
+        // mobile hub use IndexedDB on every mobile platform so they survive
+        // leaving the editor and restarting the app.
+        return true;
     }, []);
 
     const refreshMobileProjects = useCallback(async () => {
@@ -2862,13 +2868,8 @@ const GUIComponent = props => {
         return saveOperation;
     }, [isWebMobileProjectStore, captureMobileProject, vm, refreshMobileProjects]);
 
-    const createMobileProject = useCallback(async () => {
-        let name = 'Mi proyecto';
-        if (typeof window !== 'undefined' && typeof window.prompt === 'function') {
-            const enteredName = window.prompt('¿Cómo se llamará tu proyecto?', name);
-            if (enteredName === null) return;
-            name = enteredName.trim() || name;
-        }
+    const createMobileProject = useCallback(async requestedName => {
+        const name = String(requestedName || 'Mi proyecto').trim() || 'Mi proyecto';
         if (isWebMobileProjectStore() && !mobileHubOpen) {
             const previousId = mobileProjectIdRef.current || `stb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const previousName = mobileProjectNameRef.current ||
@@ -2891,6 +2892,8 @@ const GUIComponent = props => {
         setDeviceTabId('code');
         try {
             await startNewProject();
+            // startNewProject resolves after the VM has loaded the blank project;
+            // capture only then so IndexedDB receives the actual new project.
             await persistMobileProject(id, name);
             setMobileProjectError('');
         } catch (error) {
@@ -2899,6 +2902,11 @@ const GUIComponent = props => {
             setMobileHubOpen(true);
         }
     }, [startNewProject, persistMobileProject, isWebMobileProjectStore, onSetProjectTitle, mobileHubOpen, projectTitle, reduxProjectTitle]);
+
+    const openNewProjectDialog = useCallback(() => {
+        setNewProjectName('Mi proyecto');
+        setNewProjectDialogOpen(true);
+    }, []);
 
     const openMobileProject = useCallback(async id => {
         try {
@@ -2979,6 +2987,26 @@ const GUIComponent = props => {
     useEffect(() => {
         if (isWebMobileProjectStore()) refreshMobileProjects();
     }, [isWebMobileProjectStore, refreshMobileProjects]);
+
+    // Each time the mobile hub becomes visible, re-read IndexedDB so projects
+    // saved from the editor or from a background autosave always show up.
+    useEffect(() => {
+        if (!mobileHubOpen) return;
+        void refreshMobileProjects();
+    }, [mobileHubOpen, refreshMobileProjects]);
+
+    // Focus and preselect the suggested name so typing replaces it at once.
+    useEffect(() => {
+        if (!newProjectDialogOpen) return undefined;
+        const timer = window.setTimeout(() => {
+            const input = newProjectInputRef.current;
+            if (input) {
+                input.focus();
+                input.select();
+            }
+        }, 120);
+        return () => window.clearTimeout(timer);
+    }, [newProjectDialogOpen]);
 
     useEffect(() => {
         if (!isWebMobileProjectStore() || !vm) return undefined;
@@ -4535,7 +4563,9 @@ const GUIComponent = props => {
                         }
                     }}
                     onClickNew={() => {
-                        if (isWebMobileProjectStore()) {
+                        if (isMobileDevice()) {
+                            openNewProjectDialog();
+                        } else if (isWebMobileProjectStore()) {
                             createMobileProject();
                         } else {
                             startNewProject();
@@ -4611,6 +4641,30 @@ const GUIComponent = props => {
                                 const safeTitle = rawTitle.replace(/[\\/:*?"<>|]/g, '_');
                                 const ext = (vm && typeof vm.saveProjectFlynt === 'function') ? '.flynt' : '.sb3';
                                 const filename = `${safeTitle}${ext}`;
+
+                                // Saving to Android's file picker is an export. Keep a
+                                // copy in the in-app project library as well, so it is
+                                // listed under "Mis proyectos" the next time the hub opens.
+                                if (isWebMobileProjectStore()) {
+                                    const id = mobileProjectIdRef.current ||
+                                        `stb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                                    const name = mobileProjectNameRef.current || rawTitle.replace(/_/g, ' ');
+                                    mobileProjectIdRef.current = id;
+                                    mobileProjectNameRef.current = name;
+                                    try {
+                                        await saveMobileProject({
+                                            id,
+                                            name,
+                                            blob,
+                                            format: ext === '.flynt' ? 'flynt' : 'sb3',
+                                            createdAt: Date.now()
+                                        });
+                                        await refreshMobileProjects();
+                                        setMobileProjectError('');
+                                    } catch (error) {
+                                        setMobileProjectError(`El archivo se exportó, pero no se pudo guardar en Mis proyectos: ${error.message || error}`);
+                                    }
+                                }
 
                                 // 1. En Android nativo con AndroidBridge:
                                 if (typeof window !== 'undefined' && window.AndroidBridge && typeof window.AndroidBridge.saveWithDialog === 'function') {
@@ -4797,7 +4851,7 @@ const GUIComponent = props => {
             )}
             {isMobileDevice() && mobileHubOpen && (
                 <HomeHub
-                    onNewProject={createMobileProject}
+                    onNewProject={openNewProjectDialog}
                     onOpenProject={() => {
                         setMobileHubOpen(false);
                         onSetDeviceMode('game');
@@ -4809,6 +4863,81 @@ const GUIComponent = props => {
                     saveError={mobileProjectError}
                     onOpenSavedProject={openMobileProject}
                 />
+            )}
+            {isMobileDevice() && newProjectDialogOpen && (
+                <div
+                    className={styles.mobileProjectNameBackdrop}
+                    onMouseDown={event => {
+                        if (event.target === event.currentTarget) setNewProjectDialogOpen(false);
+                    }}
+                >
+                    <section
+                        className={styles.mobileProjectNameDialog}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="mobile-project-name-title"
+                    >
+                        <button
+                            type="button"
+                            className={styles.mobileProjectNameClose}
+                            onClick={() => setNewProjectDialogOpen(false)}
+                            aria-label="Cerrar"
+                        >×</button>
+                        <div className={styles.mobileProjectNameIcon} aria-hidden="true">✨</div>
+                        <span className={styles.mobileProjectNameEyebrow}>NUEVO PROYECTO</span>
+                        <h2 id="mobile-project-name-title">Ponle nombre a tu idea</h2>
+                        <p>Lo guardaremos en «Mis proyectos» para que puedas volver cuando quieras.</p>
+                        <label className={styles.mobileProjectNameField}>
+                            <span className={styles.mobileProjectNameFieldLabel}>
+                                <span>Nombre del proyecto</span>
+                                <small>{newProjectName.trim().length}/48</small>
+                            </span>
+                            <input
+                                ref={newProjectInputRef}
+                                autoFocus
+                                maxLength={48}
+                                enterkeyhint="done"
+                                value={newProjectName}
+                                onChange={event => setNewProjectName(event.target.value)}
+                                onKeyDown={event => {
+                                    if (event.key === 'Enter') {
+                                        event.preventDefault();
+                                        setNewProjectDialogOpen(false);
+                                        void createMobileProject(newProjectName);
+                                    }
+                                    if (event.key === 'Escape') setNewProjectDialogOpen(false);
+                                }}
+                                aria-label="Nombre del proyecto"
+                            />
+                        </label>
+                        <div
+                            className={styles.mobileProjectNameSuggestions}
+                            role="group"
+                            aria-label="Sugerencias de nombre"
+                        >
+                            {['Mi primer juego', 'Robot explorador', 'Historia espacial'].map(suggestion => (
+                                <button
+                                    key={suggestion}
+                                    type="button"
+                                    className={newProjectName === suggestion ? styles.mobileProjectNameSuggestionActive : ''}
+                                    onClick={() => setNewProjectName(suggestion)}
+                                >{suggestion}</button>
+                            ))}
+                        </div>
+                        <div className={styles.mobileProjectNameActions}>
+                            <button type="button" className={styles.mobileProjectCancel} onClick={() => setNewProjectDialogOpen(false)}>Cancelar</button>
+                            <button
+                                type="button"
+                                className={styles.mobileProjectCreate}
+                                disabled={!newProjectName.trim()}
+                                onClick={() => {
+                                    setNewProjectDialogOpen(false);
+                                    void createMobileProject(newProjectName);
+                                }}
+                            >Crear proyecto <span aria-hidden="true">✨</span></button>
+                        </div>
+                    </section>
+                </div>
             )}
             {deviceMode === 'device' ? renderDeviceMode() : deviceMode === 'diseno' ? renderDiseno3DMode() : deviceMode === 'evaluacion' ? renderEvaluacionMode() : renderEditor()}
             {!isFullScreen && <DragLayer />}

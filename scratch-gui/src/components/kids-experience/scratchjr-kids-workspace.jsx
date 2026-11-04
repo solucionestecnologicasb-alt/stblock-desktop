@@ -7,7 +7,9 @@ const PROJECT_KEY = 'stblock.kids.scratchjr.project';
 const STORY_HOME_PROGRESS_KEY = 'stblock.kids.story.home-progress';
 const STORY_PENDING_NAME_KEY = 'stblock.kids.story.pending-player-name';
 const APP_PATH = 'static/scratchjr/app/';
-const MOBILE_KIDS_QUERY = '(max-width: 760px), (pointer: coarse) and (max-height: 600px)';
+// `any-pointer` sobrevive a emulaciones/devtools que desactivan el puntero
+// primario (p. ej. el selector de elementos) y sigue siendo fiable en Android.
+const MOBILE_KIDS_QUERY = '(max-width: 760px), (any-pointer: coarse) and (max-height: 600px)';
 const emptyStoryProgress = playerName => ({version: 1, completed: [], unlocked: 1, sparks: 0, activeLevel: 1, introsSeen: [], attemptsByLevel: {}, levelScores: {}, starsByLevel: {}, starsSpent: 0, hintsByLevel: {}, playerName: playerName || ''});
 const readMobileStoryProgress = () => {
     try {
@@ -111,7 +113,7 @@ STORY_WORLDS[10] = {
 };
 
 const projectKeyFor = mode => `${PROJECT_KEY}.${mode}`;
-const storyMapPath = world => `/static/kids/story/maps/${world.mapAsset || `${world.id}.jpg`}`;
+const storyMapPath = (world, basePath) => `${basePath}static/kids/story/maps/${world.mapAsset || `${world.id}.jpg`}`;
 // Ending cinematics shown once world 20 is solved, in this order.
 const FINAL_VIDEO_FILES = ['final.mp4', 'final-2.mp4'];
 const WORLD5_BLOCKED_CELLS = [[2, 4], [3, 4], [2, 2], [3, 2], [3, 1]];
@@ -308,6 +310,12 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     const robotProjectCreationPendingRef = useRef(false);
     const [isMobileLayout, setIsMobileLayout] = useState(() => typeof window !== 'undefined' && window.matchMedia(MOBILE_KIDS_QUERY).matches);
     const [mobileStoryHome, setMobileStoryHome] = useState(() => typeof window !== 'undefined' && window.matchMedia(MOBILE_KIDS_QUERY).matches);
+    // Si el layout cae a escritorio (devtools/rotación) estando en la portada,
+    // recordamos volver a ella al recuperar el layout móvil.
+    const mobileStoryHomeRef = useRef(mobileStoryHome);
+    const mobileHomeWasOpenRef = useRef(false);
+    const [modeSwitching, setModeSwitching] = useState(false);
+    const modeSwitchTimerRef = useRef(null);
     const [phonePortrait, setPhonePortrait] = useState(() => typeof window !== 'undefined' && window.matchMedia('(orientation: portrait)').matches);
     const [mobileStoryNameOpen, setMobileStoryNameOpen] = useState(false);
     const [mobileStoryPlayerName, setMobileStoryPlayerName] = useState('');
@@ -324,6 +332,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     const [storyProgress, setStoryProgress] = useState(() => emptyStoryProgress());
     const [storyLevel, setStoryLevel] = useState(1);
     const [storyRunMessage, setStoryRunMessage] = useState('');
+    const [storyHintCollapsed, setStoryHintCollapsed] = useState(false);
     const [storyVideoError, setStoryVideoError] = useState(false);
     const [storyIntroVideoDone, setStoryIntroVideoDone] = useState(false);
     const [finalVideoStep, setFinalVideoStep] = useState(0);
@@ -367,14 +376,45 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     const staleFrameRetriesRef = useRef(new Set());
     const logoUrl = `${basePath}static/kids/stblock-kids-logo.jpg`;
 
+    // Cubre el iframe mientras ScratchJr cambia de modo: durante la recarga el
+    // documento se ve en blanco y la toolbar aparece/desaparece. La capa se
+    // retira cuando el editor está realmente montado.
+    const clearModeSwitchVeil = useCallback(() => {
+        if (modeSwitchTimerRef.current) {
+            window.clearTimeout(modeSwitchTimerRef.current);
+            modeSwitchTimerRef.current = null;
+        }
+        setModeSwitching(false);
+    }, []);
+    const beginModeSwitchVeil = useCallback(() => {
+        if (modeSwitchTimerRef.current) window.clearTimeout(modeSwitchTimerRef.current);
+        setModeSwitching(true);
+        modeSwitchTimerRef.current = window.setTimeout(() => {
+            modeSwitchTimerRef.current = null;
+            setModeSwitching(false);
+        }, 5000);
+    }, []);
+    useEffect(() => () => {
+        if (modeSwitchTimerRef.current) window.clearTimeout(modeSwitchTimerRef.current);
+    }, []);
+
+    useEffect(() => {
+        mobileStoryHomeRef.current = mobileStoryHome;
+    }, [mobileStoryHome]);
+
     useEffect(() => {
         const query = window.matchMedia(MOBILE_KIDS_QUERY);
         const updateLayout = event => {
             const mobile = event.matches;
             setIsMobileLayout(mobile);
             if (!mobile) {
+                if (mobileStoryHomeRef.current) mobileHomeWasOpenRef.current = true;
                 setMobileStoryHome(false);
                 setMobileStoryNameOpen(false);
+            } else if (mobileHomeWasOpenRef.current) {
+                mobileHomeWasOpenRef.current = false;
+                mobileStoryHomeRef.current = true;
+                setMobileStoryHome(true);
             }
         };
         updateLayout(query);
@@ -388,7 +428,9 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
 
     useEffect(() => {
         const query = window.matchMedia('(orientation: portrait)');
-        const updateOrientation = () => setPhonePortrait(query.matches);
+        const updateOrientation = () => {
+            setPhonePortrait(query.matches);
+        };
         updateOrientation();
         window.addEventListener('orientationchange', updateOrientation);
         window.addEventListener('resize', updateOrientation);
@@ -486,6 +528,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
             }
             return;
         }
+        beginModeSwitchVeil();
         setMode(nextMode);
         setStoryScreen('');
         if (nextMode === 'story') {
@@ -512,11 +555,16 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
         if (!isMobileLayout || !projectOpen) setProjectOpen(false);
         setRenameModalOpen(false);
         setMapPickerOpen(false);
-        if (isMobileLayout && nextMode === 'robot' && !readProjectId('robot')) {
-            robotProjectCreationPendingRef.current = true;
+        // Entering Free or Robot from another editor (e.g. a Story mission) with
+        // no saved project must land in a fresh project. Without the pending
+        // flag the iframe would stay on ScratchJr's "Mis proyectos" album.
+        const needsRobotCreation = isMobileLayout && nextMode === 'robot' && !readProjectId('robot');
+        const needsFreeCreation = isMobileLayout && nextMode === 'free' && !readProjectId('free');
+        robotProjectCreationPendingRef.current = needsRobotCreation;
+        freeProjectCreationPendingRef.current = needsFreeCreation;
+        if (needsRobotCreation || needsFreeCreation) {
             setFrameUrl(makeFrameUrl(nextMode, null));
         } else {
-            robotProjectCreationPendingRef.current = false;
             setFrameUrl(makeFrameUrl(nextMode));
         }
     };
@@ -555,13 +603,18 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
         }
         sendModeToScratchJr(mode);
         try {
-            const mountControls = () => {
+            const mountControls = force => {
                 const centerPanel = child.document.querySelector('.centerpanel');
                 const stageFrame = child.document.getElementById('stageframe');
                 const topSection = child.document.getElementById('topsection');
                 const blockPalette = child.document.getElementById('blockspalette');
                 const scriptsContainer = child.document.getElementById('scriptscontainer');
-                if (!centerPanel || !stageFrame || !topSection || !blockPalette || !scriptsContainer || !blockPalette.offsetWidth) return false;
+                if (!centerPanel || !stageFrame || !topSection || !blockPalette || !scriptsContainer) return false;
+                // En WebView 68 offsetWidth puede quedarse en 0 si el CSS de
+                // ScratchJr aún no se ha aplicado; tras unos segundos montamos
+                // igualmente porque el dock fija tamaño y posición con !important.
+                if (!blockPalette.offsetWidth && !force) return false;
+                clearModeSwitchVeil();
                 centerPanel.style.setProperty('position', 'absolute', 'important');
                 centerPanel.style.setProperty('top', '0px', 'important');
                 centerPanel.style.setProperty('left', '0px', 'important');
@@ -607,11 +660,11 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                 return true;
             };
             setRightActionRoot(null);
-            if (!mountControls()) {
+            if (!mountControls(false)) {
                 let attempts = 0;
                 const retryMount = child.setInterval(() => {
                     attempts += 1;
-                    if (mountControls() || attempts >= 100) child.clearInterval(retryMount);
+                    if (mountControls(attempts >= 40) || attempts >= 100) child.clearInterval(retryMount);
                 }, 100);
             }
             child.sessionStorage.setItem('stblockKids', '1');
@@ -647,7 +700,10 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                 child.__stblockKidsLobbyObserver.observe(frame, {childList: true, subtree: true});
                 syncLobbyPage();
             }
-            setProjectOpen(isEditor);
+            // Keep the immersive surface (toolbar hidden, iframe size stable)
+            // while a pending creation still shows the lobby, so the toolbar
+            // does not flash between the old editor and the new one.
+            setProjectOpen(isEditor || robotProjectCreationPendingRef.current || freeProjectCreationPendingRef.current);
             const nextProjectId = url.searchParams.get('pmd5');
             if (nextProjectId) {
                 window.localStorage.setItem(projectKeyFor(mode), nextProjectId);
@@ -691,6 +747,8 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                     } else if (attempts >= 80) {
                         child.clearInterval(createProject);
                         freeProjectCreationPendingRef.current = false;
+                        clearModeSwitchVeil();
+                        setProjectOpen(false);
                     }
                 }, 100);
             }
@@ -706,10 +764,14 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                             home.createNewProject('Robot STBlock');
                         } catch (_error) {
                             // ScratchJr keeps its lobby available if project creation fails.
+                            clearModeSwitchVeil();
+                            setProjectOpen(false);
                         }
                     } else if (attempts >= 80) {
                         child.clearInterval(createRobotProject);
                         robotProjectCreationPendingRef.current = false;
+                        clearModeSwitchVeil();
+                        setProjectOpen(false);
                     }
                 }, 100);
             }
@@ -749,15 +811,15 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
         } catch (_error) {
             // ScratchJr conserva su comportamiento si el navegador bloquea el acceso al iframe.
         }
-    }, [isMobileLayout, mode, onConnectRobot, sendModeToScratchJr]);
+    }, [isMobileLayout, mode, onConnectRobot, sendModeToScratchJr, clearModeSwitchVeil]);
 
     const storyApi = () => iframeRef.current && iframeRef.current.contentWindow && iframeRef.current.contentWindow.STBLOCK_KIDS_STORY;
     const configureStoryWorld = (world, calibration, debugMarkers = false, resetScripts = false) => {
         const api = storyApi();
         if (!world || !api || !api.configureLevel) return false;
-        const challenge = getStoryChallenge(world.id, calibration);
+        const challenge = getStoryChallenge(world.id, calibration, basePath);
         return api.configureLevel({
-            background: storyMapPath(world),
+            background: storyMapPath(world, basePath),
             startX: calibration.originX + (calibration.startCol - 1) * calibration.stepX + calibration.startOffsetX,
             startY: calibration.originY + (calibration.startRow - 1) * calibration.stepY + calibration.startOffsetY,
             ...calibration,
@@ -778,7 +840,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
         if (api && api.saveProgress) api.saveProgress(persisted);
     };
     const getWorldCalibration = world => {
-        const challenge = getStoryChallenge(world.id);
+        const challenge = getStoryChallenge(world.id, {}, basePath);
         const calibration = {...defaultCalibrationFor(world), actors: challenge.actors, objects: challenge.objects};
         // The fallen trunk in level 4 must be carried, so no cell is blocked there.
         if (world.id === 4) calibration.blocked = [];
@@ -907,7 +969,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
         if (!world) return;
         setHintsOpen(true);
         const owned = storyProgress.hintsByLevel?.[world.id] || [];
-        const pendingHints = levelHints(world, getStoryChallenge(world.id)).filter(hint => !owned.includes(hint.id));
+        const pendingHints = levelHints(world, getStoryChallenge(world.id, {}, basePath)).filter(hint => !owned.includes(hint.id));
         const available = starsAvailable(storyProgress);
         if (!pendingHints.length) {
             speakStory(`Ya compraste todas las pistas de este mundo. Tienes ${available} estrellas.`);
@@ -1024,7 +1086,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
             const trace = Array.isArray(event.data.trace) ? event.data.trace : [];
             const telemetry = event.data.telemetry || {};
             const runSeconds = storyRunStartedAtRef.current ? (Date.now() - storyRunStartedAtRef.current) / 1000 : null;
-            const levelChallenge = getStoryChallenge(world.id, calibration);
+            const levelChallenge = getStoryChallenge(world.id, calibration, basePath);
             const result = evaluateStoryChallenge({
                 challenge: levelChallenge,
                 calibration,
@@ -1089,6 +1151,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     };
 
     const openMobileStoryHome = () => {
+        clearModeSwitchVeil();
         if (window.speechSynthesis) window.speechSynthesis.cancel();
         setMobileMenuOpen(false);
         setMobileStoryNameOpen(false);
@@ -1102,6 +1165,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
 
     const openMobileFreeProject = projectId => {
         if (!projectId) return;
+        beginModeSwitchVeil();
         requestLandscapeMode();
         setMobileStoryHome(false);
         setMobileStoryNameOpen(false);
@@ -1206,6 +1270,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     };
 
     const createMobileFreeProject = () => {
+        beginModeSwitchVeil();
         requestLandscapeMode();
         setMobileMenuOpen(false);
         setMobileStoryHome(false);
@@ -1428,7 +1493,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                     type="button"
                     aria-label="Abrir menú de STBlock Kids"
                     aria-expanded={mobileMenuOpen}
-                >☰</button>
+                >⋮</button>
             </header>
             {mobileMenuOpen && (
                 <div className={styles.mobileMenuShade} onMouseDown={event => {if (event.target === event.currentTarget) setMobileMenuOpen(false);}}>
@@ -1437,22 +1502,43 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                             <strong>STBlock Kids</strong>
                             <button onClick={() => setMobileMenuOpen(false)} type="button" aria-label="Cerrar menú">×</button>
                         </div>
-                        <div className={styles.mobileMenuWelcome}><span aria-hidden="true">🌟</span><div><strong>¡Hola, explorador!</strong><small>¿Qué quieres hacer hoy?</small></div></div>
-                        <p className={styles.mobileMenuLabel}>Tu espacio</p>
-                        <div className={styles.mobileMenuTools}>
-                            <button onClick={openMobileStoryHome} type="button"><span>⭐</span>Inicio · Mi aventura</button>
-                            <button onClick={createMobileFreeProject} type="button"><span>➕</span>Crear proyecto · Libre</button>
-                            <button onClick={loadProjectFile} type="button"><span>📂</span>Cargar archivo · Libre</button>
-                            <button onClick={() => {enterMobileMode('robot'); setMobileMenuOpen(false);}} type="button"><span>🤖</span>Proyectos · Robot</button>
-                            {projectOpen && <button onClick={() => {openRenameProject(); setMobileMenuOpen(false);}} type="button"><span>✏️</span>Cambiar nombre</button>}
-                            <button onClick={() => {toggleBlockVoice(); setMobileMenuOpen(false);}} type="button"><span>{blockVoiceEnabled ? '🔊' : '🔇'}</span>{blockVoiceEnabled ? 'Silenciar voz de bloques' : 'Activar voz de bloques'}</button>
-                            {mode === 'robot' && <>
-                                <button onClick={() => {setMapPickerOpen(true); setMobileMenuOpen(false);}} type="button"><span>🗺️</span>Cambiar mundo</button>
-                                <button onClick={() => {onConnectRobot(); setMobileMenuOpen(false);}} type="button"><span>🔵</span>{bluetoothConnected ? 'Robot conectado' : 'Conectar robot'}</button>
-                            </>}
-                            <button onClick={openMobileSettings} type="button"><span>⚙️</span>Ajustes</button>
+                        <div className={styles.mobileMenuBody}>
+                            <div className={styles.mobileMenuSection}>
+                                <p className={styles.mobileMenuLabel}>PROYECTO</p>
+                                <div className={styles.mobileMenuTools}>
+                                    <button className={styles.mobileMenuReturnItem} onClick={openMobileStoryHome} type="button"><span>⭐</span>Inicio · Mi aventura</button>
+                                    <button onClick={createMobileFreeProject} type="button"><span>➕</span>Crear proyecto · Libre</button>
+                                    <button onClick={loadProjectFile} type="button"><span>📂</span>Cargar archivo · Libre</button>
+                                    {projectOpen && <button onClick={() => {openRenameProject(); setMobileMenuOpen(false);}} type="button"><span>✏️</span>Cambiar nombre</button>}
+                                </div>
+                            </div>
+                            <div className={styles.mobileMenuSection}>
+                                <p className={styles.mobileMenuLabel}>ROBOT</p>
+                                <div className={styles.mobileMenuTools}>
+                                    <button onClick={() => {enterMobileMode('robot'); setMobileMenuOpen(false);}} type="button"><span>🤖</span>Proyectos · Robot</button>
+                                    {mode === 'robot' && <>
+                                        <button onClick={() => {setMapPickerOpen(true); setMobileMenuOpen(false);}} type="button"><span>🗺️</span>Cambiar mundo</button>
+                                        <button onClick={() => {if (onConnectRobot) onConnectRobot(); setMobileMenuOpen(false);}} type="button"><span>🔵</span>{bluetoothConnected ? 'Robot conectado' : 'Conectar robot'}</button>
+                                    </>}
+                                </div>
+                            </div>
+                            <div className={styles.mobileMenuSection}>
+                                <p className={styles.mobileMenuLabel}>SISTEMA</p>
+                                <div className={styles.mobileMenuTools}>
+                                    <button onClick={() => {toggleBlockVoice(); setMobileMenuOpen(false);}} type="button"><span>{blockVoiceEnabled ? '🔊' : '🔇'}</span>{blockVoiceEnabled ? 'Silenciar voz de bloques' : 'Activar voz de bloques'}</button>
+                                    <button onClick={openMobileSettings} type="button"><span>⚙️</span>Ajustes</button>
+                                </div>
+                            </div>
+                            <div className={styles.mobileMenuSection}>
+                                <p className={styles.mobileMenuLabel}>ESPACIO</p>
+                                <div className={styles.mobileMenuTools}>
+                                    <button className={styles.mobileMenuPlatform} onClick={() => {setMobileMenuOpen(false); onExit();}} type="button"><span>🔄</span>Cambiar entre STBlock y STBlock Kids</button>
+                                </div>
+                            </div>
                         </div>
-                        <button className={styles.mobileMenuPlatform} onClick={() => {setMobileMenuOpen(false); onExit();}} type="button"><span>🔄</span>Cambiar entre STBlock y STBlock Kids</button>
+                        <div className={styles.mobileMenuFooter}>
+                            <small>STBlock Kids · STB Academy</small>
+                        </div>
                     </aside>
                 </div>
             )}
@@ -1483,6 +1569,13 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                     allow="autoplay; camera; microphone"
                     onLoad={handleFrameLoad}
                 />
+                {isMobileLayout && modeSwitching && (
+                    <div className={styles.modeSwitchVeil} role="status" aria-live="polite">
+                        <img src={logoUrl} alt="" aria-hidden="true" />
+                        <span className={styles.modeSwitchDots} aria-hidden="true"><i /><i /><i /></span>
+                        <small>Preparando tu espacio…</small>
+                    </div>
+                )}
                 {mode === 'story' && storyScreen === 'loading' && <div className={styles.storyLoading} role="status">✨ Preparando tu aventura…</div>}
                 {mode === 'story' && storyScreen === 'route' && (
                     <div className={styles.storyRoute}>
@@ -1601,7 +1694,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                                 <h2 id="hintTitle">⭐ Mis estrellas: {available}</h2>
                                 <p>Cambia estrellas por pistas de verdad. Cada mundo tiene pistas más caras.</p>
                                 <div className={styles.hintList}>
-                                    {levelHints(world, getStoryChallenge(world.id)).map(hint => {
+                                    {levelHints(world, getStoryChallenge(world.id, {}, basePath)).map(hint => {
                                         const bought = owned.includes(hint.id);
                                         const affordable = available >= hint.cost;
                                         return (
@@ -1664,6 +1757,16 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
             </section>
             {isMobileLayout && mobileStoryHome && (
                 <section className={styles.mobileStoryHome} aria-label="Aventura STBlock Kids">
+                    <div className={styles.mobileStoryScenery} aria-hidden="true">
+                        <span className={styles.scenerySun} />
+                        <span className={`${styles.sceneryCloud} ${styles.sceneryCloudA}`} />
+                        <span className={`${styles.sceneryCloud} ${styles.sceneryCloudB}`} />
+                        <span className={`${styles.sceneryStar} ${styles.sceneryStarA}`}>✦</span>
+                        <span className={`${styles.sceneryStar} ${styles.sceneryStarB}`}>✦</span>
+                        <span className={`${styles.sceneryStar} ${styles.sceneryStarC}`}>✦</span>
+                        <span className={styles.sceneryBalloon}>🎈</span>
+                        <span className={styles.sceneryHill} />
+                    </div>
                     <div className={styles.mobileStoryLayout}>
                         <section className={styles.mobileStoryHero} aria-labelledby="mobileStoryTitle">
                             <div className={styles.mobileStoryBrand}><img src={logoUrl} alt="STBlock Kids" /><span>📖 HISTORIA</span></div>
@@ -1687,15 +1790,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                                     <>
                                         <h1 id="mobileStoryTitle">El Faro del Cielo</h1>
                                         <p className={styles.mobileStoryDescription}>¡Ayuda a STB!</p>
-                                        {!mobileStoryNameOpen ? (
-                                            <button className={styles.mobileStoryPrimary} onClick={() => setMobileStoryNameOpen(true)} type="button">¡Empezar! <span>✨</span></button>
-                                        ) : (
-                                            <form className={styles.mobileStoryNameForm} onSubmit={createMobileStory}>
-                                                <label htmlFor="mobileStoryPlayerName">¿Tu nombre?</label>
-                                                <input id="mobileStoryPlayerName" autoFocus maxLength={24} value={mobileStoryPlayerName} onChange={event => setMobileStoryPlayerName(event.target.value)} placeholder="Escribe aquí" />
-                                                <div><button type="button" onClick={() => setMobileStoryNameOpen(false)}>Volver</button><button className={styles.mobileStoryPrimary} disabled={!mobileStoryPlayerName.trim()} type="submit">¡Vamos! ➜</button></div>
-                                            </form>
-                                        )}
+                                        <button className={styles.mobileStoryPrimary} onClick={() => setMobileStoryNameOpen(true)} type="button">¡Empezar! <span>✨</span></button>
                                         <div className={styles.mobileStoryNewBadge}>🗺️ 20 mundos　⭐</div>
                                     </>
                                 )}
@@ -1725,6 +1820,31 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                     </div>
                 </section>
             )}
+            {isMobileLayout && mobileStoryHome && mobileStoryNameOpen && (
+                <div
+                    className={styles.mobileStoryNameShade}
+                    role="presentation"
+                    onMouseDown={event => { if (event.target === event.currentTarget) setMobileStoryNameOpen(false); }}
+                    onKeyDown={event => { if (event.key === 'Escape') setMobileStoryNameOpen(false); }}
+                >
+                    <form className={styles.mobileStoryNameModal} onSubmit={createMobileStory} role="dialog" aria-modal="true" aria-labelledby="mobileStoryNameTitle">
+                        <button className={styles.mobileStoryNameClose} type="button" onClick={() => setMobileStoryNameOpen(false)} aria-label="Cerrar">×</button>
+                        <span className={`${styles.mobileStoryNameSparkle} ${styles.mobileNameSparkleA}`} aria-hidden="true">⭐</span>
+                        <span className={`${styles.mobileStoryNameSparkle} ${styles.mobileNameSparkleB}`} aria-hidden="true">✨</span>
+                        <span className={`${styles.mobileStoryNameSparkle} ${styles.mobileNameSparkleC}`} aria-hidden="true">🌟</span>
+                        <span className={styles.mobileStoryNameIcon} aria-hidden="true">🌟</span>
+                        <p className={styles.mobileStoryNameEyebrow}>NUEVA AVENTURA</p>
+                        <h2 id="mobileStoryNameTitle">¿Cómo te llamas?</h2>
+                        <p className={styles.mobileStoryNameHint}>STB te saludará por tu nombre en cada mundo.</p>
+                        <label className={styles.mobileStoryNameLabel} htmlFor="mobileStoryPlayerName">Tu nombre</label>
+                        <input id="mobileStoryPlayerName" autoFocus maxLength={24} value={mobileStoryPlayerName} onChange={event => setMobileStoryPlayerName(event.target.value)} placeholder="Escribe tu nombre" enterkeyhint="done" />
+                        <div className={styles.mobileStoryNameActions}>
+                            <button type="button" onClick={() => setMobileStoryNameOpen(false)}>Cancelar</button>
+                            <button className={styles.mobileStoryNameGo} type="submit" disabled={!mobileStoryPlayerName.trim()}>¡Vamos! <span aria-hidden="true">✨</span></button>
+                        </div>
+                    </form>
+                </div>
+            )}
             {isMobileLayout && mobileProjectToDelete && (
                 <div
                     className={styles.mobileProjectDeleteShade}
@@ -1752,17 +1872,26 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                 </div>
             )}
             {isMobileLayout && mode === 'story' && storyScreen === 'mission' && (() => {
-                // Phones keep hints and listening controls permanently visible in a
-                // compact window docked to the left, so the code area stays free and
-                // children never lose their place opening and closing a modal.
+                // Phones keep hints and listening controls in a compact window docked
+                // to the left. It stays short enough to leave the block categories
+                // visible and can be folded down to its title with the chevron.
                 const world = STORY_WORLDS[storyLevel - 1];
                 const owned = storyProgress.hintsByLevel?.[world.id] || [];
                 const available = starsAvailable(storyProgress);
                 return (
-                    <aside className={styles.storyHintPanel} aria-label="Pistas de la misión">
+                    <aside className={`${styles.storyHintPanel} ${storyHintCollapsed ? styles.storyHintPanelCollapsed : ''}`} aria-label="Pistas de la misión">
                         <header className={styles.storyHintPanelHead}>
                             <strong>🧭 Mundo {world.id} · {world.chapter}</strong>
                             <small>{world.lesson}</small>
+                            <button
+                                className={styles.storyHintPanelToggle}
+                                type="button"
+                                aria-expanded={!storyHintCollapsed}
+                                aria-label={storyHintCollapsed ? 'Mostrar consejos y controles' : 'Ocultar consejos y controles'}
+                                onClick={() => setStoryHintCollapsed(value => !value)}
+                            >
+                                <span aria-hidden="true">{storyHintCollapsed ? '▾' : '▴'}</span>
+                            </button>
                             <div className={styles.storyHintPanelWallet} aria-label="Mis monedas y puntos"><span title="Estrellas disponibles">⭐ {available}</span><span title="Puntos totales">🏆 {storyPoints}</span></div>
                         </header>
                         <div className={styles.storyHintPanelActions}>
@@ -1773,7 +1902,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                         </div>
                         {storyRunMessage && <p className={styles.storyHintPanelStatus} role="status">{storyRunMessage}</p>}
                         <div className={styles.storyHintPanelList}>
-                            {levelHints(world, getStoryChallenge(world.id)).map(hint => {
+                            {levelHints(world, getStoryChallenge(world.id, {}, basePath)).map(hint => {
                                 const bought = owned.includes(hint.id);
                                 const affordable = available >= hint.cost;
                                 return (

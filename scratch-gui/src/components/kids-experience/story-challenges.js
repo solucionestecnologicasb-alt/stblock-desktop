@@ -1,18 +1,20 @@
 const ACTOR_IMAGES = {
-    lumi: '/static/kids/story/characters/lumi.svg',
-    tula: '/static/kids/story/characters/tula.svg',
-    bito: '/static/kids/story/characters/bito.svg',
-    nara: '/static/kids/story/characters/nara.svg',
-    mistral: '/static/kids/story/characters/mistral.svg',
-    vega: '/static/kids/story/characters/vega.svg'
+    lumi: 'characters/lumi.svg',
+    tula: 'characters/tula.svg',
+    bito: 'characters/bito.svg',
+    nara: 'characters/nara.svg',
+    mistral: 'characters/mistral.svg',
+    vega: 'characters/vega.svg'
 };
 
-const actor = (id, name, icon, col, row, options = {}) => ({
-    id, name, icon, image: ACTOR_IMAGES[id], role: id, col, row, scale: 1, locked: true, motion: 'idle', ...options
+const storyAsset = (basePath, path) => `${basePath}static/kids/story/${path}`;
+const actor = (id, name, icon, col, row, options = {}, basePath = '/') => ({
+    id, name, icon, image: storyAsset(basePath, ACTOR_IMAGES[id]), role: id, col, row, scale: 1, locked: true, motion: 'idle', ...options
 });
 
-const object = (id, name, icon, col, row, options = {}) => ({
-    id, name, icon, col, row, scale: 0.8, locked: true, ...options
+const object = (id, name, icon, col, row, options = {}, basePath = '/') => ({
+    id, name, icon, col, row, scale: 0.8, locked: true, ...options,
+    ...(options.image ? {image: storyAsset(basePath, options.image.replace(/^\/static\/kids\/story\//, ''))} : {})
 });
 
 // Child-friendly names for the block opcodes used by the story campaign. Lets
@@ -294,7 +296,7 @@ export const STORY_CHALLENGES = {
     }
 };
 
-export const getStoryChallenge = (level, saved = {}) => {
+export const getStoryChallenge = (level, saved = {}, basePath = '/') => {
     const base = STORY_CHALLENGES[level] || {};
     const availableBlocks = new Set();
     for (let world = 1; world <= level; world++) {
@@ -340,6 +342,9 @@ export const getStoryChallenge = (level, saved = {}) => {
         // base para que las calibraciones guardadas antiguas (con Vega quieta en
         // la meta) no impidan recogerla.
         ? {...entity, carryable: true} : entity) : actors;
+    const resolveAsset = path => typeof path === 'string' && path.startsWith('/static/kids/story/')
+        ? `${basePath}${path.slice(1)}`
+        : path;
     return {
         ...base,
         ...saved,
@@ -347,8 +352,8 @@ export const getStoryChallenge = (level, saved = {}) => {
         requiredBlockSequence: saved.requiredBlockSequence || base.requiredBlockSequence || [],
         requiredActions: level === 4 || level === 15 || level === 16 || level === 17 || level === 18 || level === 19 || level === 20 ? base.requiredActions : (saved.requiredActions || base.requiredActions || []),
         availableBlocks: [...availableBlocks],
-        actors: resolvedActors,
-        objects: resolvedObjects
+        actors: resolvedActors.map(entity => ({...entity, image: resolveAsset(entity.image)})),
+        objects: resolvedObjects.map(entity => ({...entity, image: resolveAsset(entity.image)}))
     };
 };
 

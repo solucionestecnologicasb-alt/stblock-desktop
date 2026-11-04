@@ -1,6 +1,121 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <!--
+      STBlock: Chromebooks con ARC++ usan Android System WebView 68 (Chrome 68).
+      Ese motor no implementa globalThis, Array.prototype.flatMap,
+      Object.fromEntries, String.prototype.matchAll ni queueMicrotask, por lo que
+      el bundle abortaba antes de montar React y la pantalla quedaba en blanco.
+      Este shim debe ejecutarse antes de gui.js (que se carga con defer).
+    -->
+    <script>
+      (function () {
+        if (typeof globalThis === 'undefined') {
+          window.globalThis = window;
+        }
+        if (!Array.prototype.flatMap) {
+          Array.prototype.flatMap = function (callback, thisArg) {
+            var source = Object(this);
+            var length = source.length >>> 0;
+            var result = [];
+            for (var index = 0; index < length; index++) {
+              if (index in source) {
+                var value = callback.call(thisArg, source[index], index, source);
+                if (Array.isArray(value)) {
+                  for (var inner = 0; inner < value.length; inner++) {
+                    result.push(value[inner]);
+                  }
+                } else {
+                  result.push(value);
+                }
+              }
+            }
+            return result;
+          };
+        }
+        if (!Object.fromEntries) {
+          Object.fromEntries = function (entries) {
+            var result = {};
+            var iterator = entries[Symbol.iterator]();
+            for (var step = iterator.next(); !step.done; step = iterator.next()) {
+              result[step.value[0]] = step.value[1];
+            }
+            return result;
+          };
+        }
+        if (!String.prototype.matchAll) {
+          String.prototype.matchAll = function (pattern) {
+            var input = String(this);
+            var regexp = pattern instanceof RegExp ? pattern : new RegExp(pattern, 'g');
+            var flags = regexp.flags || '';
+            if (flags.indexOf('g') === -1) {
+              flags += 'g';
+            }
+            var globalRegexp = new RegExp(regexp.source, flags);
+            var matches = [];
+            var match;
+            while ((match = globalRegexp.exec(input)) !== null) {
+              matches.push(match);
+              if (match[0] === '') {
+                globalRegexp.lastIndex += 1;
+              }
+            }
+            return matches[Symbol.iterator]();
+          };
+        }
+        if (!window.queueMicrotask) {
+          window.queueMicrotask = function (callback) {
+            Promise.resolve().then(callback);
+          };
+        }
+      }());
+    </script>
+    <!--
+      Si el arranque falla (p. ej. una SyntaxError en un WebView antiguo), el
+      usuario sólo veía una pantalla en blanco. Mostrar el error en pantalla
+      permite diagnosticar sin adb. Sólo se activa durante los primeros 15 s.
+    -->
+    <script>
+      (function () {
+        var startedAt = Date.now();
+        var shown = false;
+        var showFatal = function (message) {
+          if (shown) {
+            return;
+          }
+          shown = true;
+          var render = function () {
+            if (!document.body) {
+              return;
+            }
+            var panel = document.createElement('pre');
+            panel.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;' +
+              'z-index:2147483647;margin:0;padding:16px;background:#1a1a1a;' +
+              'color:#ff8a80;font:12px/1.4 monospace;white-space:pre-wrap;overflow:auto';
+            panel.textContent = 'STBlock no pudo iniciar\n\n' + message +
+              '\n\nWebView: ' + navigator.userAgent;
+            document.body.appendChild(panel);
+          };
+          if (document.body) {
+            render();
+          } else {
+            document.addEventListener('DOMContentLoaded', render);
+          }
+        };
+        window.addEventListener('error', function (event) {
+          var message = event && event.message;
+          if (!message || Date.now() - startedAt > 15000) {
+            return;
+          }
+          if (!/SyntaxError|is not a function|is not defined/.test(message)) {
+            return;
+          }
+          showFatal(message + (event.filename ?
+            '\n' + event.filename + ':' + event.lineno + ':' + event.colno : ''));
+        }, true);
+        window.__stbShowFatalError = showFatal;
+      }());
+    </script>
     <% if (htmlWebpackPlugin.options.gtm_id) { %>
     <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
