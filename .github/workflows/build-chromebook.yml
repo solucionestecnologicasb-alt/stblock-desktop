@@ -61,6 +61,9 @@ jobs:
         run: |
           pnpm install
           pnpm --dir backend install
+          # build:gui compila el submódulo vendor/scratchjr-reborn, que necesita
+          # sus propias dependencias (esbuild).
+          npm --prefix vendor/scratchjr-reborn ci
 
       - name: Descargar arduino-cli para Linux 64-bit
         run: |
