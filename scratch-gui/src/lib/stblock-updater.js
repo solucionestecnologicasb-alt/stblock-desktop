@@ -368,6 +368,16 @@ export const installPendingSTBlockUpdate = async onProgress => {
             userMsg = 'Error de conexión: No se pudo conectar al servidor de descargas o la red se interrumpió. Comprueba tu conexión a internet e inténtalo de nuevo.';
         } else if (lower.includes('signature') || lower.includes('pubkey') || lower.includes('hash')) {
             userMsg = 'Error de seguridad: La firma digital de la actualización no es válida o no coincide.';
+        } else if (
+            lower.includes('pkexec') ||
+            lower.includes('polkit') ||
+            lower.includes('not authorized') ||
+            lower.includes('authentication') ||
+            lower.includes('password')
+        ) {
+            userMsg = 'No se pudo autenticar para instalar. Descarga el .deb e instálalo manualmente.';
+        } else if (lower.includes('dpkg') || lower.includes('dependency') || lower.includes('depends')) {
+            userMsg = 'Faltan dependencias del sistema. Descarga el .deb y ábrelo con el instalador.';
         } else if (lower.includes('permission') || lower.includes('access') || lower.includes('denied')) {
             userMsg = 'Error de permisos: El sistema no permitió guardar el instalador. Prueba ejecutando STBlock como Administrador.';
         } else if (lower.includes('space') || lower.includes('disk')) {

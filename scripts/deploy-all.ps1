@@ -143,29 +143,25 @@ function Get-PrimaryInstaller {
     return $installer
 }
 
-function Ensure-UpdaterMetadata {
+function Get-OrCreateSignature {
     param(
-        [System.IO.FileInfo] $Installer,
-        [string] $Version,
-        [string] $Tag,
-        [string] $Repo,
-        [string] $AssetDir,
-        [string] $Notes
+        [Parameter(Mandatory = $true)] [string] $Path
     )
 
-    if (-not $Installer) {
-        Fail 'No se encontro instalador primario x64 para generar latest.json'
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Fail "No existe el artefacto a firmar: $Path"
     }
 
-    $sigPath = "$($Installer.FullName).sig"
+    $file = Get-Item -LiteralPath $Path
+    $sigPath = "$($file.FullName).sig"
     $needsSignature = -not (Test-Path -LiteralPath $sigPath)
     if (-not $needsSignature) {
         $sigFile = Get-Item -LiteralPath $sigPath
-        $needsSignature = $sigFile.LastWriteTime -lt $Installer.LastWriteTime
+        $needsSignature = $sigFile.LastWriteTime -lt $file.LastWriteTime
     }
 
     if ($needsSignature) {
-        Write-Host "Firmando artefacto updater: $($Installer.Name)"
+        Write-Host "Firmando artefacto updater: $($file.Name)"
         Push-Location $RootDir
         try {
             # Limpiar variables de entorno conflictivas - no se pueden usar ambos metodos
@@ -173,9 +169,9 @@ function Ensure-UpdaterMetadata {
             $env:TAURI_SIGNING_PRIVATE_KEY = $null
             $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
             $tauriCli = Join-Path $RootDir "node_modules\.bin\tauri.CMD"
-            & cmd /c "$tauriCli signer sign --private-key-path `"$SigningKeyPath`" --password `"`" `"$($Installer.FullName)`""
+            & cmd /c "$tauriCli signer sign --private-key-path `"$SigningKeyPath`" --password `"`" `"$($file.FullName)`""
             if ($LASTEXITCODE -ne 0) {
-                Fail "Fallo firma updater: $($Installer.FullName)"
+                Fail "Fallo firma updater: $($file.FullName)"
             }
             # Restaurar para otros usos posteriores si es necesario
             $env:TAURI_SIGNING_PRIVATE_KEY = $savedKey
@@ -192,6 +188,26 @@ function Ensure-UpdaterMetadata {
     if (-not $signature) {
         Fail "Firma updater vacia: $sigPath"
     }
+
+    return $signature
+}
+
+function Ensure-UpdaterMetadata {
+    param(
+        [System.IO.FileInfo] $Installer,
+        [string] $Version,
+        [string] $Tag,
+        [string] $Repo,
+        [string] $AssetDir,
+        [string] $Notes
+    )
+
+    if (-not $Installer) {
+        Fail 'No se encontro instalador primario x64 para generar latest.json'
+    }
+
+    $sigPath = "$($Installer.FullName).sig"
+    $signature = Get-OrCreateSignature -Path $Installer.FullName
 
     Copy-Item -LiteralPath $sigPath -Destination (Join-Path $AssetDir (Split-Path -Leaf $sigPath)) -Force
 
@@ -212,6 +228,59 @@ function Ensure-UpdaterMetadata {
     Write-JsonFile -Path (Join-Path $AssetDir 'latest.json') -Value $latest -Depth 10
     Write-OK "latest.json generado para $($Installer.Name)"
 }
+
+function Add-LinuxDebUpdaterMetadata {
+    param(
+        [string] $DebPath,
+        [string] $Version,
+        [string] $Tag,
+        [string] $Repo,
+        [string] $AssetDir
+    )
+
+    $latestPath = Join-Path $AssetDir 'latest.json'
+    if (-not (Test-Path -LiteralPath $latestPath)) {
+        Fail "No existe latest.json en $AssetDir al anadir la entrada Linux. Se requiere la entrada windows-x86_64."
+    }
+
+    $signature = Get-OrCreateSignature -Path $DebPath
+
+    # Conservar el resto de plataformas (windows-x86_64) y reescribir el objeto
+    # manteniendo version/notes/pub_date.
+    $existing = Read-JsonFile $latestPath
+    $platforms = [ordered]@{}
+    if ($existing.platforms) {
+        foreach ($prop in $existing.platforms.PSObject.Properties) {
+            $platforms[$prop.Name] = [ordered]@{
+                signature = $prop.Value.signature
+                url = $prop.Value.url
+            }
+        }
+    }
+
+    $debUrl = "https://github.com/$Repo/releases/download/$Tag/STBlock_${Version}_amd64.deb"
+    # 'linux-x86_64-deb' es la clave que busca tauri-plugin-updater para bundles
+    # Deb; 'linux-x86_64' se mantiene por compatibilidad.
+    $platforms['linux-x86_64-deb'] = [ordered]@{
+        signature = $signature
+        url = $debUrl
+    }
+    $platforms['linux-x86_64'] = [ordered]@{
+        signature = $signature
+        url = $debUrl
+    }
+
+    $latest = [ordered]@{
+        version = $existing.version
+        notes = $existing.notes
+        pub_date = $existing.pub_date
+        platforms = $platforms
+    }
+
+    Write-JsonFile -Path $latestPath -Value $latest -Depth 10
+    Write-OK "Entrada Linux (.deb) anadida a latest.json: $debUrl"
+}
+
 function Get-SourceRepo {
     param([string] $Root)
     $url = (git -C $Root remote get-url origin 2>$null)
@@ -533,16 +602,6 @@ if (-not $SkipPluginCopy) {
 
 
 
-$latestJson = Get-ChildItem -LiteralPath $releaseAssetDir -File -Filter 'latest.json' -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $latestJson) {
-    $missingLatestMessage = "No se encontro latest.json en los artefactos. Tauri Updater necesita latest.json para actualizar automaticamente."
-    if (-not $SkipReleasePublish) {
-        Fail "$missingLatestMessage Revisa la firma updater/TAURI_SIGNING_PRIVATE_KEY antes de publicar a usuarios finales."
-    }
-    Write-Warn $missingLatestMessage
-    Write-Warn "Si el build no lo genera, revisa la firma updater/TAURI_SIGNING_PRIVATE_KEY antes de publicar a usuarios finales."
-}
-
 if (-not $SkipGitCommit) {
     Write-Step "Guardando cambios en Git"
     Invoke-Checked -File 'git' -Arguments @('add', '-A') -WorkingDirectory $RootDir
@@ -658,8 +717,17 @@ if (-not $SkipDebDownload) {
         Write-OK "Paquete guardado en $distDebDir\$canonicalDebName"
 
         if (Test-Path -LiteralPath $releaseAssetDir) {
-            Copy-Item -LiteralPath $debPackage.FullName -Destination (Join-Path $releaseAssetDir $canonicalDebName) -Force
+            $releaseDebPath = Join-Path $releaseAssetDir $canonicalDebName
+            Copy-Item -LiteralPath $debPackage.FullName -Destination $releaseDebPath -Force
             Write-OK "Paquete copiado a los artefactos de release: $canonicalDebName"
+
+            # Firmar el .deb en el directorio de assets para que publish-update-policy
+            # suba STBlock_<ver>_amd64.deb.sig junto al paquete.
+            if (Test-Path -LiteralPath (Join-Path $releaseAssetDir 'latest.json')) {
+                Add-LinuxDebUpdaterMetadata -DebPath $releaseDebPath -Version $version -Tag $tag -Repo $ReleaseRepo -AssetDir $releaseAssetDir
+            } else {
+                Write-Warn "No existe latest.json; no se puede anadir la entrada Linux para la actualizacion automatica."
+            }
         }
 
         if (-not $SkipPluginCopy -and (Test-Path -LiteralPath $PluginAssetsDir)) {
@@ -670,6 +738,54 @@ if (-not $SkipDebDownload) {
     }
 } else {
     Write-Warn "Descarga del .deb saltada por parametro"
+}
+
+Write-Step "Validando latest.json"
+$latestJsonPath = Join-Path $releaseAssetDir 'latest.json'
+if (-not (Test-Path -LiteralPath $latestJsonPath)) {
+    $missingLatestMessage = "No se encontro latest.json en los artefactos. Tauri Updater necesita latest.json para actualizar automaticamente."
+    if (-not $SkipReleasePublish) {
+        Fail "$missingLatestMessage Revisa la firma updater/TAURI_SIGNING_PRIVATE_KEY antes de publicar a usuarios finales."
+    }
+    Write-Warn $missingLatestMessage
+    Write-Warn "Si el build no lo genera, revisa la firma updater/TAURI_SIGNING_PRIVATE_KEY antes de publicar a usuarios finales."
+} else {
+    $latestData = Read-JsonFile $latestJsonPath
+    $platformNames = if ($latestData.platforms) {
+        @($latestData.platforms.PSObject.Properties | ForEach-Object { $_.Name })
+    } else {
+        @()
+    }
+
+    if ($platformNames -notcontains 'windows-x86_64') {
+        $missingWindowsMessage = "latest.json no contiene la plataforma 'windows-x86_64'."
+        if (-not $SkipReleasePublish) {
+            Fail $missingWindowsMessage
+        }
+        Write-Warn $missingWindowsMessage
+    }
+
+    $debEntryExpected = (-not $SkipDebDownload) -and [bool] $debPackage
+    if ($debEntryExpected -and ($platformNames -notcontains 'linux-x86_64-deb')) {
+        $missingLinuxMessage = "latest.json no contiene la plataforma 'linux-x86_64-deb' aunque se obtuvo el paquete .deb."
+        if (-not $SkipReleasePublish) {
+            Fail $missingLinuxMessage
+        }
+        Write-Warn $missingLinuxMessage
+    }
+
+    if ($platformNames -contains 'linux-x86_64-deb') {
+        $linuxEntry = $latestData.platforms.'linux-x86_64-deb'
+        $expectedDebUrl = "https://github.com/$ReleaseRepo/releases/download/$tag/STBlock_${version}_amd64.deb"
+        if (-not $linuxEntry.signature) {
+            Fail "La entrada 'linux-x86_64-deb' de latest.json no tiene firma."
+        }
+        if ($linuxEntry.url -ne $expectedDebUrl) {
+            Fail "La URL de 'linux-x86_64-deb' no apunta al .deb esperado: $($linuxEntry.url)"
+        }
+    }
+
+    Write-OK "latest.json valido: $($platformNames -join ', ')"
 }
 
 if (-not $SkipReleasePublish) {

@@ -180,6 +180,13 @@ const UpdateModal = ({
         ? ((progress && progress.statusText) || 'Descargando la nueva versión de STBlock...')
         : (cleanSpanishText(info.message) || 'Hay una nueva versión de STBlock disponible.');
 
+    const openDebDownload = () => {
+        const url = info.debDownloadUrl || info.releaseUrl;
+        if (url) {
+            window.open(url, '_blank');
+        }
+    };
+
     return (
         <div className={styles.overlay}>
             <div className={modalClass} role="dialog" aria-modal="true">
@@ -263,7 +270,7 @@ const UpdateModal = ({
                         </div>
                     ) : null}
 
-                    {!installing && available && !info.canInstall ? (
+                    {!installing && available && !info.canInstall && !(info.isLinux && info.debDownloadUrl) ? (
                         <div className={styles.error}>
                             Paquete firmado no disponible para descarga directa en esta versión.
                         </div>
@@ -296,7 +303,20 @@ const UpdateModal = ({
                                 <span>💡 Nota para Chromebook / Linux</span>
                             </div>
                             <div className={styles.chromebookNoticeText}>
-                                Al hacer clic en <strong>Descargar actualización (.deb)</strong> se descargará el nuevo paquete. Muévelo a la carpeta <em>Archivos de Linux</em> y haz doble clic para actualizar sin perder tus proyectos.
+                                {info.canInstall ? (
+                                    <React.Fragment>
+                                        En Debian o Ubuntu, <strong>Actualizar ahora</strong> descarga e instala el
+                                        paquete automáticamente y el sistema te pedirá tu contraseña. Si el diálogo
+                                        no aparece (por ejemplo, en Chromebook/Crostini), usa{' '}
+                                        <strong>Descargar .deb manualmente</strong> y ábrelo con el instalador.
+                                    </React.Fragment>
+                                ) : (
+                                    <React.Fragment>
+                                        Al hacer clic en <strong>Descargar actualización (.deb)</strong> se
+                                        descargará el nuevo paquete. Muévelo a la carpeta <em>Archivos de Linux</em> y
+                                        haz doble clic para actualizar sin perder tus proyectos.
+                                    </React.Fragment>
+                                )}
                             </div>
                         </div>
                     ) : null}
@@ -351,17 +371,22 @@ const UpdateModal = ({
                                 </button>
                             )}
                             {info.isLinux ? (
-                                <button
-                                    className={styles.primaryButton}
-                                    onClick={() => {
-                                        const url = info.debDownloadUrl || info.releaseUrl;
-                                        if (url) {
-                                            window.open(url, '_blank');
-                                        }
-                                    }}
-                                >
-                                    Descargar actualización (.deb)
-                                </button>
+                                <React.Fragment>
+                                    {info.canInstall ? (
+                                        <button className={styles.primaryButton} onClick={onInstall}>
+                                            Actualizar ahora
+                                        </button>
+                                    ) : (
+                                        <button className={styles.primaryButton} onClick={openDebDownload}>
+                                            Descargar actualización (.deb)
+                                        </button>
+                                    )}
+                                    {info.canInstall ? (
+                                        <button className={styles.secondaryButton} onClick={openDebDownload}>
+                                            Descargar .deb manualmente
+                                        </button>
+                                    ) : null}
+                                </React.Fragment>
                             ) : (
                                 <button
                                     className={styles.primaryButton}
