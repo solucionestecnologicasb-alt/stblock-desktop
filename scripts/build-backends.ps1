@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Compiles Node.js backend services into standalone Windows executables using esbuild + SEA.
 .DESCRIPTION
@@ -168,14 +168,22 @@ Write-Host "`n[build-backends] ==== Servidor Backend (server.js) ===="
 # Bundle server.js + deps with esbuild
 $BackendBundle = Join-Path $TempDir "backend-bundle.cjs"
 Write-Host "[build-backends] Bundling server.js con esbuild..."
-& npx --yes esbuild (Join-Path $BackendDir "server.js") `
-    --bundle `
-    --platform=node `
-    --target=node20 `
-    --outfile=$BackendBundle `
-    --minify `
-    --sourcemap=inline `
-    --external:none
+$esbuildArgs = @(
+    (Join-Path $BackendDir "server.js")
+    '--bundle'
+    '--platform=node'
+    '--target=node20'
+    "--outfile=$BackendBundle"
+    '--minify'
+    '--sourcemap=inline'
+    '--external:none'
+)
+$localEsbuild = Join-Path $RootDir 'vendor\scratchjr-reborn\node_modules\.bin\esbuild.cmd'
+if (Test-Path -LiteralPath $localEsbuild -PathType Leaf) {
+    & $localEsbuild @esbuildArgs
+} else {
+    & npx --yes esbuild @esbuildArgs
+}
 if ($LASTEXITCODE -ne 0) { throw "Error en esbuild bundle de server.js" }
 
 # Verify bundle was created

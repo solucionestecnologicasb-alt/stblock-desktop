@@ -89,6 +89,8 @@ $tauriVer = pnpm exec tauri --version 2>$null
 if (-not $tauriVer) { Write-Fail "Tauri CLI no encontrado. Ejecute: pnpm install" }
 Write-OK "$tauriVer"
 
+& (Join-Path $RootDir 'scripts\ensure-webview2-installer.ps1')
+
 # === PASO 1: Compilar backends Node.js a EXEs ===
 if (-not $SkipBackends) {
     Write-Step "PASO 1: Compilando backends Node.js a EXEs..."

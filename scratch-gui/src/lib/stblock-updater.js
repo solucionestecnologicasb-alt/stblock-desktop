@@ -149,6 +149,16 @@ export const checkForSTBlockUpdates = async ({manual = false} = {}) => {
         };
     }
 
+    if (!updateAvailable && updateError) {
+        return {
+            status: 'error',
+            currentVersion,
+            latestVersion: null,
+            title: 'No se pudo buscar actualizaciones',
+            message: 'No se pudo consultar el canal de actualizaciones. Inténtalo de nuevo más tarde.'
+        };
+    }
+
     if (!updateAvailable) {
         return {
             status: 'current',

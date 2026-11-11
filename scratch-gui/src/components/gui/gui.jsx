@@ -1712,7 +1712,7 @@ const GUIComponent = props => {
             if (result.status === 'available') {
                 setUpdateInfo(result);
             } else if (manual) {
-                setUpdateInfo(result.status === 'current' ? result : {
+                setUpdateInfo(['current', 'error'].includes(result.status) ? result : {
                     status: 'current',
                     currentVersion: result.currentVersion,
                     latestVersion: result.latestVersion || result.currentVersion,

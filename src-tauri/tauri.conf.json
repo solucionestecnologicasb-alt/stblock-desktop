@@ -1,7 +1,7 @@
 {
     "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName":  "STBlock",
-    "version":  "0.1.59",
+    "version":  "0.1.62",
     "identifier":  "stblock.app",
     "build":  {
                   "frontendDist":  "../scratch-gui/build",
@@ -86,7 +86,7 @@
                },
     "plugins":  {
                     "updater":  {
-                                    "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI0NURERERERjdEQTE4RTcKUldUbkdOcjMzZDFkSkFCMVVPZGd6VFdGT3grZ3NKVTBmaytSYXp3bk1Lbm5mRHNGNGIwdlFGT00K",
+                                    "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFGNzU4ODFEMDA5RjRCQTIKUldTaVM1OEFIWWgxSC8wWW9oR0tJZG5EZmxWU1JnVFJjR01Xa2dYSVNMNU1IRGxjNUN6NXBXak8K",
                                     "endpoints":  [
                                                       "https://github.com/solucionestecnologicasb-alt/stblock-releases/releases/latest/download/latest.json"
                                                   ],

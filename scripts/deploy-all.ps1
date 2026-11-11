@@ -21,17 +21,20 @@ param(
 
     [string] $ReleaseRepo = 'solucionestecnologicasb-alt/stblock-releases',
 
-    [string] $PluginPath = 'C:\Users\bello\Local Sites\stbacademylocal\app\public\wp-content\plugins\stb-academy-core',
+    [string] $PluginPath = (Join-Path $env:USERPROFILE 'Local Sites\stbacademylocal\app\public\wp-content\plugins\stb-academy-core'),
+    [string] $SigningKeyPath = $env:TAURI_SIGNING_PRIVATE_KEY_PATH,
 
 
     [string] $Notes = '',
+    [switch] $ManualMigrationNotice,
 
     [switch] $SkipInstallerBuild,
     [switch] $SkipGitPush,
     [switch] $SkipReleasePublish,
     [switch] $SkipPluginCopy,
     [switch] $SkipGitCommit,
-    [switch] $SkipDebDownload
+    [switch] $SkipDebDownload,
+    [switch] $CheckSigning
 )
 
 $ErrorActionPreference = 'Stop'
@@ -162,21 +165,12 @@ function Get-OrCreateSignature {
 
     if ($needsSignature) {
         Write-Host "Firmando artefacto updater: $($file.Name)"
-        Push-Location $RootDir
-        try {
-            # Limpiar variables de entorno conflictivas - no se pueden usar ambos metodos
-            $savedKey = $env:TAURI_SIGNING_PRIVATE_KEY
-            $env:TAURI_SIGNING_PRIVATE_KEY = $null
-            $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ''
-            $tauriCli = Join-Path $RootDir "node_modules\.bin\tauri.CMD"
-            & cmd /c "$tauriCli signer sign --private-key-path `"$SigningKeyPath`" --password `"`" `"$($file.FullName)`""
-            if ($LASTEXITCODE -ne 0) {
-                Fail "Fallo firma updater: $($file.FullName)"
-            }
-            # Restaurar para otros usos posteriores si es necesario
-            $env:TAURI_SIGNING_PRIVATE_KEY = $savedKey
-        } finally {
-            Pop-Location
+        $tauriCli = Join-Path $RootDir 'node_modules\.bin\tauri.CMD'
+        $signArgs = @('signer', 'sign', '--private-key-path', $SigningKeyPath)
+        if (-not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) { $signArgs += '--password=' }
+        & $tauriCli @signArgs $file.FullName | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Fail "Fallo firma updater: $($file.FullName)"
         }
     }
 
@@ -206,10 +200,7 @@ function Ensure-UpdaterMetadata {
         Fail 'No se encontro instalador primario x64 para generar latest.json'
     }
 
-    $sigPath = "$($Installer.FullName).sig"
     $signature = Get-OrCreateSignature -Path $Installer.FullName
-
-    Copy-Item -LiteralPath $sigPath -Destination (Join-Path $AssetDir (Split-Path -Leaf $sigPath)) -Force
 
     $latest = [ordered]@{
         version = $Version
@@ -406,21 +397,64 @@ $BundleDir = Join-Path $RootDir 'src-tauri\target\release\bundle'
 $PluginAssetsDir = Join-Path $PluginPath 'assets'
 $PluginEditorDir = Join-Path $PluginAssetsDir 'editor'
 $ReleaseAssetsRoot = Join-Path $RootDir 'updates\release-assets'
-$SigningKeyPath = Join-Path $env:USERPROFILE '.tauri\stblock-update-dev.key'
-# Limpiar variables de firma para evitar error RC2102 (string literal too long) durante build
-# La firma se hace despues del build usando --private-key-path
+if (-not $SigningKeyPath) {
+    $SigningKeyPath = Join-Path $env:USERPROFILE '.tauri\stblock-update-dev.key'
+}
+# El build hijo limpia sus variables de firma. El deploy conserva la
+# contrasena para el firmante y usa exclusivamente la clave indicada por ruta.
 $env:TAURI_SIGNING_PRIVATE_KEY = $null
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $null
 $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $null
+
+if (-not $CheckSigning -and -not $SkipPluginCopy -and -not (Test-Path -LiteralPath (Join-Path $PluginPath 'stb-academy-core.php') -PathType Leaf)) {
+    Fail "No se encontro stb-academy-core en $PluginPath. Indica la ruta correcta con -PluginPath."
+}
+if ($CheckSigning -or -not $SkipReleasePublish) {
+    if (-not (Test-Path -LiteralPath $SigningKeyPath -PathType Leaf)) {
+        Fail "Falta la clave privada del updater: $SigningKeyPath. Restaura la clave correspondiente a tauri.conf.json o indica su ruta con -SigningKeyPath."
+    }
+    $SigningKeyPath = (Resolve-Path -LiteralPath $SigningKeyPath).ProviderPath
+}
 
 $CargoTomlPath = Join-Path $RootDir 'src-tauri\Cargo.toml'
 
 if (-not (Test-Path -LiteralPath $PackagePath)) { Fail "No existe package.json en $RootDir" }
 if (-not (Test-Path -LiteralPath $TauriConfigPath)) { Fail "No existe src-tauri\tauri.conf.json" }
 
-Write-Step "Preparando version"
 $package = Read-JsonFile $PackagePath
 $tauriConfig = Read-JsonFile $TauriConfigPath
+if ($CheckSigning -or -not $SkipReleasePublish) {
+    Write-Step "Verificando firma del updater"
+    $probe = [IO.Path]::GetTempFileName()
+    try {
+        $signature = Get-OrCreateSignature -Path $probe
+        $publicText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($tauriConfig.plugins.updater.pubkey))
+        $signatureText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($signature))
+        $publicBytes = [Convert]::FromBase64String(($publicText -split '\r?\n')[1])
+        $signatureBytes = [Convert]::FromBase64String(($signatureText -split '\r?\n')[1])
+        if ([BitConverter]::ToString($publicBytes, 2, 8) -ne [BitConverter]::ToString($signatureBytes, 2, 8)) {
+            Fail 'La clave de firma no coincide con la clave publica configurada en Tauri.'
+        }
+    } finally {
+        Remove-Item -LiteralPath $probe, "$probe.sig" -Force -ErrorAction SilentlyContinue
+    }
+    Write-OK 'La clave privada puede firmar y coincide con la clave publica del proyecto.'
+}
+if ($CheckSigning) { return }
+
+if (-not $SkipReleasePublish) {
+    Invoke-Checked -File 'gh' -Arguments @('auth', 'status', '--hostname', 'github.com') -WorkingDirectory $RootDir
+}
+if (-not $SkipGitCommit) {
+    Invoke-Checked -File 'git' -Arguments @('rev-parse', '--is-inside-work-tree') -WorkingDirectory $RootDir
+}
+
+Write-Step "Preparando version"
+if (-not $SkipInstallerBuild) {
+    Invoke-Checked -File 'powershell' -Arguments @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass',
+        '-File', (Join-Path $RootDir 'scripts\ensure-webview2-installer.ps1')
+    ) -WorkingDirectory $RootDir
+}
 $currentVersion = [string] $tauriConfig.version
 if (-not $currentVersion) { $currentVersion = [string] $package.version }
 $version = Get-NextVersion -Current $currentVersion -Kind $Bump
@@ -464,26 +498,6 @@ if (-not (Test-Path -LiteralPath $GuiBuildDir)) {
     Fail "No existe build web: $GuiBuildDir"
 }
 
-if (-not $SkipPluginCopy) {
-    Write-Step "Preparando editor web optimizado para WordPress"
-    if (-not (Test-Path -LiteralPath $PluginPath)) {
-        Fail "No existe plugin WordPress: $PluginPath"
-    }
-    # El preparador recrea unicamente assets/editor, elimina source maps y
-    # playgrounds que WordPress no usa, e instala cache local bajo demanda.
-    # El identificador cambia en cada deploy para invalidar el Service Worker.
-    $cacheVersion = "$version-$(Get-Date -Format 'yyyyMMddHHmmss')"
-    Invoke-Checked -File 'node' -Arguments @(
-        '.\scripts\prepare-wordpress-editor.mjs',
-        $GuiBuildDir,
-        $PluginEditorDir,
-        $cacheVersion
-    ) -WorkingDirectory $RootDir
-    Write-OK "Editor WordPress optimizado; version de cache: $cacheVersion"
-} else {
-    Write-Warn "Copia al plugin saltada por parametro"
-}
-
 Write-Step "Preparando instaladores y artefactos de release"
 if (-not (Test-Path -LiteralPath $BundleDir)) {
     Fail "No existe carpeta bundle: $BundleDir"
@@ -496,7 +510,7 @@ if (-not $bundleFiles) {
 
 $releaseAssetDir = Join-Path $ReleaseAssetsRoot $tag
 if (Test-Path -LiteralPath $releaseAssetDir) {
-    Remove-Item -LiteralPath $releaseAssetDir -Recurse -Force
+    $releaseAssetDir = Join-Path $ReleaseAssetsRoot "$tag-$([Guid]::NewGuid().ToString('N'))"
 }
 New-Item -ItemType Directory -Path $releaseAssetDir -Force | Out-Null
 
@@ -505,7 +519,7 @@ New-Item -ItemType Directory -Path $releaseAssetDir -Force | Out-Null
 # (era la causa de "instala pero abre la version anterior": se firmaba/publicaba el
 # instalador viejo de la carpeta bundle como si fuera la version nueva).
 $versionFiles = $bundleFiles |
-    Where-Object { $_.Name -like "*_$version`_*" }
+    Where-Object { $_.Name -like "*_$version`_*" -and $_.Extension -in @(".exe", ".msi") }
 
 if (-not $versionFiles) {
     if (-not $SkipReleasePublish) {
@@ -528,79 +542,11 @@ if ($versionFiles) {
             Fail "No se encontro instalador x64 para la version $version. Revisa el output del build."
         }
         Write-Warn "No se encontro instalador x64; se omite generar latest.json."
-    } else {
+    } elseif (-not $SkipReleasePublish) {
+        $primaryInstaller = Get-Item -LiteralPath (Join-Path $releaseAssetDir $primaryInstaller.Name)
         Ensure-UpdaterMetadata -Installer $primaryInstaller -Version $version -Tag $tag -Repo $ReleaseRepo -AssetDir $releaseAssetDir -Notes $Notes
     }
 }
-
-if (-not $SkipPluginCopy) {
-    Write-Step "Copiando instaladores al plugin WordPress"
-    if (-not (Test-Path -LiteralPath $PluginAssetsDir)) {
-        New-Item -ItemType Directory -Path $PluginAssetsDir -Force | Out-Null
-    }
-
-    $x64ExeInstaller = $bundleFiles |
-        Where-Object { $_.Extension -eq '.exe' -and $_.Name -match 'x64' -and ($_.Name -like '*setup*' -or $_.Name -like 'STBlock*') -and $_.Name -like "*_$version`_*" } |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-
-    $x64MsiInstaller = $bundleFiles |
-        Where-Object { $_.Extension -eq '.msi' -and $_.Name -match 'x64' -and $_.Name -like "*_$version`_*" } |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-
-    $pluginX64Exe = Join-Path $PluginAssetsDir 'STBlock-Desktop-Installer-x64.exe'
-    $pluginX64Msi = Join-Path $PluginAssetsDir 'STBlock-Desktop-Installer-x64.msi'
-
-    if ($x64ExeInstaller) {
-        if (Test-Path -LiteralPath $pluginX64Exe) {
-            Remove-Item -LiteralPath $pluginX64Exe -Force
-            Write-Host "Instalador anterior eliminado en plugin: $pluginX64Exe"
-        }
-        Copy-Item -LiteralPath $x64ExeInstaller.FullName -Destination $pluginX64Exe -Force
-        Write-OK "Instalador x64 copiado y reemplazado exactamente a $pluginX64Exe"
-    } else {
-        Fail "No se encontro instalador EXE x64. Ejecuta build con NSIS antes del deploy."
-    }
-
-    if ($x64MsiInstaller) {
-        if (Test-Path -LiteralPath $pluginX64Msi) {
-            Remove-Item -LiteralPath $pluginX64Msi -Force
-        }
-        Copy-Item -LiteralPath $x64MsiInstaller.FullName -Destination $pluginX64Msi -Force
-        Write-OK "Instalador MSI x64 copiado al plugin para referencia/update"
-    } else {
-        Write-Warn "No se encontro instalador MSI x64"
-    }
-
-    # Android APK: Preservado intacto para Google Play Store sin cambiar firmas ni claves
-    $pluginApk = Join-Path $PluginAssetsDir 'STBlock.apk'
-    if (Test-Path -LiteralPath $pluginApk) {
-        Write-OK "Instalador Android APK preservado intacto (firmado para Google Play): $pluginApk"
-    } else {
-        Write-Warn "No existe STBlock.apk en el plugin; se preserva sin compilar."
-    }
-
-    # Paquete Linux .deb (Debian / Ubuntu / Chromebook). Solo de la version
-    # desplegada: si hay un .deb viejo en la carpeta no debe reemplazar al nuevo.
-    $debInstaller = Get-ChildItem -Path (Join-Path $RootDir 'src-tauri\target\release\bundle\deb'), (Join-Path $RootDir 'dist-linux'), (Join-Path $RootDir 'dist-chromebook') -Filter "STBlock_${version}_amd64.deb" -Recurse -File -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-
-    $pluginDeb = Join-Path $PluginAssetsDir 'STBlock-Linux.deb'
-    if ($debInstaller) {
-        if (Test-Path -LiteralPath $pluginDeb) {
-            Remove-Item -LiteralPath $pluginDeb -Force
-            Write-Host "Paquete Linux anterior eliminado en plugin: $pluginDeb"
-        }
-        Copy-Item -LiteralPath $debInstaller.FullName -Destination $pluginDeb -Force
-        Write-OK "Instalador Linux copiado y reemplazado exactamente a $pluginDeb ($($debInstaller.Name))"
-    } else {
-        Write-Warn "No se encontro paquete Linux .deb local. La compilacion en la nube se ejecuta automaticamente en GitHub Actions con el tag."
-    }
-}
-
-
 
 if (-not $SkipGitCommit) {
     Write-Step "Guardando cambios en Git"
@@ -730,11 +676,7 @@ if (-not $SkipDebDownload) {
             }
         }
 
-        if (-not $SkipPluginCopy -and (Test-Path -LiteralPath $PluginAssetsDir)) {
-            $pluginDeb = Join-Path $PluginAssetsDir 'STBlock-Linux.deb'
-            Copy-Item -LiteralPath $debPackage.FullName -Destination $pluginDeb -Force
-            Write-OK "Paquete Linux copiado a la web del plugin: $pluginDeb"
-        }
+
     }
 } else {
     Write-Warn "Descarga del .deb saltada por parametro"
@@ -790,7 +732,7 @@ if (-not (Test-Path -LiteralPath $latestJsonPath)) {
 
 if (-not $SkipReleasePublish) {
     Write-Step "Publicando release y policy de actualizacion"
-    Invoke-Checked -File 'powershell' -Arguments @(
+    $publishArguments = @(
         '-ExecutionPolicy', 'Bypass',
         '-File', '.\scripts\publish-update-policy.ps1',
         '-Repo', $ReleaseRepo,
@@ -799,10 +741,106 @@ if (-not $SkipReleasePublish) {
         '-Version', $version,
         '-Notes', $Notes,
         '-AssetDir', $releaseAssetDir
-    ) -WorkingDirectory $RootDir
+    )
+    if ($ManualMigrationNotice) {
+        $publishArguments += @(
+            '-Message', "STBlock $version esta disponible. Cierra la aplicacion, visita https://www.stbacademy.net/stblock y descarga el instalador para tu sistema. Ejecutalo una vez para volver a recibir las siguientes actualizaciones desde Ajustes."
+        )
+    }
+    Invoke-Checked -File 'powershell' -Arguments $publishArguments -WorkingDirectory $RootDir
 } else {
     Write-Warn "Publicacion de release saltada por parametro"
 }
+
+if (-not $SkipPluginCopy) {
+    Write-Step "Preparando editor web optimizado para WordPress"
+    if (-not (Test-Path -LiteralPath $PluginPath)) {
+        Fail "No existe plugin WordPress: $PluginPath"
+    }
+    # El preparador recrea unicamente assets/editor, elimina source maps y
+    # playgrounds que WordPress no usa, e instala cache local bajo demanda.
+    # El identificador cambia en cada deploy para invalidar el Service Worker.
+    $cacheVersion = "$version-$(Get-Date -Format 'yyyyMMddHHmmss')"
+    Invoke-Checked -File 'node' -Arguments @(
+        '.\scripts\prepare-wordpress-editor.mjs',
+        $GuiBuildDir,
+        $PluginEditorDir,
+        $cacheVersion
+    ) -WorkingDirectory $RootDir
+    Write-OK "Editor WordPress optimizado; version de cache: $cacheVersion"
+} else {
+    Write-Warn "Copia al plugin saltada por parametro"
+}
+
+if (-not $SkipPluginCopy) {
+    Write-Step "Copiando instaladores al plugin WordPress"
+    if (-not (Test-Path -LiteralPath $PluginAssetsDir)) {
+        New-Item -ItemType Directory -Path $PluginAssetsDir -Force | Out-Null
+    }
+
+    $x64ExeInstaller = $bundleFiles |
+        Where-Object { $_.Extension -eq '.exe' -and $_.Name -match 'x64' -and ($_.Name -like '*setup*' -or $_.Name -like 'STBlock*') -and $_.Name -like "*_$version`_*" } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    $x64MsiInstaller = $bundleFiles |
+        Where-Object { $_.Extension -eq '.msi' -and $_.Name -match 'x64' -and $_.Name -like "*_$version`_*" } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    $pluginX64Exe = Join-Path $PluginAssetsDir 'STBlock-Desktop-Installer-x64.exe'
+    $pluginX64Msi = Join-Path $PluginAssetsDir 'STBlock-Desktop-Installer-x64.msi'
+
+    if ($x64ExeInstaller) {
+        if (Test-Path -LiteralPath $pluginX64Exe) {
+            Remove-Item -LiteralPath $pluginX64Exe -Force
+            Write-Host "Instalador anterior eliminado en plugin: $pluginX64Exe"
+        }
+        Copy-Item -LiteralPath $x64ExeInstaller.FullName -Destination $pluginX64Exe -Force
+        Write-OK "Instalador x64 copiado y reemplazado exactamente a $pluginX64Exe"
+    } else {
+        Fail "No se encontro instalador EXE x64. Ejecuta build con NSIS antes del deploy."
+    }
+
+    if ($x64MsiInstaller) {
+        if (Test-Path -LiteralPath $pluginX64Msi) {
+            Remove-Item -LiteralPath $pluginX64Msi -Force
+        }
+        Copy-Item -LiteralPath $x64MsiInstaller.FullName -Destination $pluginX64Msi -Force
+        Write-OK "Instalador MSI x64 copiado al plugin para referencia/update"
+    } else {
+        Write-Warn "No se encontro instalador MSI x64"
+    }
+
+    # Android APK: Preservado intacto para Google Play Store sin cambiar firmas ni claves
+    $pluginApk = Join-Path $PluginAssetsDir 'STBlock.apk'
+    if (Test-Path -LiteralPath $pluginApk) {
+        Write-OK "Instalador Android APK preservado intacto (firmado para Google Play): $pluginApk"
+    } else {
+        Write-Warn "No existe STBlock.apk en el plugin; se preserva sin compilar."
+    }
+
+    # Paquete Linux .deb (Debian / Ubuntu / Chromebook). Solo de la version
+    # desplegada: si hay un .deb viejo en la carpeta no debe reemplazar al nuevo.
+    $debInstaller = Get-ChildItem -Path (Join-Path $RootDir 'src-tauri\target\release\bundle\deb'), (Join-Path $RootDir 'dist-linux'), (Join-Path $RootDir 'dist-chromebook') -Filter "STBlock_${version}_amd64.deb" -Recurse -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    $pluginDeb = Join-Path $PluginAssetsDir 'STBlock-Linux.deb'
+    if ($debPackage) { $debInstaller = $debPackage }
+    if ($debInstaller) {
+        if (Test-Path -LiteralPath $pluginDeb) {
+            Remove-Item -LiteralPath $pluginDeb -Force
+            Write-Host "Paquete Linux anterior eliminado en plugin: $pluginDeb"
+        }
+        Copy-Item -LiteralPath $debInstaller.FullName -Destination $pluginDeb -Force
+        Write-OK "Instalador Linux copiado y reemplazado exactamente a $pluginDeb ($($debInstaller.Name))"
+    } else {
+        Write-Warn "No se encontro paquete Linux .deb local. La compilacion en la nube se ejecuta automaticamente en GitHub Actions con el tag."
+    }
+}
+
+
 
 Write-Step "Deploy completo terminado"
 Write-Host "Version: $version"

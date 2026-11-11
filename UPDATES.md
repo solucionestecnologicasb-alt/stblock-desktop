@@ -10,13 +10,13 @@ STBlock usa Tauri Updater con paquetes firmados. El código fuente puede vivir e
 El endpoint configurado actualmente es:
 
 ```text
-https://github.com/STB-Academy/stblock-releases/releases/latest/download/latest.json
+https://github.com/solucionestecnologicasb-alt/stblock-releases/releases/latest/download/latest.json
 ```
 
 La política recomendada/obligatoria se lee desde:
 
 ```text
-https://github.com/STB-Academy/stblock-releases/releases/latest/download/policy.json
+https://github.com/solucionestecnologicasb-alt/stblock-releases/releases/latest/download/policy.json
 ```
 
 Para pruebas locales puedes cambiarlo desde DevTools:
@@ -37,15 +37,28 @@ localStorage.removeItem('stblock_update_policy_url')
 Se generó una llave de desarrollo local en:
 
 ```text
-C:\Users\bello\.tauri\stblock-update-dev.key
+%USERPROFILE%\.tauri\stblock-update-dev.key
 ```
 
-La pública está en `src-tauri/tauri.conf.json`. La privada no debe subirse al repo. Para producción conviene generar una nueva llave y guardar estos secretos en GitHub Actions:
+La pública está en `src-tauri/tauri.conf.json`. La clave anterior se perdió tras reinstalar Windows. La primera versión publicada con la clave nueva requiere una instalación manual en los equipos que todavía tienen la clave pública anterior. Las versiones siguientes deben firmarse con la misma clave privada nueva.
 
-```text
-TAURI_SIGNING_PRIVATE_KEY
-TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+Guarda una copia de la clave privada fuera del repositorio. Si necesitas restaurarla en otra ruta, indica esa ruta con `TAURI_SIGNING_PRIVATE_KEY_PATH`. Si está protegida, configura `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` en la sesión que ejecutará el deploy.
+
+Puedes comprobar la firma sin compilar ni publicar:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy-all.ps1 -CheckSigning
 ```
+
+`pnpm deploy:all` incrementa la versión y publica el instalador firmado. Para completar una versión que ya figura en `tauri.conf.json`, usa:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy-all.ps1 -Bump none
+```
+
+El deploy actualiza los archivos del plugin en Local Sites. El instalador de la web pública cambia cuando se despliegan esos archivos al servidor WordPress.
+
+Para que las instalaciones con la clave anterior vean el aviso de migración en «Buscar actualizaciones», publica la versión de transición con `pnpm deploy:all -ManualMigrationNotice`. El aviso dirigirá a los usuarios a https://www.stbacademy.net/stblock para instalarla manualmente una vez. Despliega también el instalador actualizado en WordPress para que esa página entregue la versión anunciada. Las versiones posteriores se publican con `pnpm deploy:all`.
 
 ## Publicar policy manual con GitHub CLI
 
