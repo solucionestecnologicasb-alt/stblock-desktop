@@ -122,6 +122,46 @@ function Invoke-Checked {
 }
 
 
+function Assert-SubmodulePublished {
+    param([string] $Root)
+
+    $relativePath = 'vendor/scratchjr-reborn'
+    $submodulePath = Join-Path $Root $relativePath
+    if (-not (Test-Path -LiteralPath (Join-Path $submodulePath '.git'))) {
+        Fail "Inicializa el submodulo con git submodule update --init --recursive antes del deploy."
+    }
+    $dirty = git -C $submodulePath status --porcelain --untracked-files=no
+    if ($LASTEXITCODE -ne 0) { Fail 'No se pudo consultar el estado del submodulo de Kids.' }
+    if ($dirty) { Fail 'El submodulo de Kids tiene cambios sin commit. Guarda y publica esos cambios antes del deploy.' }
+
+    $url = git -C $Root config -f .gitmodules "submodule.$relativePath.url"
+    if ($LASTEXITCODE -ne 0 -or -not $url) { Fail 'Falta la URL del submodulo de Kids en .gitmodules.' }
+    $head = git -C $submodulePath rev-parse HEAD
+    if ($LASTEXITCODE -ne 0) { Fail 'No se pudo consultar el commit del submodulo de Kids.' }
+
+    # Verificar la URL que usara Actions, sin depender de un remoto local
+    # llamado fork ni de referencias antiguas que hayan quedado tras migrar.
+    $savedPreference = $ErrorActionPreference
+    $savedPrompt = $env:GIT_TERMINAL_PROMPT
+    try {
+        $ErrorActionPreference = 'Continue'
+        $env:GIT_TERMINAL_PROMPT = '0'
+        $fetchOutput = @(& git -c credential.helper= -C $submodulePath fetch --no-tags --prune --quiet $url '+refs/heads/*:refs/stblock-deploy/kids/*' 2>&1)
+        $fetchExit = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $savedPreference
+        $env:GIT_TERMINAL_PROMPT = $savedPrompt
+    }
+    if ($fetchExit -ne 0) {
+        Fail "No se puede descargar el submodulo desde $url. $($fetchOutput -join ' ')"
+    }
+    $contains = git -C $submodulePath for-each-ref "--contains=$head" '--format=%(refname)' refs/stblock-deploy/kids/
+    if ($LASTEXITCODE -ne 0 -or -not $contains) {
+        Fail "El commit $head de Kids no esta publicado en $url. Publica la rama del submodulo antes del deploy."
+    }
+    Write-OK "Submodulo de Kids accesible y commit publicado: $head"
+}
+
 function Get-PrimaryInstaller {
     param(
         [object[]] $Files,
@@ -441,6 +481,11 @@ if ($CheckSigning -or -not $SkipReleasePublish) {
 }
 if ($CheckSigning) { return }
 
+if (-not $SkipDebDownload -and -not $SkipGitPush) {
+    Write-Step "Verificando dependencias del build Linux"
+    Assert-SubmodulePublished -Root $RootDir
+}
+
 if (-not $SkipReleasePublish) {
     Invoke-Checked -File 'gh' -Arguments @('auth', 'status', '--hostname', 'github.com') -WorkingDirectory $RootDir
 }
@@ -591,30 +636,12 @@ if (-not $SkipDebDownload) {
     $canonicalDebName = "STBlock_${version}_amd64.deb"
 
     if (-not $SkipGitPush) {
-        # El workflow clona vendor/scratchjr-reborn en el runner. Si el commit
-        # del submódulo no esta publicado, el build falla con ENOENT tras varios
-        # minutos; mejor detectarlo antes de esperar.
-        $submodulePath = Join-Path $RootDir 'vendor\scratchjr-reborn'
-        if (Test-Path -LiteralPath (Join-Path $submodulePath '.git')) {
-            $submoduleDirty = git -C $submodulePath status --porcelain --untracked-files=no 2>$null
-            if ($submoduleDirty) {
-                Fail "El submodulo vendor/scratchjr-reborn tiene cambios sin commitear. El .deb se compila desde el commit publicado, asi que esos cambios no se incluiran. Haz commit y push al fork (rama stblock-2.14.1) antes del deploy."
-            }
-            # Actualizar refs remotas por si el push se hizo fuera de este repo.
-            git -C $submodulePath fetch fork --quiet 2>$null | Out-Null
-            $submoduleHead = (git -C $submodulePath rev-parse HEAD 2>$null).Trim()
-            $remoteContains = git -C $submodulePath branch -r --contains $submoduleHead 2>$null
-            if (-not $remoteContains) {
-                Fail "El submodulo vendor/scratchjr-reborn apunta a $submoduleHead, que no esta publicado en su remoto. Haz commit y push al fork (rama stblock-2.14.1) antes del deploy; si no, el workflow no podra clonarlo."
-            }
-        }
-
         $commitSha = (git -C $RootDir rev-parse HEAD).Trim()
-        # Ignorar runs anteriores a este deploy (p. ej. un tag reutilizado con
-        # -Bump none o un build fallido de ayer): en ese caso se lanza uno nuevo.
-        $debWaitSince = (Get-Date).AddMinutes(-2)
+        # Reutilizar un build del mismo commit al reanudar con -Bump none.
+        $debWaitSince = [datetime]::MinValue
+        $findTimeout = if ($Bump -eq 'none') { 30 } else { 180 }
         Write-Host "Esperando el build .deb del tag $tag en GitHub Actions..."
-        $run = Wait-BuildRun -Workflow 'build-chromebook.yml' -Tag $tag -CommitSha $commitSha -SourceRepo $sourceRepo -NotBefore $debWaitSince
+        $run = Wait-BuildRun -Workflow 'build-chromebook.yml' -Tag $tag -CommitSha $commitSha -SourceRepo $sourceRepo -NotBefore $debWaitSince -FindTimeoutSeconds $findTimeout
 
         if (-not $run) {
             Write-Warn "No se encontro un run del tag $tag; lanzando el workflow manualmente."
