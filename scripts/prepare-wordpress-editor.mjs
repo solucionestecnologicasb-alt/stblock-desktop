@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import { patchSketchforgeDirectory } from "./patch-sketchforge-relative.mjs";
+import { patchElectronicsWordPress } from "./patch-electronics-wordpress.mjs";
 
 
 const [sourceArg, destinationArg, versionArg = "dev"] = process.argv.slice(2);
@@ -25,37 +26,35 @@ if (source === destination || destination.startsWith(`${source}${sep}`)) {
 
 await stat(join(source, "index.html"));
 
-// El editor es un artefacto generado. Recrearlo evita conservar chunks obsoletos
-// de despliegues anteriores, que aumentaban silenciosamente el espacio del hosting.
+// Validate the generated bundle before replacing the deployed editor.
+const electronicsRelativePath = join("static", "electronics-lab", "assets");
+const electronicsAssets = join(source, electronicsRelativePath);
+const bundlePatches = new Map();
+let electronicsDirectory = null;
+try {
+  electronicsDirectory = await stat(electronicsAssets);
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
+if (electronicsDirectory) {
+  const entries = await readdir(electronicsAssets, { withFileTypes: true });
+  const bundles = entries.filter((entry) => entry.isFile() && /^index-.*\.js$/i.test(entry.name));
+  if (bundles.length === 0) throw new Error(`No se encontro el bundle de Electronics Lab en ${electronicsAssets}.`);
+  for (const bundle of bundles) {
+    const original = await readFile(join(electronicsAssets, bundle.name), "utf8");
+    bundlePatches.set(bundle.name, patchElectronicsWordPress(original, bundle.name));
+  }
+}
+
+// Recreate generated assets only after the circuit-state validation succeeds.
 await rm(destination, { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
 await cp(source, destination, { recursive: true, force: true });
-
-// The WordPress host does not expose the development-only /api/circuit-state
-// disk-sync endpoint. Keep Electronics Lab persistence in localStorage and the
-// existing parent-frame bridge, and avoid its repeated 404 polling requests.
-const electronicsAssets = join(destination, "static", "electronics-lab", "assets");
-try {
-  await stat(electronicsAssets);
-  const entries = await readdir(electronicsAssets, { withFileTypes: true });
-  const bundles = entries.filter((entry) => entry.isFile() && /^index-.*\.js$/i.test(entry.name));
-  if (bundles.length === 0) throw new Error(`No se encontró el bundle de Electronics Lab en ${electronicsAssets}.`);
-
-  let patchedBundles = 0;
-  for (const bundle of bundles) {
-    const bundlePath = join(electronicsAssets, bundle.name);
-    const original = await readFile(bundlePath, "utf8");
-    const signature = /async function Rb\(c\)\{[\s\S]*?\}function sW\(c\)\{[\s\S]*?\}function dh\(c\)/;
-    if (!signature.test(original)) {
-      throw new Error(`El bundle ${bundle.name} cambió; no se aplicó el ajuste de circuit-state. Revisa la lógica antes de desplegar.`);
-    }
-    const replacement = `async function Rb(c){if(_b)return!1;try{const e=JSON.stringify(c);localStorage.setItem("electronics_lab_circuit_state_file",e);typeof window<"u"&&window.parent&&window.parent.postMessage({type:"STBLOCK_SAVE_CIRCUIT_FILE",filename:"circuit-state.json",payload:c},"*");return!0}catch{return!1}}function sW(c){return()=>{}}function dh(c)`;
-    await writeFile(bundlePath, original.replace(signature, replacement), "utf8");
-    patchedBundles += 1;
-  }
-  console.log(`[wordpress-editor] Electronics Lab preparado: guardado local/bridge habilitado, polling /api/circuit-state desactivado (${patchedBundles} bundle${patchedBundles === 1 ? "" : "s"}).`);
-} catch (error) {
-  if (error?.code !== "ENOENT") throw error;
+for (const [name, patched] of bundlePatches) {
+  await writeFile(join(destination, electronicsRelativePath, name), patched, "utf8");
+}
+if (bundlePatches.size) {
+  console.log("[wordpress-editor] Electronics Lab preparado: guardado local/bridge habilitado y polling de circuit-state desactivado.");
 }
 
 const rootOnlyArtifacts = new Set([

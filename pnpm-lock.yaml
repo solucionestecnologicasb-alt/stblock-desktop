@@ -45,6 +45,9 @@ importers:
       '@tauri-apps/cli':
         specifier: ^2.11.3
         version: 2.11.4
+      acorn:
+        specifier: 8.17.0
+        version: 8.17.0
       autoprefixer:
         specifier: ^10.5.0
         version: 10.5.2(postcss@8.5.16)
