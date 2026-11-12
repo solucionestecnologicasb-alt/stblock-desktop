@@ -9139,3 +9139,32 @@ html[data-theme="dark"] .shape-library-cache-badge { border-color: #1b2a35; }
 html[data-theme="dark"] .shape-library-cache-summary { color: #9eb1bf; background: #1c2a35; border-top-color: #334652; }
 html[data-theme="dark"] .shape-library-cache-summary button { color: #c7d8e4; background: #243440; border-color: #3a4f5e; }
 html[data-theme="dark"] .shape-library-error { color: #ffb7c1; background: #45242b; border-bottom-color: #6d343e; }
+.plane-cut-panel {
+  position: absolute; z-index: 70; right: 16px; top: calc(var(--editor-toolbar-height) + 12px); width: 340px;
+  max-height: calc(100% - var(--editor-toolbar-height) - 24px); overflow: auto; padding: 16px; border-radius: 14px;
+  color: var(--foreground); background: var(--panel);
+  border: 1px solid #64748b66; box-shadow: 0 12px 40px #0005; font-size: 12px;
+}
+.plane-cut-panel header, .plane-cut-panel header > div, .plane-cut-panel footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.plane-cut-panel header strong { font-size: 16px; }
+.plane-cut-panel p { line-height: 1.5; margin: 10px 0; }
+.plane-cut-panel fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.plane-cut-panel h4 { margin: 13px 0 6px; font-weight: 600; }
+.plane-cut-presets, .plane-cut-triple, .plane-cut-double { display: grid; gap: 6px; margin: 8px 0; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.plane-cut-double { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.plane-cut-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 7px; }
+.plane-cut-panel input[type=number], .plane-cut-panel select { width: 100%; min-width: 0; padding: 7px; border: 1px solid #64748b88; border-radius: 6px; color: inherit; background: #64748b18; }
+.plane-cut-panel button { padding: 7px 9px; border-radius: 7px; border: 1px solid #64748b77; color: inherit; background: #64748b22; cursor: pointer; }
+.plane-cut-panel button.active, .plane-cut-panel button.primary { background: #087baf; color: white; border-color: #24baf3; }
+.plane-cut-panel button:disabled { opacity: .45; cursor: default; }
+.plane-cut-check { display: flex; align-items: center; gap: 7px; margin: 10px 0; }
+.plane-cut-hint { opacity: .75; font-size: 11px; }
+.plane-cut-error { color: #ff8484; }
+.plane-cut-success { color: #50dbae; }
+.plane-cut-panel footer { margin: 12px -16px -16px; padding: 12px 16px; position: sticky; bottom: -16px; background: var(--panel); border-top: 1px solid var(--border); }
+.plane-cut-panel[data-collapsed=true] > :not(header) { display: none; }
+.sketchforge-editor[data-cut-active=true] .secondary-toolbar,
+.sketchforge-editor[data-cut-active=true] .toolbar-workspace-tabs { pointer-events: none; opacity: .5; }
+.sketchforge-editor[data-cut-active=true] .transform-overlay,
+.sketchforge-editor[data-cut-active=true] .shape-inspector { display: none; }
+@media (max-width: 650px) { .plane-cut-panel { right: 8px; top: 155px; width: min(310px, calc(100% - 16px)); max-height: calc(100% - 165px); } }

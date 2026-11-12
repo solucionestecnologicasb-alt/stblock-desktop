@@ -6,6 +6,8 @@ import * as THREE from "three";
 import { Brush, Evaluator, HOLLOW_INTERSECTION } from "three-bvh-csg";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree, MeshBVH } from "three-mesh-bvh";
 import { GenerateMeshBVHWorker } from "three-mesh-bvh/worker";
+import { attachCutPlane } from "@/lib/cutPlaneViewport";
+import type { PlaneCutSettings } from "@/lib/planeCut";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
@@ -164,6 +166,9 @@ function parseDroppedShapeAsset(raw: string): ShapeAsset | null {
 }
 
 type WorkplaneViewportProps = {
+  cutPlane?: PlaneCutSettings | null;
+  cutPlaneSize?: number;
+  onCutPlaneChange?: (settings: PlaneCutSettings) => void;
   shapes: WorkplaneShape[];
   selectedIds: string[];
   alignMode: boolean;
@@ -2612,6 +2617,7 @@ function rebuildGeometrySketchOverlay(
 }
 
 export function WorkplaneViewport({
+  cutPlane = null, cutPlaneSize = 100, onCutPlaneChange,
   shapes,
   selectedIds,
   alignMode,
@@ -2748,6 +2754,11 @@ export function WorkplaneViewport({
   const rulerOverlayRef = useRef<RulerOverlayState | null>(null);
   const rulerIdRef = useRef(0);
   const alignModeRef = useRef(alignMode);
+  const cutPlaneRef = useRef(cutPlane);
+  cutPlaneRef.current = cutPlane;
+  const cutPlaneChangeRef = useRef(onCutPlaneChange);
+  cutPlaneChangeRef.current = onCutPlaneChange;
+  const cutPlaneControlsRef = useRef<ReturnType<typeof attachCutPlane> | null>(null);
   const alignAnchorIdRef = useRef(alignAnchorId);
   const alignHandlesRef = useRef(alignHandles);
   const mirrorModeRef = useRef(mirrorMode);
@@ -3303,6 +3314,20 @@ export function WorkplaneViewport({
       threeRef.current = null;
     };
   }, []);
+
+  const hasCutPlane = Boolean(cutPlane);
+  useEffect(() => {
+    const state = threeRef.current;
+    if (!state || !cutPlaneRef.current) return;
+    const controls = attachCutPlane(state, cutPlaneRef.current, cutPlaneSize, value => cutPlaneChangeRef.current?.(value));
+    cutPlaneControlsRef.current = controls;
+    state.helperLayer.visible = false;
+    return () => { controls.dispose(); cutPlaneControlsRef.current = null; state.helperLayer.visible = true; };
+  }, [hasCutPlane, cutPlaneSize]);
+  useEffect(() => {
+    if (cutPlane) cutPlaneControlsRef.current?.update(cutPlane);
+    if (hasCutPlane && threeRef.current) threeRef.current.helperLayer.visible = false;
+  }, [cutPlane, hasCutPlane, shapes]);
 
   useEffect(() => {
     window.sketchforgePerf = {
@@ -4906,6 +4931,7 @@ export function WorkplaneViewport({
   // puntero y pueda hacer pinch zoom / desplazamiento.
   const handlePointerDownCapture = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (cutPlaneRef.current) return;
       if (event.pointerType !== "touch") {
         return;
       }
@@ -4959,6 +4985,7 @@ export function WorkplaneViewport({
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (cutPlaneRef.current) return;
       const state = threeRef.current;
       if (!state) {
         return;
@@ -5343,6 +5370,7 @@ export function WorkplaneViewport({
 
   const handlePointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (cutPlaneRef.current) return;
       if (event.pointerType === "touch") {
         touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY, pageX: event.pageX, pageY: event.pageY });
       }
@@ -5718,6 +5746,7 @@ export function WorkplaneViewport({
     (event: DragEvent<HTMLDivElement>) => {
       event.preventDefault();
       if (rulerMoveModeRef.current) return;
+      if (cutPlaneRef.current) return;
       const raw = event.dataTransfer.getData("application/x-sketchforge-shape");
       if (!raw) {
         return;

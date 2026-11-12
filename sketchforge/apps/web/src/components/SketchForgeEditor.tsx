@@ -1,4 +1,6 @@
 "use client";
+import { PlaneCutPanel } from "@/components/PlaneCutPanel";
+import { cutSolidByPlanes, cutFragmentToShape, cutPlaneNormal, cutPlaneOffsets, type PlaneCutSettings, type CutVector } from "@/lib/planeCut";
 import { editableMeshToShape } from "@/lib/editableMeshShape";
 
 import { Box, Check, CloudUpload, Download, FileImage, FolderOpen, Hexagon, Minus, Pencil, Scissors, Triangle, Type, X } from "lucide-react";
@@ -5583,6 +5585,15 @@ export function SketchForgeEditor({
   const [systemClipboardSupported, setSystemClipboardSupported] = useState(false);
   const [history, setHistory] = useState<EditorHistoryEntry[]>(() => (initialHistoryStateRef.current as EditorHistoryState).entries);
   const [historyIndex, setHistoryIndex] = useState(() => (initialHistoryStateRef.current as EditorHistoryState).index);
+  const [planeCut, setPlaneCut] = useState<{
+    settings: PlaneCutSettings; targets: WorkplaneShape[]; sourceScene: WorkplaneShape[];
+    bounds: {min: CutVector; max: CutVector}; preview: WorkplaneShape[] | null; busy: boolean; error: string | null;
+  } | null>(null);
+  const planeCutRef = useRef(planeCut);
+  planeCutRef.current = planeCut;
+  const planeCutRequest = useRef(0);
+  const closePlaneCut = useCallback(() => { planeCutRequest.current++; setPlaneCut(null); }, []);
+  useEffect(() => { closePlaneCut(); return () => { planeCutRequest.current++; }; }, [projectId, closePlaneCut]);
   const [pendingPlacement, setPendingPlacement] = useState<WorkplaneShape | null>(null);
   const pendingPlacementRef = useRef<WorkplaneShape | null>(null);
   const placementRequestRef = useRef(0);
@@ -6409,6 +6420,79 @@ export function SketchForgeEditor({
     },
     [appendHistorySnapshot, selectedIds, syncProjectShapes],
   );
+
+  const beginPlaneCut = () => {
+    const targets = shapesRef.current.filter(shape => selectedIdsRef.current.includes(shape.id) && !shape.locked && !shape.hidden && !shape.hole);
+    if (!targets.length) { setNotice("Selecciona al menos una pieza s?lida desbloqueada para cortar"); return; }
+    if (edgeModifier || meshEditSession || geometryDrawTool || pendingPlacementRef.current) {
+      setNotice("Termina o cancela la herramienta activa antes de cortar"); return;
+    }
+    const bounds = new THREE.Box3();
+    for (const shape of targets) for (const vertex of meshForShape(shape).vertices) bounds.expandByPoint(new THREE.Vector3(...vertex));
+    if (bounds.isEmpty()) { setNotice("La selecci?n no contiene una superficie para cortar"); return; }
+    setAlignMode(false); setMirrorMode(false); setWorkplaneMode(false); setShapeLibraryOpen(false);
+    setPlaneCut({targets, sourceScene: shapesRef.current, bounds: {min: bounds.min.toArray() as CutVector, max: bounds.max.toArray() as CutVector},
+      settings: {position: bounds.getCenter(new THREE.Vector3()).toArray() as CutVector, rotation: [-90, 0, 0], keep: "both", kerf: 0, count: 1,
+        spacing: Math.max(1, (bounds.max.y - bounds.min.y) / 4), separation: 0, splitDisconnected: true, keepOriginals: false, union: false, gizmo: "translate", snap: 0},
+      preview: null, busy: false, error: null});
+  };
+  const changePlaneCut = useCallback((settings: PlaneCutSettings) => {
+    planeCutRequest.current++;
+    setPlaneCut(current => current ? {...current, settings, preview: null, busy: false, error: null} : null);
+  }, []);
+  const previewPlaneCut = async () => {
+    const session = planeCutRef.current;
+    if (!session || session.busy) return;
+    const request = ++planeCutRequest.current;
+    setPlaneCut(current => current ? {...current, busy: true, preview: null, error: null} : null);
+    const created: ManifoldSolid[] = [];
+    try {
+      const offsets = cutPlaneOffsets(session.settings);
+      await new Promise(resolve => setTimeout(resolve, 30));
+      const runtime = await getManifoldRuntime();
+      if (request !== planeCutRequest.current) return;
+      if (session.sourceScene !== shapesRef.current) throw new Error("El proyecto cambi?. Cierra el corte y vuelve a seleccionar las piezas.");
+      const normal = cutPlaneNormal(session.settings.rotation);
+      const sets = session.settings.union ? [session.targets] : session.targets.map(shape => [shape]);
+      const preview: WorkplaneShape[] = [];
+      let changed = false;
+      for (const sources of sets) {
+        const solid = shapesToManifoldUnion(runtime, sources, created);
+        if (!solid) throw new Error("No se pudo preparar una pieza. Comprueba que sus superficies formen un s?lido cerrado.");
+        const box = solid.boundingBox();
+        const projections: number[] = [];
+        for (const x of [box.min[0], box.max[0]]) for (const y of [box.min[1], box.max[1]]) for (const z of [box.min[2], box.max[2]]) projections.push(normal[0]*x + normal[1]*y + normal[2]*z);
+        // A plane outside the bounds leaves this target intact in a multi-piece selection.
+        if (!offsets.some(offset => offset + session.settings.kerf/2 > Math.min(...projections) + 1e-7 && offset - session.settings.kerf/2 < Math.max(...projections) - 1e-7)) {
+          if (session.settings.keep !== "both") throw new Error("El plano no atraviesa una de las piezas seleccionadas. Mu?velo o conserva ambos lados.");
+          preview.push(...sources.map(shape => ({...shape, id:createLocalId("cut-unchanged")})));
+          continue;
+        }
+        const fragments = cutSolidByPlanes(solid, session.settings);
+        changed = true;
+        for (const fragment of fragments) {
+          const result = cutFragmentToShape(sources[0], fragment, session.settings, createLocalId("plane-cut"),
+            `${sources.length > 1 ? "Uni?n" : sources[0].name} ? corte ${preview.length + 1}`);
+          preview.push(result);
+        }
+      }
+      if (!changed) throw new Error("Ning?n plano atraviesa las piezas seleccionadas.");
+      if (request === planeCutRequest.current) setPlaneCut(current => current ? {...current, busy:false, preview, error:null} : null);
+    } catch (error) {
+      if (request === planeCutRequest.current) setPlaneCut(current => current ? {...current, busy:false, preview:null, error:error instanceof Error ? error.message : String(error)} : null);
+    } finally { Array.from(new Set(created)).forEach(disposeManifold); }
+  };
+  const applyPlaneCut = () => {
+    const session = planeCutRef.current;
+    if (!session?.preview || session.busy) return;
+    if (session.sourceScene !== shapesRef.current) { setPlaneCut({...session, preview:null, error:"El proyecto cambi?. Cierra y vuelve a abrir la herramienta."}); return; }
+    const ids = new Set(session.targets.map(shape => shape.id));
+    const next = shapesRef.current.filter(shape => !ids.has(shape.id));
+    if (session.settings.keepOriginals) next.push(...session.targets.map(shape => ({...shape, hidden:true, name:`${shape.name} ? original`})));
+    next.push(...session.preview);
+    commitShapes(next, session.preview.map(shape => shape.id), `Corte aplicado: ${session.preview.length} piezas`);
+    closePlaneCut();
+  };
 
   const commitCap = useCallback(
     (next: CapDocument, message?: string) => {
@@ -9756,6 +9840,7 @@ export function SketchForgeEditor({
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (planeCutRef.current) { if (event.key === "Escape") {event.preventDefault(); closePlaneCut();} return; }
       if (pendingPlacementRef.current || placementLoadingRef.current) { if (event.key === "Escape") { event.preventDefault(); cancelPlacement(); setNotice("Colocación cancelada"); } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); setNotice("Confirma o cancela la colocación antes de guardar"); } return; }
       if (meshEditSession || isTypingTarget(event.target)) {
         return;
@@ -10039,7 +10124,10 @@ export function SketchForgeEditor({
         : facePlaneDraft ?? { kind: "base" });
   const viewportElement = (
     <WorkplaneViewport
-      shapes={viewportShapes}
+      shapes={planeCut?.preview ? [...shapes.filter(shape => !planeCut.targets.some(target => target.id === shape.id)), ...planeCut.preview] : viewportShapes}
+      cutPlane={planeCut?.settings ?? null}
+      cutPlaneSize={planeCut ? Math.max(...planeCut.bounds.max.map((v, i) => v - planeCut.bounds.min[i]), 10) * 1.65 : 100}
+      onCutPlaneChange={changePlaneCut}
       selectedIds={selectedIds}
       alignMode={alignMode}
       alignAnchorId={effectiveAlignAnchorId}
@@ -10089,7 +10177,7 @@ export function SketchForgeEditor({
   );
 
   return (
-    <div data-placement-active={!!pendingPlacement} data-toolbar-mode={toolbarMode} className={`sketchforge-editor${meshEditSession ? " mesh-edit-active" : ""}`}>
+    <div data-cut-active={Boolean(planeCut)} data-placement-active={!!pendingPlacement} data-toolbar-mode={toolbarMode} className={`sketchforge-editor${meshEditSession ? " mesh-edit-active" : ""}`}>
       {!meshEditSession ? <SecondaryToolbar
         toolbarMode={toolbarMode}
         shapeLibraryOpen={shapeLibraryOpen}
@@ -10117,6 +10205,9 @@ export function SketchForgeEditor({
         sketchCanUndo={sketchHistoryIndex > 0}
         sketchCanRedo={sketchHistoryIndex < sketchHistory.length - 1}
         canEditSketch={selectedShapes.length === 1 && Boolean(selectedShape?.sketchProfile)}
+        onPlaneCut={beginPlaneCut}
+        planeCutActive={Boolean(planeCut)}
+        canPlaneCut={selectedShapes.some(shape => !shape.locked && !shape.hole && !shape.hidden)}
         onNewSketch={() => beginSketch("extrude")}
         onNewRevolveSketch={() => beginSketch("revolve")}
         onNewSweepSketch={() => beginSketch("sweep")}
@@ -10213,6 +10304,9 @@ export function SketchForgeEditor({
           </>
         ) : sketchActive || capSketchActive ? sketchWorkspaceElement : viewportElement}
       </div>
+      {planeCut ? <PlaneCutPanel settings={planeCut.settings} targetCount={planeCut.targets.length} bounds={planeCut.bounds}
+        busy={planeCut.busy} error={planeCut.error} previewCount={planeCut.preview?.length ?? 0}
+        onChange={changePlaneCut} onPreview={() => void previewPlaneCut()} onApply={applyPlaneCut} onClose={closePlaneCut} /> : null}
       {edgeModifier ? (
         <EdgeModifierPanel
           kind={edgeModifier.kind}
@@ -10400,6 +10494,7 @@ function MobileMeshEditIcon() {
 }
 
 function SecondaryToolbar({
+  onPlaneCut, planeCutActive, canPlaneCut,
   toolbarMode,
   onToolbarModeChange,
   alignMode,
@@ -10475,6 +10570,9 @@ function SecondaryToolbar({
   shapeLibraryOpen,
   onToggleShapeLibrary,
 }: {
+  onPlaneCut: () => void;
+  planeCutActive: boolean;
+  canPlaneCut: boolean;
   toolbarMode: ToolbarMode;
   onToolbarModeChange: (mode: ToolbarMode) => void;
   shapeLibraryOpen?: boolean;
@@ -10657,7 +10755,7 @@ function SecondaryToolbar({
 
   return (
     <>
-    <div className="secondary-toolbar">
+    <div className="secondary-toolbar" inert={planeCutActive}>
       {/* Desktop Toolbar Container */}
       <div className="desktop-toolbar-container">
         <div className={`toolbar-mode-content ${toolbarMode}`}>
@@ -10713,6 +10811,10 @@ function SecondaryToolbar({
             >
               <SketchEntityRectangleIcon />
               <span>2D</span>
+            </button>
+            <button className={`geometry-2d-trigger ${planeCutActive ? "active" : ""}`} type="button" disabled={!canPlaneCut}
+              aria-label="Cortar piezas" title="Cortar con un plano m?vil: altura, ?ngulos y cortes paralelos" onClick={() => {setGeometry2dOpen(false); onPlaneCut();}}>
+              <Scissors size={20}/><span>Cortar</span>
             </button>
             {geometry2dOpen ? (
               <div className="geometry-2d-popover" role="dialog" aria-label="Dibujo 2D en geometría" onPointerDown={(event) => event.stopPropagation()}>
