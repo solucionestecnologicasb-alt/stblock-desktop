@@ -336,14 +336,8 @@ function forwardPollinationsPost(req, res) {
 if (!buildDist && !Array.isArray(finalConfig)) {
     finalConfig.devServer = finalConfig.devServer || {};
     finalConfig.devServer.static = [
-        {
-            directory: path.resolve(__dirname, 'public'),
-            publicPath: '/'
-        },
-        {
-            directory: path.resolve(__dirname, 'static'),
-            publicPath: '/static'
-        },
+        // Prefer the current editor export over the historical public/sketchforge snapshot.
+        // publicPath '/' also matches /sketchforge and must remain after these entries.
         {
             directory: path.resolve(__dirname, 'build/sketchforge'),
             publicPath: '/sketchforge'
@@ -351,6 +345,14 @@ if (!buildDist && !Array.isArray(finalConfig)) {
         {
             directory: path.resolve(__dirname, '../sketchforge/apps/web/.next-export'),
             publicPath: '/sketchforge'
+        },
+        {
+            directory: path.resolve(__dirname, 'public'),
+            publicPath: '/'
+        },
+        {
+            directory: path.resolve(__dirname, 'static'),
+            publicPath: '/static'
         }
     ];
 

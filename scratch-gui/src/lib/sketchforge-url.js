@@ -1,14 +1,20 @@
 // URL de SketchForge 3D embebido en la pestaña "Diseño 3D" de STBlock.
-// Por defecto carga el static export empaquetado en /sketchforge/ (mismo origen que STBlock).
-// Para desarrollo en caliente en el Next dev server (:3000), usar ?dev_sketchforge=1 o localStorage.setItem('stblock_use_dev_sketchforge', 'true').
+// En tauri dev usa Next (:3000), iniciado por dev:servers, para mostrar los cambios del editor.
+// Las aplicaciones empaquetadas y la web usan el static export del mismo origen.
 function shouldUseDevServer() {
   if (typeof window === 'undefined') return false;
   try {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('dev_sketchforge') === 'true' || params.get('dev_sketchforge') === '1') return true;
-    if (window.localStorage && window.localStorage.getItem('stblock_use_dev_sketchforge') === 'true') return true;
+    const requested = params.get('dev_sketchforge');
+    if (requested === 'true' || requested === '1') return true;
+    if (requested === 'false' || requested === '0') return false;
+    const stored = window.localStorage && window.localStorage.getItem('stblock_use_dev_sketchforge');
+    if (stored === 'true') return true;
+    if (stored === 'false') return false;
   } catch (_) {}
-  return false;
+  return process.env.NODE_ENV === 'development' &&
+    ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname) &&
+    window.location.port === '8601';
 }
 
 function getEditorBaseUrl() {
