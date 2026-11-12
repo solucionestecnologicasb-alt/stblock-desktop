@@ -14,6 +14,7 @@ const log = require('./util/log');
 const MathUtil = require('./util/math-util');
 const Runtime = require('./engine/runtime');
 const StringUtil = require('./util/string-util');
+const trackSkinRedraw = require('./util/track-skin-redraw');
 const formatMessage = require('format-message');
 
 const Variable = require('./engine/variable');
@@ -1324,13 +1325,7 @@ class VirtualMachine extends EventEmitter {
      * @param {object} skin - el skin del renderer (scratch-render) o null.
      */
     _trackSkinRedraw (skin) {
-        if (!skin || typeof skin.on !== 'function') return;
-        if (!this._skinRedrawTracked) this._skinRedrawTracked = new WeakSet();
-        if (this._skinRedrawTracked.has(skin)) return;
-        this._skinRedrawTracked.add(skin);
-        skin.on('WasAltered', () => {
-            if (this.runtime) this.runtime.requestRedraw();
-        });
+        trackSkinRedraw(this.runtime, skin);
     }
 
     /**

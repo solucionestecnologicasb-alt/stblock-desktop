@@ -1,5 +1,6 @@
 const StringUtil = require('../util/string-util');
 const log = require('../util/log');
+const trackSkinRedraw = require('../util/track-skin-redraw');
 const {loadSvgString, serializeSvgToString} = require('scratch-svg-renderer');
 
 const loadVector_ = function (costume, runtime, rotationCenter, optVersion) {
@@ -24,6 +25,8 @@ const loadVector_ = function (costume, runtime, rotationCenter, optVersion) {
         // createSVGSkin does the right thing if rotationCenter isn't provided, so it's okay if it's
         // undefined here
         costume.skinId = runtime.renderer.createSVGSkin(svgString, rotationCenter);
+        const skins = runtime.renderer._allSkins;
+        trackSkinRedraw(runtime, skins && skins[costume.skinId]);
         costume.size = runtime.renderer.getSkinSize(costume.skinId);
         // Now we should have a rotationCenter even if we didn't before
         if (!rotationCenter) {

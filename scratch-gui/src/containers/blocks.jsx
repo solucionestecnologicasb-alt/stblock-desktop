@@ -18,6 +18,7 @@ import BlocksComponent from '../components/blocks/blocks.jsx';
 import BlockSearch from '../components/block-search/block-search.jsx';
 import {buildSearchToolboxXML} from '../lib/block-search-index.js';
 import installSafeFlyout from '../lib/safe-flyout';
+import preserveToolboxCategory from '../lib/preserve-toolbox-category';
 import {isMobileDevice} from '../lib/device-detector';
 
 import ExtensionLibrary from './extension-library.jsx';
@@ -618,6 +619,8 @@ class Blocks extends React.Component {
                     self._restoringToolboxSelection = restoring;
                 }
             };
+
+            preserveToolboxCategory(toolbox, () => self._preventFlyoutShow);
 
             // Prevent scroll in flyout from changing category selection.
             // recordCategoryScrollPositions_ assigns wrong IDs when only 1 category
