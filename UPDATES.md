@@ -58,6 +58,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy-all.ps1 -Bump none
 
 El deploy actualiza los archivos del plugin en Local Sites. El instalador de la web pública cambia cuando se despliegan esos archivos al servidor WordPress.
 
+## Actualizaciones en Debian
+
+El deploy normal espera el build Linux, firma el `.deb` con la misma clave del updater y publica las entradas `linux-x86_64-deb` y `linux-x86_64` en `latest.json`. Este paquete está destinado a Debian/Ubuntu amd64.
+
+La aplicación busca actualizaciones al abrirse y desde Ajustes. «Actualizar ahora» descarga el paquete firmado, solicita autorización del sistema, ejecuta `dpkg -i` y reinicia STBlock. Necesita permisos administrativos y una sesión gráfica con autenticación de polkit. El paquete recomienda `pkexec` y `polkitd`; comprueba su disponibilidad si la instalación original se hizo con `dpkg -i`, que no resuelve recomendaciones automáticamente. Si falla la instalación, el aviso conserva la descarga manual como alternativa.
+
 Para que las instalaciones con la clave anterior vean el aviso de migración en «Buscar actualizaciones», publica la versión de transición con `pnpm deploy:all -ManualMigrationNotice`. El aviso dirigirá a los usuarios a https://www.stbacademy.net/stblock para instalarla manualmente una vez. Despliega también el instalador actualizado en WordPress para que esa página entregue la versión anunciada. Las versiones posteriores se publican con `pnpm deploy:all`.
 
 ## Publicar policy manual con GitHub CLI

@@ -358,6 +358,11 @@ const UpdateModal = ({
                                     Reintentar búsqueda
                                 </button>
                             )}
+                            {info.isLinux && info.debDownloadUrl ? (
+                                <button className={styles.secondaryButton} onClick={openDebDownload}>
+                                    Descargar .deb manualmente
+                                </button>
+                            ) : null}
                         </React.Fragment>
                     ) : available ? (
                         <React.Fragment>

@@ -1767,6 +1767,8 @@ const GUIComponent = props => {
                 status: 'error',
                 mandatory: Boolean(updateInfo && updateInfo.mandatory),
                 canInstall: true,
+                isLinux: Boolean(updateInfo && updateInfo.isLinux),
+                debDownloadUrl: updateInfo && updateInfo.debDownloadUrl,
                 title: 'No se pudo completar la actualización',
                 message: e.message || String(e),
                 currentVersion: updateInfo && updateInfo.currentVersion ? updateInfo.currentVersion : 'Actual',

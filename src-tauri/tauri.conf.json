@@ -79,6 +79,10 @@
                                                              "gstreamer1.0-libav"
                                                          ],
                                              "section":  "education",
+                                             "recommends":  [
+                                                                "pkexec",
+                                                                "polkitd"
+                                                            ],
                                              "priority":  "optional",
                                              "postInstallScript":  "linux/postinstall.sh"
                                          }
