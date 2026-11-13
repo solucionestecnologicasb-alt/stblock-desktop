@@ -2,6 +2,8 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import styles from './scratchjr-kids-workspace.css';
 import {evaluateStoryChallenge, getStoryChallenge} from './story-challenges';
+import {createKidsVoicePlayer} from '../../lib/kids-voice-player';
+import {blockVoiceInstruction} from '../../lib/kids-voice-text';
 
 const PROJECT_KEY = 'stblock.kids.scratchjr.project';
 const STORY_HOME_PROGRESS_KEY = 'stblock.kids.story.home-progress';
@@ -423,8 +425,27 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     const [pendingStoryCompletion, setPendingStoryCompletion] = useState(null);
     const [hintsOpen, setHintsOpen] = useState(false);
     const bonusTimerRef = useRef(null);
+    const bonusVoiceRequestRef = useRef(0);
+    useEffect(() => () => {
+        bonusVoiceRequestRef.current++;
+        if (bonusTimerRef.current) window.clearTimeout(bonusTimerRef.current);
+    }, []);
     const storyRunStartedAtRef = useRef(0);
-    const guideSpeechTokenRef = useRef(0);
+    const voicePlayer = useMemo(() => createKidsVoicePlayer({
+        baseUrl: new URL(`${basePath}static/kids/voice/es/`, window.location.href).href
+    }), [basePath]);
+    useEffect(() => () => voicePlayer.cancel(), [voicePlayer]);
+    useEffect(() => { if (!blockVoiceEnabled) voicePlayer.cancel(); }, [blockVoiceEnabled, voicePlayer]);
+    useEffect(() => {
+        const receiveBlockVoice = event => {
+            if (!blockVoiceEnabled || event.source !== (iframeRef.current && iframeRef.current.contentWindow) || event.origin !== window.location.origin) return;
+            if (!event.data || event.data.type !== 'STBLOCK_KIDS_BLOCK_VOICE') return;
+            const text = blockVoiceInstruction(event.data.blockType, event.data.argument);
+            if (text) voicePlayer.speak(text, {channel: 'block'});
+        };
+        window.addEventListener('message', receiveBlockVoice);
+        return () => window.removeEventListener('message', receiveBlockVoice);
+    }, [blockVoiceEnabled, voicePlayer]);
     const [scoreName, setScoreName] = useState('');
     const [rightActionRoot, setRightActionRoot] = useState(null);
     const readProjectId = activeMode => {
@@ -579,13 +600,16 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     }, [isMobileLayout, map]);
 
     const handleModeChange = nextMode => {
+        bonusVoiceRequestRef.current++;
+        if (bonusTimerRef.current) window.clearTimeout(bonusTimerRef.current);
+        voicePlayer.cancel();
         if (isMobileLayout) requestLandscapeMode();
         setMobileStoryHome(false);
         setMobileStoryNameOpen(false);
         setMobileSettingsPage(false);
         if (nextMode === mode) {
             if (nextMode === 'story') {
-                window.speechSynthesis && window.speechSynthesis.cancel();
+                voicePlayer.cancel();
                 const child = iframeRef.current && iframeRef.current.contentWindow;
                 // Only reveal the route once the story editor (and its
                 // STBLOCK_KIDS_STORY API) is ready; otherwise "Empezar el reto"
@@ -918,45 +942,11 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     };
 
     const storyPoints = Object.values(storyProgress.levelScores || {}).reduce((total, value) => total + (Number(value) || 0), 0) + (Number(storyProgress.bonusPoints) || 0);
-    const makeStoryUtterance = text => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        const spanishVoices = window.speechSynthesis.getVoices().filter(voice => /^es([_-]|$)/i.test(voice.lang));
-        const voice = spanishVoices.find(candidate => /^es[-_]mx/i.test(candidate.lang)) ||
-            spanishVoices.find(candidate => /^es[-_]co/i.test(candidate.lang)) ||
-            spanishVoices.find(candidate => /^es[-_]es/i.test(candidate.lang)) || spanishVoices[0];
-        if (voice) {
-            utterance.voice = voice;
-            utterance.lang = voice.lang;
-        } else {
-            utterance.lang = 'es-MX';
-        }
-        utterance.rate = 0.98;
-        utterance.pitch = 1;
-        utterance.volume = 1;
-        return utterance;
-    };
     const speakStory = text => {
-        if (!blockVoiceEnabled || !window.speechSynthesis) return;
-        guideSpeechTokenRef.current += 1;
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(makeStoryUtterance(text));
+        return blockVoiceEnabled ? voicePlayer.speak(text) : Promise.resolve(false);
     };
-    // Chained narration for the guiding voice: every step is spoken after the
-    // previous one ends. Any later speakStory (a failure, the green flag, the
-    // math prompt) bumps the token and stops the chain so lines never overlap.
     const speakStorySequence = texts => {
-        if (!blockVoiceEnabled || !window.speechSynthesis) return;
-        const token = guideSpeechTokenRef.current + 1;
-        guideSpeechTokenRef.current = token;
-        window.speechSynthesis.cancel();
-        const lines = (Array.isArray(texts) ? texts : [texts]).filter(Boolean);
-        const speakNext = index => {
-            if (guideSpeechTokenRef.current !== token || index >= lines.length) return;
-            const utterance = makeStoryUtterance(lines[index]);
-            utterance.onend = () => speakNext(index + 1);
-            window.speechSynthesis.speak(utterance);
-        };
-        speakNext(0);
+        if (blockVoiceEnabled) voicePlayer.speak(texts);
     };
     const enterStoryWorld = level => {
         const world = STORY_WORLDS[level - 1];
@@ -996,12 +986,11 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
         }
         if (child) child.postMessage({type: 'STBLOCK_KIDS_STORY_LEVEL', level: world.id}, window.location.origin);
     };
-    const openStoryMap = () => { guideSpeechTokenRef.current += 1; window.speechSynthesis && window.speechSynthesis.cancel(); setHintsOpen(false); setStoryScreen('route'); };
+    const openStoryMap = () => { bonusVoiceRequestRef.current++; voicePlayer.cancel(); setHintsOpen(false); setStoryScreen('route'); };
     // The finale plays after world 20: first "final.mp4", then "final-2.mp4",
     // and finally the ¡AVENTURA COMPLETADA! card.
     const playStoryFinale = () => {
-        guideSpeechTokenRef.current += 1;
-        window.speechSynthesis && window.speechSynthesis.cancel();
+        voicePlayer.cancel();
         setFinalVideoStep(0);
         setFinalVideoError(false);
         setStoryScreen('final');
@@ -1014,7 +1003,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
         setStoryScreen('success');
     };
     const closeStoryFinal = () => {
-        window.speechSynthesis && window.speechSynthesis.cancel();
+        voicePlayer.cancel();
         setStoryScreen('success');
     };
     const showStoryHelp = () => {
@@ -1076,6 +1065,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     // never required: solving it adds extra points, and a wrong answer (or
     // skipping) still advances to the next world.
     const finishBonusChallenge = earnedBonus => {
+        bonusVoiceRequestRef.current++;
         if (bonusTimerRef.current) {
             window.clearTimeout(bonusTimerRef.current);
             bonusTimerRef.current = null;
@@ -1112,16 +1102,23 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     const skipBonusChallenge = () => finishBonusChallenge(0);
     const answerBonus = choice => {
         if (!bonusChallenge || bonusFeedback !== '') return;
+        const finishAfterNarration = (text, extra, minimumDelay) => {
+            const request = ++bonusVoiceRequestRef.current;
+            const started = Date.now();
+            if (bonusTimerRef.current) window.clearTimeout(bonusTimerRef.current);
+            speakStory(text).then(() => {
+                if (request !== bonusVoiceRequestRef.current) return;
+                bonusTimerRef.current = window.setTimeout(() => {
+                    if (request === bonusVoiceRequestRef.current) finishBonusChallenge(extra);
+                }, Math.max(0, minimumDelay - (Date.now() - started)));
+            });
+        };
         if (choice === bonusChallenge.answer) {
             setBonusFeedback('correct');
-            speakStory(`¡Muy bien! ${bonusChallenge.solutionText} Ganaste puntos extra.`);
-            if (bonusTimerRef.current) window.clearTimeout(bonusTimerRef.current);
-            bonusTimerRef.current = window.setTimeout(() => finishBonusChallenge(BONUS_POINTS), 1400);
+            finishAfterNarration(`¡Muy bien! ${bonusChallenge.solutionText} Ganaste puntos extra.`, BONUS_POINTS, 1400);
         } else {
             setBonusFeedback('wrong');
-            speakStory(`Casi. ${bonusChallenge.solutionText} Vamos al siguiente mundo.`);
-            if (bonusTimerRef.current) window.clearTimeout(bonusTimerRef.current);
-            bonusTimerRef.current = window.setTimeout(() => finishBonusChallenge(0), 3200);
+            finishAfterNarration(`Casi. ${bonusChallenge.solutionText} Vamos al siguiente mundo.`, 0, 3200);
         }
     };
 
@@ -1212,6 +1209,8 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     }, [mode, storyLevel, storyProgress, blockVoiceEnabled]);
 
     const openStoryLibrary = () => {
+        bonusVoiceRequestRef.current++;
+        voicePlayer.cancel();
         setMode('story');
         setStoryScreen('');
         setProjectOpen(false);
@@ -1221,8 +1220,9 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
     };
 
     const openMobileStoryHome = () => {
+        bonusVoiceRequestRef.current++;
         clearModeSwitchVeil();
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        voicePlayer.cancel();
         setMobileMenuOpen(false);
         setMobileStoryNameOpen(false);
         setMode('free');
@@ -1476,9 +1476,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
             // Keep the control usable for this session if storage is unavailable.
         }
         if (!nextEnabled) {
-            if (window.speechSynthesis) window.speechSynthesis.cancel();
-            const child = iframeRef.current && iframeRef.current.contentWindow;
-            if (child && child.speechSynthesis) child.speechSynthesis.cancel();
+            voicePlayer.cancel();
         }
     };
 
@@ -1668,7 +1666,7 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                 {mode === 'story' && storyScreen === 'intro' && (
                     <div className={`${styles.storyCinematic} ${isMobileLayout ? styles.storyIntroMobile : ''} ${isMobileLayout && !storyIntroVideoDone && !storyVideoError ? styles.storyIntroMobilePlaying : ''}`}>
                         <div className={styles.storyCinematicCard}>
-                            <button className={styles.storyClose} onClick={() => {window.speechSynthesis && window.speechSynthesis.cancel(); setStoryScreen('route');}} type="button" aria-label="Volver al mapa">×</button>
+                            <button className={styles.storyClose} onClick={() => {voicePlayer.cancel(); setStoryScreen('route');}} type="button" aria-label="Volver al mapa">×</button>
                             <header className={styles.storyIntroHeader}><p className={styles.storyEyebrow}>MUNDO {storyLevel} · {STORY_WORLDS[storyLevel - 1].chapter}</p><h2>{STORY_WORLDS[storyLevel - 1].title}</h2></header>
                             <div className={styles.storyIntroContent}>
                                 {!storyVideoError && (!isMobileLayout || !storyIntroVideoDone) ? (

@@ -2,6 +2,10 @@ import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyKidsVoiceAssets } from './verify-kids-voice-assets.mjs';
+
+// Fail before replacing the previous editor if narration assets are missing or stale.
+await verifyKidsVoiceAssets();
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const webDist = resolve(repoRoot, 'vendor/scratchjr-reborn/dist-web');
