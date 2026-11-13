@@ -4,6 +4,7 @@ import styles from './scratchjr-kids-workspace.css';
 import {evaluateStoryChallenge, getStoryChallenge} from './story-challenges';
 import {createKidsVoicePlayer} from '../../lib/kids-voice-player';
 import {blockVoiceInstruction} from '../../lib/kids-voice-text';
+import {KIDS_VOICE_LOCALES, KIDS_VOICE_LOCALE_KEY, normalizeKidsVoiceLocale, readKidsVoiceLocale} from '../../lib/kids-voice-locales';
 
 const PROJECT_KEY = 'stblock.kids.scratchjr.project';
 const STORY_HOME_PROGRESS_KEY = 'stblock.kids.story.home-progress';
@@ -431,9 +432,20 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
         if (bonusTimerRef.current) window.clearTimeout(bonusTimerRef.current);
     }, []);
     const storyRunStartedAtRef = useRef(0);
+    const [voiceLocale, setVoiceLocale] = useState(() => {
+        try { return readKidsVoiceLocale(window.localStorage); } catch (_error) { return 'es'; }
+    });
+    const changeVoiceLocale = value => {
+        const locale = normalizeKidsVoiceLocale(value);
+        voicePlayer.cancel();
+        setVoiceLocale(locale);
+        try { window.localStorage.setItem(KIDS_VOICE_LOCALE_KEY, locale); } catch (_error) { /* Session selection remains usable. */ }
+    };
     const voicePlayer = useMemo(() => createKidsVoicePlayer({
-        baseUrl: new URL(`${basePath}static/kids/voice/es/`, window.location.href).href
-    }), [basePath]);
+        baseUrl: new URL(`${basePath}static/kids/voice/${voiceLocale}/`, window.location.href).href
+    }), [basePath, voiceLocale]);
+    const currentVoiceRef = useRef(null);
+    currentVoiceRef.current = {player: voicePlayer, enabled: blockVoiceEnabled};
     useEffect(() => () => voicePlayer.cancel(), [voicePlayer]);
     useEffect(() => { if (!blockVoiceEnabled) voicePlayer.cancel(); }, [blockVoiceEnabled, voicePlayer]);
     useEffect(() => {
@@ -943,10 +955,11 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
 
     const storyPoints = Object.values(storyProgress.levelScores || {}).reduce((total, value) => total + (Number(value) || 0), 0) + (Number(storyProgress.bonusPoints) || 0);
     const speakStory = text => {
-        return blockVoiceEnabled ? voicePlayer.speak(text) : Promise.resolve(false);
+        const current = currentVoiceRef.current;
+        return current.enabled ? current.player.speak(text) : Promise.resolve(false);
     };
     const speakStorySequence = texts => {
-        if (blockVoiceEnabled) voicePlayer.speak(texts);
+        return speakStory(texts);
     };
     const enterStoryWorld = level => {
         const world = STORY_WORLDS[level - 1];
@@ -1554,6 +1567,9 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                     >
                         {blockVoiceEnabled ? '🔊' : '🔇'}
                     </button>
+                    <select className={styles.voiceLocale} aria-label="Acento de la narración" value={voiceLocale} onChange={event => changeVoiceLocale(event.target.value)}>
+                        {KIDS_VOICE_LOCALES.map(locale => <option key={locale.id} value={locale.id}>{locale.label}</option>)}
+                    </select>
                 </nav>
                 <button
                     className={styles.mobileMenuToggle}
@@ -1594,6 +1610,11 @@ const ScratchJrKidsWorkspace = ({basePath, onExit, onConnectRobot, bluetoothConn
                                 <p className={styles.mobileMenuLabel}>SISTEMA</p>
                                 <div className={styles.mobileMenuTools}>
                                     <button onClick={() => {toggleBlockVoice(); setMobileMenuOpen(false);}} type="button"><span>{blockVoiceEnabled ? '🔊' : '🔇'}</span>{blockVoiceEnabled ? 'Silenciar voz de bloques' : 'Activar voz de bloques'}</button>
+                                    <label className={styles.mobileVoiceLocale}>Acento de la narración
+                                        <select aria-label="Acento de la narración en móvil" value={voiceLocale} onChange={event => changeVoiceLocale(event.target.value)}>
+                                            {KIDS_VOICE_LOCALES.map(locale => <option key={locale.id} value={locale.id}>{locale.label}</option>)}
+                                        </select>
+                                    </label>
                                     <button onClick={openMobileSettings} type="button"><span>⚙️</span>Ajustes</button>
                                 </div>
                             </div>

@@ -14,10 +14,11 @@ from piper import PiperVoice, SynthesisConfig
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model', required=True)
+parser.add_argument('--locale', choices=['es', 'es-MX'], default='es')
 args = parser.parse_args()
 root = pathlib.Path(__file__).resolve().parent.parent
 catalog = json.loads(subprocess.check_output(['node', str(root/'scripts'/'kids-voice-catalog.mjs')], cwd=root, text=True, encoding='utf-8'))
-output = root/'scratch-gui'/'static'/'kids'/'voice'/'es'
+output = root/'scratch-gui'/'static'/'kids'/'voice'/args.locale
 output.mkdir(parents=True, exist_ok=True)
 voice = PiperVoice.load(args.model, use_cuda=False)
 config = SynthesisConfig(length_scale=1.05, noise_scale=0.5, noise_w_scale=0.333)
@@ -45,7 +46,7 @@ for index, entry in enumerate(catalog['entries']):
     clips[entry['key']]={'file':entry['file'],'duration':round(duration,3),'sha256':hashlib.sha256(target.read_bytes()).hexdigest()}
     total_seconds += duration
     if index%50==0: print(f'Kids voice: {index+1}/{len(catalog["entries"])} clips',flush=True)
-manifest={'schema':1,'language':'es','voice':'es_ES-davefx-medium','engine':'Piper 1.8.0 (build time only)',
+manifest={'schema':1,'language':'es','locale':args.locale,'voice':pathlib.Path(args.model).stem,'engine':'Piper 1.8.0 (build time only)',
           'modelSha256':hashlib.sha256(pathlib.Path(args.model).read_bytes()).hexdigest(),'clips':clips}
 (output/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 print(f'Kids voice ready: {len(clips)} clips, {total_seconds/60:.1f} minutes, {sum(p.stat().st_size for p in output.glob("*.wav"))/1024/1024:.1f} MiB',flush=True)

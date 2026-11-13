@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "language": "es",
+  "locale": "es",
   "voice": "es_ES-davefx-medium",
   "engine": "Piper 1.8.0 (build time only)",
   "modelSha256": "d2c9224e122321aac3c33343957fff4d0f465226cb74c66b0f520ca3f8c0dd07",
@@ -1104,6 +1105,21 @@
       "file": "5e81a8c3488d41ad60bd4d8e.wav",
       "duration": 0.633,
       "sha256": "793e027f3e3bfdc105e3daa7fca993f2c72f06c64b0b438c7ee386b4538fdaad"
+    },
+    "acento": {
+      "file": "611f0f070d78c3ae23d95570.wav",
+      "duration": 0.669,
+      "sha256": "3967a5fb5e4785829f1482c6dfc1460cd0ed9f88967d5260475484575f2ccd42"
+    },
+    "acento de la narración": {
+      "file": "f6a0061bdf8de7cd0553a671.wav",
+      "duration": 1.152,
+      "sha256": "d4425c1e2e9ea35d9121da698ad8ccf2676527dc9dd6df3c59a0882bb8d5ba99"
+    },
+    "acento de la narración en móvil": {
+      "file": "11090089b67f8b35c235b9e1.wav",
+      "duration": 1.671,
+      "sha256": "cb8248f0de24f85b85b352ad8cbf77289388c65c617e36027315c62f6f3b634e"
     },
     "acércate": {
       "file": "50f604b3182fe33dfad75da8.wav",
@@ -4870,6 +4886,11 @@
       "duration": 0.668,
       "sha256": "25cf27841f60e5d4bf400f9d0eed3a73654d4b9124f0adb258efbb67bf249530"
     },
+    "móvil": {
+      "file": "d6041bf2c01d673c22c30da2.wav",
+      "duration": 0.487,
+      "sha256": "ecf56f292d4d666948a608a9220c7022a6294992c9589eb3bdeefd4cd5c1f13d"
+    },
     "movimiento": {
       "file": "15ac7820af7eb537de19c0ea.wav",
       "duration": 0.796,
@@ -4969,6 +4990,11 @@
       "file": "9e49ce6268f165dbf1f15a1a.wav",
       "duration": 4.575,
       "sha256": "7279504febec4d7f0777451e952dd4058d2f035e8ae7bdf80c55b69652d0410a"
+    },
+    "narración": {
+      "file": "d6cb84b17c8b904cf3b9f9ae.wav",
+      "duration": 0.659,
+      "sha256": "ec8050e8b4cbf3dee8ace35817c2c5231a44e3b9e80b33fd493310e806f897c5"
     },
     "necesita": {
       "file": "04ee3146aaf3d551f77c4a1c.wav",

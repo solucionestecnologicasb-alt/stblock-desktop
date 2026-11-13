@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import vm from 'node:vm';
 import {KIDS_BLOCK_INSTRUCTIONS, blockVoiceInstruction, planKidsVoice, normalizeKidsVoiceText} from '../scratch-gui/src/lib/kids-voice-text.js';
+import {KIDS_VOICE_LOCALES, normalizeKidsVoiceLocale, readKidsVoiceLocale} from '../scratch-gui/src/lib/kids-voice-locales.js';
 const playerSource = (await readFile(new URL('../scratch-gui/src/lib/kids-voice-player.js',import.meta.url),'utf8'))
     .replace("'./kids-voice-text'",JSON.stringify(new URL('../scratch-gui/src/lib/kids-voice-text.js',import.meta.url).href));
 const {createKidsVoicePlayer} = await import('data:text/javascript;base64,'+Buffer.from(playerSource).toString('base64'));
@@ -101,4 +102,29 @@ test('bonus answers finish speaking before moving to the next screen',async()=>{
     const canceled={...context,bonusVoiceRequestRef:{current:0}};
     let resolve;const audio=new Promise(r=>{resolve=r;});canceled.speakStory=()=>audio;
     vm.runInNewContext('('+answer.getText(ast)+')',canceled)(3);canceled.bonusVoiceRequestRef.current++;resolve(false);await tick();assert.equal(scheduled.length,1);
+});
+test('accent preferences accept both included voices and tolerate missing storage',()=>{
+    assert.deepEqual(KIDS_VOICE_LOCALES.map(locale=>locale.id),['es','es-MX']);
+    assert.equal(readKidsVoiceLocale({getItem:()=> 'es-MX'}),'es-MX');
+    assert.equal(readKidsVoiceLocale({getItem(){throw Error('No storage');}}),'es');
+    assert.equal(normalizeKidsVoiceLocale('unknown'),'es');
+});
+test('both accents include the same instructions with different recordings',async()=>{
+    const spain=JSON.parse(await readFile(new URL('../scratch-gui/static/kids/voice/es/manifest.json',import.meta.url),'utf8'));
+    const latin=JSON.parse(await readFile(new URL('../scratch-gui/static/kids/voice/es-MX/manifest.json',import.meta.url),'utf8'));
+    assert.equal(latin.locale,'es-MX');assert.equal(latin.voice,'es_MX-ald-medium');
+    assert.deepEqual(Object.keys(latin.clips),Object.keys(spain.clips));
+    const instruction=normalizeKidsVoiceText(KIDS_BLOCK_INSTRUCTIONS.onflag);
+    assert.notEqual(latin.clips[instruction].sha256,spain.clips[instruction].sha256);
+});
+test('old asynchronous callbacks respect the current accent and mute state',async()=>{
+    const source=await readFile(new URL('../scratch-gui/src/components/kids-experience/scratchjr-kids-workspace.jsx',import.meta.url),'utf8');
+    const require=createRequire(new URL('../sketchforge/package.json',import.meta.url));const ts=require('typescript');
+    const ast=ts.createSourceFile('kids.jsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);let speak;
+    const visit=node=>{if(ts.isVariableDeclaration(node)&&node.name.getText(ast)==='speakStory')speak=node.initializer;ts.forEachChild(node,visit);};visit(ast);
+    const calls=[];const ref={current:{enabled:true,player:{speak:async text=>calls.push('es:'+text)}}};
+    const callback=vm.runInNewContext('('+speak.getText(ast)+')',{currentVoiceRef:ref});
+    await callback('inicio');ref.current={enabled:true,player:{speak:async text=>calls.push('es-MX:'+text)}};
+    await callback('consejo');ref.current.enabled=false;await callback('silenciado');
+    assert.deepEqual(calls,['es:inicio','es-MX:consejo']);
 });

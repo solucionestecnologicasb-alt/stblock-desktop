@@ -48,5 +48,24 @@ try {
     assert.equal(await c.evaluate(`window.qaNativeTTS`),0);
     assert.ok(await c.evaluate(`window.qaVoices.every(voice=>new URL(voice.url).origin===location.origin && voice.url.includes('.wav?v='))`));
     checks.push('Advice resumes with local audio; every recording uses the application origin');
+    await c.evaluate(`(()=>{const s=document.querySelector('select[aria-label="Acento de la narración"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(s,'es-MX');s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await wait(`window.qaVoiceElement.paused`);
+    assert.equal(await c.evaluate(`localStorage.getItem('stblockKidsVoiceLocale')`),'es-MX');
+    await c.evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Consejo')).click()`);
+    await wait(`window.qaVoices.at(-1).url.includes('/es-MX/') && window.qaVoices.at(-1).playing`);
+    assert.equal(await c.evaluate(`window.qaNativeTTS`),0);
+    checks.push('Switching to Latin American Spanish cancels the previous voice and plays Mexican recordings');
+    await c.send('Page.reload');
+    await wait(`!![...document.querySelectorAll('button')].find(b=>b.textContent.includes('Aventuras para imaginar'))`,45000);
+    await click(`[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Aventuras para imaginar'))`);
+    await wait(`document.querySelector('select[aria-label="Acento de la narración"]')?.value==='es-MX'`);
+    checks.push('The selected accent survives an application reload');
+    await c.send('Emulation.setDeviceMetricsOverride',{width:650,height:900,deviceScaleFactor:1,mobile:false});
+    await c.evaluate(`document.querySelector('button[aria-label="Abrir menú de STBlock Kids"]').click()`);
+    await wait(`!!document.querySelector('select[aria-label="Acento de la narración en móvil"]')`);
+    await c.evaluate(`(()=>{const s=document.querySelector('select[aria-label="Acento de la narración en móvil"]');s.value='es';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    assert.equal(await c.evaluate(`localStorage.getItem('stblockKidsVoiceLocale')`),'es');
+    await c.send('Emulation.clearDeviceMetricsOverride');
+    checks.push('The mobile menu can also select and save the accent');
     console.log(JSON.stringify({passed:checks.length,checks},null,2));
 }finally{c.close();}

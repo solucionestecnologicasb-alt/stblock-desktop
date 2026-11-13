@@ -4,20 +4,22 @@
 
 La narración de bloques y la narración del modo Historia usan un único reproductor `HTMLAudioElement` en el documento principal de STBlock. Se eliminó el uso de `speechSynthesis` y `SpeechSynthesisUtterance` en ambas rutas.
 
+El selector **Acento de la narración**, junto al botón de voz y en el menú móvil, permite elegir **Español de España** o **Español latino (México)**. La elección se guarda con `stblockKidsVoiceLocale` y se aplica a bloques y a toda la historia. Se conserva España como valor inicial cuando no existe una elección guardada. Al cambiar de voz se detiene la grabación anterior; los mensajes asincrónicos posteriores respetan la elección y el silencio actuales.
+
 El catálogo español incluye instrucciones de bloques, variantes de salto/vuelo, los veinte mundos, introducciones, guías, pistas compradas, consejos, reglas, mensajes de resultado, letras, números y operadores. Las frases fijas se reproducen completas cuando existe una coincidencia; las frases variables se componen con fragmentos, palabras y números incluidos. Números fuera del rango normal de campaña se leen dígito por dígito. Las instrucciones genéricas de bloques no necesitan sintetizar nombres arbitrarios de personajes o grabaciones del usuario.
 
 Los efectos de sonido, grabaciones creadas por el usuario y vídeos de las historias mantienen sus rutas de audio existentes. El botón de voz conserva la preferencia de silencio del usuario; después de instalar la actualización puede reactivarse para probar la nueva narración.
 
 ## Estabilidad
 
-- Un solo elemento de audio, creado al necesitarse, y una sola cola; no se precargan los 1.553 archivos a memoria.
+- Un solo elemento de audio, creado al necesitarse, y una sola cola; no se precargan los archivos de ambas voces a memoria.
 - Las voces de bloques no interrumpen las explicaciones de historia.
 - Una nueva explicación cancela la anterior. Silenciar, cambiar de modo o salir de Kids cancela toda la cola.
 - Cancelación protegida mediante identificadores de petición, incluso mientras se carga el manifiesto.
 - Errores de reproducción, restricciones de reproducción automática y falta de eventos de finalización detienen la narración sin interrumpir el arrastre ni el proyecto.
 - No hay alternativa automática a voces del sistema ni a servicios externos.
 - Peticiones del iframe verificadas por origen y ventana de procedencia; solo se aceptan identificadores de bloque conocidos.
-- WAV PCM mono 16 bits/22.050 Hz incluidos, aproximadamente 113 MiB en total. Las versiones instaladas no generan ni descargan voces.
+- WAV PCM mono 16 bits/22.050 Hz incluidos para ambos acentos. Las versiones instaladas no generan ni descargan voces.
 
 ## Compilación
 
@@ -28,7 +30,7 @@ El catálogo se obtiene de los textos y plantillas actuales de Kids, sus reglas 
 ## Validación
 
 - Pruebas del reproductor: orden, prioridad, cancelación, silencio, errores, tiempo máximo, rutas sin TTS y cobertura de los veinte mundos y retos aleatorios.
-- Verificación de los 1.553 WAV y sus hashes.
+- Verificación de los catálogos de ambos acentos y los hashes de todos sus WAV.
 - Compilación completa de STBlock y compatibilidad JavaScript/CSS con Chrome 68.
 - Comprobación de navegador sobre el build final: arrastre real, reproducción de WAV local, historia, consejo y silencio sin acceso al sintetizador.
 
