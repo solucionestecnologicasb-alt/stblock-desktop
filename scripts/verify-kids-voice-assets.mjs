@@ -12,6 +12,7 @@ export async function verifyKidsVoiceAssets() {
         const manifest = JSON.parse(await readFile(resolve(directory,'manifest.json'),'utf8'));
         if (manifest.schema !== 1 || manifest.language !== 'es') throw new Error('El catálogo de voz de Kids no es válido.');
         if (manifest.voice !== locale.voice || (manifest.locale || 'es') !== locale.id) throw new Error(`Voz de Kids incorrecta: ${locale.id}`);
+        if (manifest.profile !== 'clear-phrases-v2') throw new Error(`Regenera el perfil de narración de ${locale.id}.`);
         const missing = catalog.entries.filter(entry => !manifest.clips[entry.key]);
         if (missing.length) throw new Error(`Faltan ${missing.length} audios de Kids: ${missing.slice(0,4).map(entry=>entry.key).join('; ')}. Regenera con scripts/generate-kids-voice.py antes de desplegar.`);
         for (const entry of catalog.entries) {

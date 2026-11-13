@@ -3,6 +3,8 @@ import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
+import vm from 'node:vm';
+import {getStoryChallenge} from '../scratch-gui/src/components/kids-experience/story-challenges.js';
 import {KIDS_BLOCK_INSTRUCTIONS, KIDS_DIRECTION_INSTRUCTIONS, normalizeKidsVoiceText} from '../scratch-gui/src/lib/kids-voice-text.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -31,9 +33,36 @@ export async function collectKidsVoiceCatalog() {
     };
     Object.values(KIDS_BLOCK_INSTRUCTIONS).forEach(add);
     Object.values(KIDS_DIRECTION_INSTRUCTIONS).forEach(add);
+    // The campaign's finite learning prompts and answers can be recorded as
+    // complete sentences instead of splicing a number/letter into a prefix.
+    for (let number = 0; number <= 12; number++) {
+        add(`La respuesta es ${number}.`);
+        add(`El número que sigue es ${number}.`);
+        add(`El número que falta es ${number}.`);
+    }
+    for (const letter of 'ABCDEFGHIJKLMNOP') {
+        add(`La letra que sigue es ${letter}.`);
+        add(`La letra que falta es ${letter}.`);
+    }
+    for (let a = 1; a <= 8; a++) for (let b = 1; b <= 8; b++) {
+        if (a <= 5 && b <= 5 && a + b <= 10) add(`¿Cuánto es ${a} + ${b}?`);
+        if (a >= 3 && b < a) add(`¿Cuánto es ${a} − ${b}?`);
+    }
     for (const file of voiceSources) {
         const source = await readFile(resolve(root, file), 'utf8');
         const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith('jsx') ? ts.ScriptKind.JSX : ts.ScriptKind.JS);
+        if (file.endsWith('scratchjr-kids-workspace.jsx')) {
+            const declarations = ast.statements.filter(node =>
+                ts.isVariableStatement(node) && node.declarationList.declarations.some(d => /^STORY_WORLDS$|^WORLD\d+_|^MOVEMENT_BLOCKS$|^BLOCK_LABELS$|^labelBlocks$|^hintTier$|^levelHints$/.test(d.name.getText(ast))) ||
+                ts.isExpressionStatement(node) && /^STORY_WORLDS\[/.test(node.getText(ast)));
+            const {worlds, hints} = vm.runInNewContext(declarations.map(node => node.getText(ast)).join('\n') + '\n({worlds:STORY_WORLDS,hints:levelHints})');
+            for (const world of worlds) {
+                add(`Mundo ${world.id}. ${world.title}. ${world.objective} ${world.lesson}.`);
+                add(`Mundo ${world.id}. ${world.title}. ${world.objective}`);
+                add(`Pista. ${world.hint}`);
+                for (const hint of hints(world, getStoryChallenge(world.id, {}, './'))) add(hint.speech);
+            }
+        }
         const walk = node => {
             if (ts.isVariableDeclaration(node) && node.name.getText(ast) === 'BLOCK_LABELS' && node.initializer) {
                 const labels = item => {if (ts.isStringLiteralLike(item)) add(item.text);ts.forEachChild(item, labels);};

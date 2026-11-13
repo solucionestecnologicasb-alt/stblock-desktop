@@ -3,10 +3,12 @@ import test from 'node:test';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import vm from 'node:vm';
-import {KIDS_BLOCK_INSTRUCTIONS, blockVoiceInstruction, planKidsVoice, normalizeKidsVoiceText} from '../scratch-gui/src/lib/kids-voice-text.js';
+import {KIDS_BLOCK_INSTRUCTIONS, blockVoiceInstruction, planKidsVoice, planKidsNarration, normalizeKidsVoiceText} from '../scratch-gui/src/lib/kids-voice-text.js';
 import {KIDS_VOICE_LOCALES, normalizeKidsVoiceLocale, readKidsVoiceLocale} from '../scratch-gui/src/lib/kids-voice-locales.js';
+import {writeKidsWave} from '../scratch-gui/src/lib/kids-voice-audio.js';
 const playerSource = (await readFile(new URL('../scratch-gui/src/lib/kids-voice-player.js',import.meta.url),'utf8'))
-    .replace("'./kids-voice-text'",JSON.stringify(new URL('../scratch-gui/src/lib/kids-voice-text.js',import.meta.url).href));
+    .replace("'./kids-voice-text'",JSON.stringify(new URL('../scratch-gui/src/lib/kids-voice-text.js',import.meta.url).href))
+    .replace("'./kids-voice-audio'",JSON.stringify(new URL('../scratch-gui/src/lib/kids-voice-audio.js',import.meta.url).href));
 const {createKidsVoicePlayer} = await import('data:text/javascript;base64,'+Buffer.from(playerSource).toString('base64'));
 const clip = file => ({file:file+'.wav',duration:0.01});
 const clips = {'hola mundo':clip('phrase'),hola:clip('hola'),mundo:clip('mundo'),ganaste:clip('win'),estrellas:clip('stars'),'5':clip('five'),'9':clip('nine')};
@@ -14,7 +16,7 @@ const tick = () => new Promise(resolve=>setImmediate(resolve));
 function fixture(options={}) {
     const played=[], errors=[];
     const audio={src:'',onended:null,onerror:null,paused:0,play(){played.push(this.src);return Promise.resolve();},pause(){this.paused++;},load(){},removeAttribute(){this.src='';}};
-    const player=createKidsVoicePlayer({baseUrl:'https://local.test/plugin/assets/editor/static/kids/voice/es/',createAudio:()=>audio,loadManifest:async()=>({clips}),onError:error=>errors.push(error.message),...options});
+    const player=createKidsVoicePlayer({baseUrl:'https://local.test/plugin/assets/editor/static/kids/voice/es/',createAudio:()=>audio,loadManifest:async()=>({clips}),prepareNarration:async plan=>({clips:plan,release(){}}),onError:error=>errors.push(error.message),...options});
     return {player,audio,played,errors};
 }
 test('complete phrases take priority over individual words',()=>{
@@ -75,10 +77,13 @@ test('included recordings cover all twenty worlds and randomized learning challe
     assert.equal(worlds.length,20);
     for(const world of worlds){
         for(const key of ['story','hint','summary','objective','lesson','title'])assert.ok(planKidsVoice(world[key],manifest.clips).length,key);
-        planKidsVoice(`Mundo ${world.id}. ${world.title}. ${world.objective} ${world.lesson}.`,manifest.clips);
+        assert.equal(planKidsNarration(`Mundo ${world.id}. ${world.title}. ${world.objective} ${world.lesson}.`,manifest.clips).length,1);
+        assert.equal(planKidsNarration(`Pista. ${world.hint}`,manifest.clips).length,1);
         for(const line of world.guide||[])planKidsVoice(line,manifest.clips);
         for(let attempt=0;attempt<20;attempt++){
             const task=bonus(world.id);
+            assert.equal(planKidsNarration(task.prompt,manifest.clips).length,1);
+            assert.equal(planKidsNarration(task.solutionText,manifest.clips).length,1);
             planKidsVoice(`¡Mundo completado! Ganaste 5 estrellas y 100 puntos. ${task.prompt} Opciones: ${task.options.join(', ')}.`,manifest.clips);
             planKidsVoice(`¡Muy bien! ${task.solutionText} Ganaste puntos extra.`,manifest.clips);
         }
@@ -112,7 +117,7 @@ test('accent preferences accept both included voices and tolerate missing storag
 test('both accents include the same instructions with different recordings',async()=>{
     const spain=JSON.parse(await readFile(new URL('../scratch-gui/static/kids/voice/es/manifest.json',import.meta.url),'utf8'));
     const latin=JSON.parse(await readFile(new URL('../scratch-gui/static/kids/voice/es-MX/manifest.json',import.meta.url),'utf8'));
-    assert.equal(latin.locale,'es-MX');assert.equal(latin.voice,'es_MX-ald-medium');
+    assert.equal(latin.locale,'es-MX');assert.equal(latin.voice,'es_MX-claude-high');
     assert.deepEqual(Object.keys(latin.clips),Object.keys(spain.clips));
     const instruction=normalizeKidsVoiceText(KIDS_BLOCK_INSTRUCTIONS.onflag);
     assert.notEqual(latin.clips[instruction].sha256,spain.clips[instruction].sha256);
@@ -127,4 +132,14 @@ test('old asynchronous callbacks respect the current accent and mute state',asyn
     await callback('inicio');ref.current={enabled:true,player:{speak:async text=>calls.push('es-MX:'+text)}};
     await callback('consejo');ref.current.enabled=false;await callback('silenciado');
     assert.deepEqual(calls,['es:inicio','es-MX:consejo']);
+});
+test('the production player decodes one continuous local stream for a variable sentence',async()=>{
+    const original=globalThis.fetch;
+    globalThis.fetch=async()=>({ok:true,arrayBuffer:async()=>writeKidsWave(Int16Array.from({length:1000},(_,i)=>i%2?100:-100))});
+    try {
+        const f=fixture({prepareNarration:undefined});
+        const run=f.player.speak('Ganaste 5 estrellas.');await tick();
+        assert.equal(f.played.length,1);assert.ok(f.played[0].startsWith('blob:'));
+        f.audio.onended();assert.equal(await run,true);assert.equal(f.errors.length,0);
+    } finally {globalThis.fetch=original;}
 });

@@ -4,6 +4,8 @@
 
 La narración de bloques y la narración del modo Historia usan un único reproductor `HTMLAudioElement` en el documento principal de STBlock. Se eliminó el uso de `speechSynthesis` y `SpeechSynthesisUtterance` en ambas rutas.
 
+El perfil de narración actual sustituye la voz latina anterior por `es_MX-claude-high`. Los bloques se anuncian con frases, por ejemplo «Mueve el personaje hacia abajo», en lugar de palabras aisladas. Las introducciones, pistas y preguntas/respuestas de los retos se graban completas para conservar contexto y entonación.
+
 El selector **Acento de la narración**, junto al botón de voz y en el menú móvil, permite elegir **Español de España** o **Español latino (México)**. La elección se guarda con `stblockKidsVoiceLocale` y se aplica a bloques y a toda la historia. Se conserva España como valor inicial cuando no existe una elección guardada. Al cambiar de voz se detiene la grabación anterior; los mensajes asincrónicos posteriores respetan la elección y el silencio actuales.
 
 El catálogo español incluye instrucciones de bloques, variantes de salto/vuelo, los veinte mundos, introducciones, guías, pistas compradas, consejos, reglas, mensajes de resultado, letras, números y operadores. Las frases fijas se reproducen completas cuando existe una coincidencia; las frases variables se componen con fragmentos, palabras y números incluidos. Números fuera del rango normal de campaña se leen dígito por dígito. Las instrucciones genéricas de bloques no necesitan sintetizar nombres arbitrarios de personajes o grabaciones del usuario.
@@ -18,6 +20,8 @@ Los efectos de sonido, grabaciones creadas por el usuario y vídeos de las histo
 - Cancelación protegida mediante identificadores de petición, incluso mientras se carga el manifiesto.
 - Errores de reproducción, restricciones de reproducción automática y falta de eventos de finalización detienen la narración sin interrumpir el arrastre ni el proyecto.
 - No hay alternativa automática a voces del sistema ni a servicios externos.
+- Los mensajes variables se cargan antes de reproducirse y se ensamblan en una única pista PCM. Se respetan pausas de frase y puntuación, evitando que abrir cada archivo introduzca retrasos variables. Se conservan los sonidos débiles de los finales de palabra.
+- La pista temporal se libera al terminar o cancelar. La caché de fragmentos se limita a 16 MiB; no se utiliza `AudioContext` ni síntesis durante el juego.
 - Peticiones del iframe verificadas por origen y ventana de procedencia; solo se aceptan identificadores de bloque conocidos.
 - WAV PCM mono 16 bits/22.050 Hz incluidos para ambos acentos. Las versiones instaladas no generan ni descargan voces.
 

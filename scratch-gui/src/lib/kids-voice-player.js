@@ -1,11 +1,13 @@
-import {planKidsVoice} from './kids-voice-text';
+import {planKidsNarration} from './kids-voice-text';
+import {createKidsNarrationAudio} from './kids-voice-audio';
 
 export const createKidsVoicePlayer = ({baseUrl, createAudio = () => new Audio(),
     loadManifest = async url => {
         const response = await fetch(url, {cache: 'no-cache'});
         if (!response.ok) throw new Error(`Audio de Kids no disponible (${response.status})`);
         return response.json();
-    }, onError = error => console.warn('[Kids audio]', error.message)}) => {
+    }, prepareNarration, onError = error => console.warn('[Kids audio]', error.message)}) => {
+    const prepare = prepareNarration || createKidsNarrationAudio({baseUrl});
     let audio = null;
     let manifest = null;
     let generation = 0;
@@ -24,6 +26,7 @@ export const createKidsVoicePlayer = ({baseUrl, createAudio = () => new Audio(),
     const playClip = (clip, token) => new Promise(resolve => {
         if (token !== generation) { resolve(false); return; }
         if (!audio) audio = createAudio();
+        if (audio.dataset) audio.dataset.kidsVoiceBase = baseUrl;
         let settled = false;
         let timer;
         const finish = ok => {
@@ -52,24 +55,27 @@ export const createKidsVoicePlayer = ({baseUrl, createAudio = () => new Audio(),
         cancel();
         const token = generation;
         active = true;
+        let prepared;
         try {
             manifest = manifest || loadManifest(new URL('manifest.json', baseUrl).href);
             const data = await manifest;
             if (token !== generation) return false;
-            const clips = (Array.isArray(texts) ? texts : [texts]).filter(Boolean).flatMap(text => planKidsVoice(text, data.clips));
-            for (const clip of clips) {
+            const plan = planKidsNarration(texts, data.clips);
+            prepared = await prepare(plan, () => token === generation);
+            for (const clip of prepared.clips) {
                 if (token !== generation) return false;
                 if (!await playClip(clip, token)) {
                     if (token === generation) onError(new Error('No se pudo reproducir la narración incluida.'));
                     return false;
                 }
             }
-            return true;
+            return token === generation;
         } catch (error) {
             manifest = null;
             if (token === generation) onError(error);
             return false;
         } finally {
+            if (prepared) prepared.release();
             if (token === generation) active = false;
         }
     };
