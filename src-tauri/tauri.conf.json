@@ -1,7 +1,7 @@
 {
     "$schema":  "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName":  "STBlock",
-    "version":  "0.1.62",
+    "version":  "0.1.65",
     "identifier":  "stblock.app",
     "build":  {
                   "frontendDist":  "../scratch-gui/build",
@@ -45,11 +45,12 @@
                    "android":  {
                                    "debugApplicationIdSuffix":  ".debug"
                                },
-                   "resources":  [
-                                     "drivers/**/*",
-                                     "tools/Arduino/**/*",
-                                     "backends/**/*"
-                                 ],
+                   "resources":  {
+                                     "drivers/":  "drivers/",
+                                     "tools/Arduino/":  "tools/Arduino/",
+                                     "backends/":  "backends/",
+                                     "../scratch-gui/build/":  "frontend/"
+                                 },
                    "createUpdaterArtifacts":  false,
                    "windows":  {
                                    "webviewInstallMode":  {

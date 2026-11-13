@@ -16,6 +16,10 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // Arduino CLI integration module
 mod arduino_cli;
+#[cfg(not(target_os = "android"))]
+mod resource_assets;
+#[cfg(not(target_os = "android"))]
+mod resource_files;
 use arduino_cli::*;
 
 // Modo Aula: servidor relay WebSocket
@@ -379,6 +383,10 @@ fn classroom_local_ip() -> Vec<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(not(target_os = "android"))]
+    let context = tauri::generate_context!(assets = resource_assets::ResourceAssets::default());
+    #[cfg(target_os = "android")]
+    let context = tauri::generate_context!();
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -447,7 +455,7 @@ pub fn run() {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application");
 
     // Event loop with cleanup on exit or exit requested
