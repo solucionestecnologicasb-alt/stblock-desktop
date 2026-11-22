@@ -379,7 +379,7 @@ fn gears_assets_save(
     Ok(serde_json::json!({
         "success": true,
         "filename": filename,
-        "path": file_path.to_string_lossy()
+        "path": file_path.to_string_lossy().to_string()
     }))
 }
 
