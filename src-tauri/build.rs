@@ -1,4 +1,8 @@
 fn main() {
+  // Ensure required resource directories exist so tauri_build does not panic on fresh checkouts
+  let _ = std::fs::create_dir_all("tools/Arduino");
+  let _ = std::fs::create_dir_all("drivers");
+
   // Dev uses the webpack server. Do not require (or copy) a production UI
   // build just to run `pnpm tauri dev` on a fresh checkout.
   if tauri_build::is_dev()

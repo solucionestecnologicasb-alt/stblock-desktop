@@ -3,13 +3,18 @@
 //   - sketchforge (Next dev server) en http://localhost:3000
 // Reemplaza el beforeDevCommand de un solo server en tauri.conf.json.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const isWindows = process.platform === "win32";
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const devTargetDir = join(projectRoot, "src-tauri", "target");
+const arduinoToolsDir = join(projectRoot, "src-tauri", "tools", "Arduino");
+
+if (!existsSync(arduinoToolsDir)) {
+  mkdirSync(arduinoToolsDir, { recursive: true });
+}
 
 const electronicsLabDir = "C:\\Users\\bello\\OneDrive\\Desktop\\prueba\\electronics-lab";
 
