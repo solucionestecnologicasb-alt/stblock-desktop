@@ -47,7 +47,7 @@ Las pruebas de interfaz se ejecutaron en Chrome con la exportación estática de
 
 ## Validación
 
-- TypeScript y compilación `pnpm run build:sketchforge`: aprobados. Export copiado a `scratch-gui/build/sketchforge`; verificados los dos runtimes de worker con prefijo `/sketchforge/_next/`.
+- TypeScript y compilación `pnpm run build:sketchforge`: aprobados. Export copiado a `apps/gui/build/sketchforge`; verificados los dos runtimes de worker con prefijo `/sketchforge/_next/`.
 - 288 pruebas unitarias aprobadas, incluidas 10 nuevas de geometría conectada, instantáneas, partición de caras y precisión de persistencia.
 - 8 pruebas STEP con OpenCascade real aprobadas.
 - 8 recorridos de navegador aprobados tanto en desarrollo como en la exportación estática: arrastre de vértice y arista antes de soltar, cancelación, deshacer/rehacer, valores exactos, escala/rotación, extrusión y reapertura SKF.

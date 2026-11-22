@@ -29,7 +29,7 @@ Los efectos de sonido, grabaciones creadas por el usuario y vídeos de las histo
 
 `prepare-scratchjr-web.mjs` verifica el catálogo, la existencia y los hashes de las grabaciones antes de sustituir el editor anterior. Si un cambio de textos necesita nuevas grabaciones, el despliegue falla con una explicación para regenerarlas, en lugar de publicar una versión incompleta.
 
-El catálogo se obtiene de los textos y plantillas actuales de Kids, sus reglas de misión y las instrucciones de bloques. La generación es una herramienta de mantenimiento separada, descrita en `scratch-gui/static/kids/voice/README.md`. Los modelos y ejecutables de generación se guardan fuera del repositorio y no forman parte del instalador.
+El catálogo se obtiene de los textos y plantillas actuales de Kids, sus reglas de misión y las instrucciones de bloques. La generación es una herramienta de mantenimiento separada, descrita en `apps/gui/static/kids/voice/README.md`. Los modelos y ejecutables de generación se guardan fuera del repositorio y no forman parte del instalador.
 
 ## Validación
 

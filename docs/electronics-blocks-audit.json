@@ -1,6 +1,6 @@
 {
   "note": "Static handler coverage only: does not prove correct generated code, compilation or hardware behavior. micro:bit uses a separate generator.",
-  "activeGenerator": "scratch-vm/src/generators/arduino (shared by GUI and VM)",
+  "activeGenerator": "apps/vm/src/generators/arduino (shared by GUI and VM)",
   "sharedDefinitionsPolicy": "Preserve existing definitions and workspace blocks on board changes, as requested by the user.",
   "boards": [
     {

@@ -17,7 +17,7 @@ Esta es una auditoría de código y registros de generadores, no una certificaci
 
 ### P1: definiciones de bloques de otra tarjeta permanecen registradas
 
-`scratch-gui/src/containers/blocks.jsx`, `handleExtensionAdded`, solo define un bloque si su tipo todavía no existe en `ScratchBlocks.Blocks`. `handleBlocksInfoUpdate` delega en esa misma función. Sin embargo, hay 99 tipos compartidos entre manifiestos con JSON diferente: pines, menús y otras definiciones dependen de la placa.
+`apps/gui/src/containers/blocks.jsx`, `handleExtensionAdded`, solo define un bloque si su tipo todavía no existe en `ScratchBlocks.Blocks`. `handleBlocksInfoUpdate` delega en esa misma función. Sin embargo, hay 99 tipos compartidos entre manifiestos con JSON diferente: pines, menús y otras definiciones dependen de la placa.
 
 Ejemplo: seleccionar Uno y después Mega conserva potencialmente la definición anterior de `arduino_pin_setPinMode`, aunque el manifiesto de Mega tenga un menú diferente. La prevención de redefiniciones impide aplicar cambios legítimos. Esto es un defecto confirmado por la comparación de fuentes; su manifestación visual exacta requiere prueba en navegador.
 
@@ -33,7 +33,7 @@ Corrección propuesta: estado único de extensiones por proyecto/tarjeta, result
 
 ### P1: bloques visibles sin generación funcional y dos rutas discrepantes
 
-Los generadores son `scratch-vm/src/generators/arduino/index.js` y `scratch-gui/src/lib/arduino-generator/index.js`. La GUI publica código desde el workspace y también escucha `CODE_GENERATED` del VM. La cobertura y los alias no coinciden.
+Los generadores son `apps/vm/src/generators/arduino/index.js` y `apps/gui/src/lib/arduino-generator/index.js`. La GUI publica código desde el workspace y también escucha `CODE_GENERATED` del VM. La cobertura y los alias no coinciden.
 
 En las 24 extensiones, solo 3 de 65 identificadores tienen resolución en el generador VM y solo 1 de 65 tiene manejador directo en el generador GUI. El ultrasónico genérico tiene cobertura en ambos; `stbV2Ultra_readDistCm` y `stbV2Ultra_readDistInch` tienen cobertura VM. El resto requiere implementación o adaptación, no simplemente repintado. Por ejemplo, `dht_dht_readTemperature` no está registrado. La existencia de otra función DHT en la tarjeta no garantiza que reciba esos argumentos ni el mismo identificador.
 

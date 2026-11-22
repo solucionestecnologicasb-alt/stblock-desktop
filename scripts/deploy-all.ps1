@@ -432,7 +432,7 @@ function Save-BuildDeb {
 $RootDir = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $PackagePath = Join-Path $RootDir 'package.json'
 $TauriConfigPath = Join-Path $RootDir 'src-tauri\tauri.conf.json'
-$GuiBuildDir = Join-Path $RootDir 'scratch-gui\build'
+$GuiBuildDir = Join-Path $RootDir 'apps\gui\build'
 $BundleDir = Join-Path $RootDir 'src-tauri\target\release\bundle'
 $PluginAssetsDir = Join-Path $PluginPath 'assets'
 $PluginEditorDir = Join-Path $PluginAssetsDir 'editor'

@@ -26,10 +26,10 @@ Enter confirma y Esc cancela las operaciones interactivas. También funcionan de
 
 ## Verificación
 
-- Compilación de producción e integración en `scratch-gui/build/sketchforge` correctas; comprobación de tipos incluida.
+- Compilación de producción e integración en `apps/gui/build/sketchforge` correctas; comprobación de tipos incluida.
 - 305 pruebas unitarias en 44 archivos. Incluyen superficie cerrada y orientación de triángulos, área/volumen, cancelación por parámetros inválidos y conservación de caras al convertir a pieza.
 - 25 comprobaciones en Chrome sobre export de producción: 11 de estas herramientas y 14 de regresión. Se verifican las operaciones con teclado/ratón, deshacer, ajuste magnético a distinta profundidad, simetría, radio proporcional y el flujo SKF existente.
-- Scripts: `sketchforge/scripts/mesh-six-browser-qa.mjs`, `mesh-edit-browser-qa.mjs` y `mesh-menu-browser-qa.mjs` (este último después del anterior).
+- Scripts: `apps/electronics/scripts/mesh-six-browser-qa.mjs`, `mesh-edit-browser-qa.mjs` y `mesh-menu-browser-qa.mjs` (este último después del anterior).
 - Se conserva la advertencia heredada de dependencia dinámica de brepjs. No se recompiló un instalador de escritorio.
 
 Referencias de comportamiento: [edición de mallas de Blender](https://docs.blender.org/manual/en/5.2/modeling/meshes/editing/index.html), [cortes en bucle](https://docs.blender.org/manual/en/latest/modeling/meshes/tools/loop.html), [transformaciones y edición proporcional](https://docs.blender.org/manual/en/4.2/modeling/meshes/editing/mesh/transform/basic.html). Los límites anteriores describen nuestra implementación, no las capacidades completas de Blender.

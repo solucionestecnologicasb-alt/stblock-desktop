@@ -3,12 +3,12 @@ import test from 'node:test';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import vm from 'node:vm';
-import {KIDS_BLOCK_INSTRUCTIONS, blockVoiceInstruction, planKidsVoice, planKidsNarration, normalizeKidsVoiceText} from '../scratch-gui/src/lib/kids-voice-text.js';
-import {KIDS_VOICE_LOCALES, normalizeKidsVoiceLocale, readKidsVoiceLocale} from '../scratch-gui/src/lib/kids-voice-locales.js';
-import {writeKidsWave} from '../scratch-gui/src/lib/kids-voice-audio.js';
-const playerSource = (await readFile(new URL('../scratch-gui/src/lib/kids-voice-player.js',import.meta.url),'utf8'))
-    .replace("'./kids-voice-text'",JSON.stringify(new URL('../scratch-gui/src/lib/kids-voice-text.js',import.meta.url).href))
-    .replace("'./kids-voice-audio'",JSON.stringify(new URL('../scratch-gui/src/lib/kids-voice-audio.js',import.meta.url).href));
+import {KIDS_BLOCK_INSTRUCTIONS, blockVoiceInstruction, planKidsVoice, planKidsNarration, normalizeKidsVoiceText} from '../apps/gui/src/lib/kids-voice-text.js';
+import {KIDS_VOICE_LOCALES, normalizeKidsVoiceLocale, readKidsVoiceLocale} from '../apps/gui/src/lib/kids-voice-locales.js';
+import {writeKidsWave} from '../apps/gui/src/lib/kids-voice-audio.js';
+const playerSource = (await readFile(new URL('../apps/gui/src/lib/kids-voice-player.js',import.meta.url),'utf8'))
+    .replace("'./kids-voice-text'",JSON.stringify(new URL('../apps/gui/src/lib/kids-voice-text.js',import.meta.url).href))
+    .replace("'./kids-voice-audio'",JSON.stringify(new URL('../apps/gui/src/lib/kids-voice-audio.js',import.meta.url).href));
 const {createKidsVoicePlayer} = await import('data:text/javascript;base64,'+Buffer.from(playerSource).toString('base64'));
 const clip = file => ({file:file+'.wav',duration:0.01});
 const clips = {'hola mundo':clip('phrase'),hola:clip('hola'),mundo:clip('mundo'),ganaste:clip('win'),estrellas:clip('stars'),'5':clip('five'),'9':clip('nine')};
@@ -66,9 +66,9 @@ test('a missing media completion event cannot leave narration stuck forever',asy
     assert.equal(await run,false);assert.equal(f.player.isPlaying(),false);assert.ok(f.audio.paused>0);
 });
 test('included recordings cover all twenty worlds and randomized learning challenges',async()=>{
-    const manifest=JSON.parse(await readFile(new URL('../scratch-gui/static/kids/voice/es/manifest.json',import.meta.url),'utf8'));
-    const source=await readFile(new URL('../scratch-gui/src/components/kids-experience/scratchjr-kids-workspace.jsx',import.meta.url),'utf8');
-    const require=createRequire(new URL('../sketchforge/package.json',import.meta.url));const ts=require('typescript');
+    const manifest=JSON.parse(await readFile(new URL('../apps/gui/static/kids/voice/es/manifest.json',import.meta.url),'utf8'));
+    const source=await readFile(new URL('../apps/gui/src/components/kids-experience/scratchjr-kids-workspace.jsx',import.meta.url),'utf8');
+    const require=createRequire(new URL('../apps/electronics/package.json',import.meta.url));const ts=require('typescript');
     const tree=ts.createSourceFile('kids.jsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
     const names=new Set(['STORY_WORLDS','LETTERS','MATH_EMOJIS','makeOptions','makeLetterChallenge','makeNumberChallenge','makeMathChallenge','makeBonusChallenge']);
     const statements=tree.statements.filter(node=>ts.isVariableStatement(node)&&node.declarationList.declarations.some(d=>(names.has(d.name.getText(tree))||/^WORLD\d+_/.test(d.name.getText(tree))))||ts.isExpressionStatement(node)&&/^STORY_WORLDS\[/.test(node.getText(tree)));
@@ -90,13 +90,13 @@ test('included recordings cover all twenty worlds and randomized learning challe
     }
 });
 test('the Kids shell and embedded drag code contain no system TTS calls',async()=>{
-    for(const path of ['../scratch-gui/src/components/kids-experience/scratchjr-kids-workspace.jsx','../vendor/scratchjr-reborn/src/app/src/editor/ui/Palette.ts']){
+    for(const path of ['../apps/gui/src/components/kids-experience/scratchjr-kids-workspace.jsx','../vendor/scratchjr-reborn/src/app/src/editor/ui/Palette.ts']){
         const source=await readFile(new URL(path,import.meta.url),'utf8');assert.doesNotMatch(source,/speechSynthesis|SpeechSynthesisUtterance/);
     }
 });
 test('bonus answers finish speaking before moving to the next screen',async()=>{
-    const source=await readFile(new URL('../scratch-gui/src/components/kids-experience/scratchjr-kids-workspace.jsx',import.meta.url),'utf8');
-    const require=createRequire(new URL('../sketchforge/package.json',import.meta.url));const ts=require('typescript');
+    const source=await readFile(new URL('../apps/gui/src/components/kids-experience/scratchjr-kids-workspace.jsx',import.meta.url),'utf8');
+    const require=createRequire(new URL('../apps/electronics/package.json',import.meta.url));const ts=require('typescript');
     const ast=ts.createSourceFile('kids.jsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);let answer;
     const visit=node=>{if(ts.isVariableDeclaration(node)&&node.name.getText(ast)==='answerBonus')answer=node.initializer;ts.forEachChild(node,visit);};visit(ast);
     let complete;const pending=new Promise(resolve=>{complete=resolve;});const scheduled=[],finished=[];
@@ -115,16 +115,16 @@ test('accent preferences accept both included voices and tolerate missing storag
     assert.equal(normalizeKidsVoiceLocale('unknown'),'es');
 });
 test('both accents include the same instructions with different recordings',async()=>{
-    const spain=JSON.parse(await readFile(new URL('../scratch-gui/static/kids/voice/es/manifest.json',import.meta.url),'utf8'));
-    const latin=JSON.parse(await readFile(new URL('../scratch-gui/static/kids/voice/es-MX/manifest.json',import.meta.url),'utf8'));
+    const spain=JSON.parse(await readFile(new URL('../apps/gui/static/kids/voice/es/manifest.json',import.meta.url),'utf8'));
+    const latin=JSON.parse(await readFile(new URL('../apps/gui/static/kids/voice/es-MX/manifest.json',import.meta.url),'utf8'));
     assert.equal(latin.locale,'es-MX');assert.equal(latin.voice,'es_MX-claude-high');
     assert.deepEqual(Object.keys(latin.clips),Object.keys(spain.clips));
     const instruction=normalizeKidsVoiceText(KIDS_BLOCK_INSTRUCTIONS.onflag);
     assert.notEqual(latin.clips[instruction].sha256,spain.clips[instruction].sha256);
 });
 test('old asynchronous callbacks respect the current accent and mute state',async()=>{
-    const source=await readFile(new URL('../scratch-gui/src/components/kids-experience/scratchjr-kids-workspace.jsx',import.meta.url),'utf8');
-    const require=createRequire(new URL('../sketchforge/package.json',import.meta.url));const ts=require('typescript');
+    const source=await readFile(new URL('../apps/gui/src/components/kids-experience/scratchjr-kids-workspace.jsx',import.meta.url),'utf8');
+    const require=createRequire(new URL('../apps/electronics/package.json',import.meta.url));const ts=require('typescript');
     const ast=ts.createSourceFile('kids.jsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);let speak;
     const visit=node=>{if(ts.isVariableDeclaration(node)&&node.name.getText(ast)==='speakStory')speak=node.initializer;ts.forEachChild(node,visit);};visit(ast);
     const calls=[];const ref={current:{enabled:true,player:{speak:async text=>calls.push('es:'+text)}}};

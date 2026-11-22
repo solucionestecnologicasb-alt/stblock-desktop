@@ -9,8 +9,8 @@ await verifyKidsVoiceAssets();
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const webDist = resolve(repoRoot, 'vendor/scratchjr-reborn/dist-web');
-const target = resolve(repoRoot, 'scratch-gui/static/scratchjr');
-const kidsAssets = resolve(repoRoot, 'scratch-gui/static/kids');
+const target = resolve(repoRoot, 'apps/gui/static/scratchjr');
+const kidsAssets = resolve(repoRoot, 'apps/gui/static/kids');
 const sqlDist = resolve(repoRoot, 'vendor/scratchjr-reborn/node_modules/sql.js/dist');
 const sqlAsmSource = resolve(sqlDist, 'sql-asm.js');
 const rootFiles = [

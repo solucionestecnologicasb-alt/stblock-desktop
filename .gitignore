@@ -7,16 +7,16 @@ Thumbs.db
 *.log
 .env
 .env.local
-scratch-gui/.env
-scratch-gui/.env.local
-scratch-vm/.env
+apps/gui/.env
+apps/gui/.env.local
+apps/vm/.env
 
 # Dependencies
 .pnpm-store/
 
 # Build output
-scratch-gui/build/
-scratch-gui/dist/
+apps/gui/build/
+apps/gui/dist/
 src-tauri/target/
 src-tauri/gen/
 updates/release-assets/
@@ -33,7 +33,7 @@ updates/release-assets/
 .cache/
 .webpack/
 .eslintcache
-scratch-gui/static/scratchjr/
+apps/gui/static/scratchjr/
 
 # OS/editor temporary files
 nul
@@ -46,7 +46,7 @@ _replace_mega.js
 dist-android/
 dist-linux/
 dist-chromebook/
-scratch-gui/build-android/
+apps/gui/build-android/
 *.aab
 *.apk
 *.deb

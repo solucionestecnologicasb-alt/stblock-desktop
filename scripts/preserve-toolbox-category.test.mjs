@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 import { parse } from "acorn";
-import preserveToolboxCategory from "../scratch-gui/src/lib/preserve-toolbox-category.js";
+import preserveToolboxCategory from "../apps/gui/src/lib/preserve-toolbox-category.js";
 
 async function blocklyMethod(file, name) {
   const source = await readFile(new URL(file, import.meta.url), "utf8");
@@ -18,9 +18,9 @@ async function blocklyMethod(file, name) {
 }
 
 const refreshSelection = await blocklyMethod(
-  "../scratch-gui/node_modules/scratch-blocks/core/toolbox.js", "refreshSelection");
+  "../apps/gui/node_modules/scratch-blocks/core/toolbox.js", "refreshSelection");
 const selectByScroll = await blocklyMethod(
-  "../scratch-gui/node_modules/scratch-blocks/core/flyout_base.js", "selectCategoryByScrollPosition");
+  "../apps/gui/node_modules/scratch-blocks/core/flyout_base.js", "selectCategoryByScrollPosition");
 
 function palette() {
   const motion = { id_: "motion" };

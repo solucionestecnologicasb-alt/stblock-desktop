@@ -58,7 +58,7 @@ importers:
         specifier: ^7.0.1
         version: 7.0.1(postcss@8.5.16)
 
-  scratch-gui:
+  apps/gui:
     dependencies:
       '@microbit/microbit-universal-hex':
         specifier: ^0.2.2
@@ -245,7 +245,7 @@ importers:
         version: 3.1.19(scratch-render-fonts@1.0.252)(supports-color@4.4.0)
       scratch-vm:
         specifier: workspace:*
-        version: link:../scratch-vm
+        version: link:../vm
       startaudiocontext:
         specifier: ^1.2.1
         version: 1.2.1
@@ -395,7 +395,7 @@ importers:
         specifier: 2.10.0
         version: 2.10.0
 
-  scratch-vm:
+  apps/vm:
     dependencies:
       '@vernier/godirect':
         specifier: ^1.5.0
@@ -567,7 +567,7 @@ importers:
         specifier: 3.11.3
         version: 3.11.3(webpack-cli@4.10.0)(webpack@5.99.7)
 
-  sketchforge:
+  apps/electronics:
     dependencies:
       '@tailwindcss/postcss':
         specifier: ^4.1.8

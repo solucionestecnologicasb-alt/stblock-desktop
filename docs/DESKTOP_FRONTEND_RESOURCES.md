@@ -1,6 +1,6 @@
 # Recursos de la interfaz de escritorio
 
-La interfaz compilada de `scratch-gui/build` se instala en `$RESOURCE/frontend`.
+La interfaz compilada de `apps/gui/build` se instala en `$RESOURCE/frontend`.
 `resource_assets.rs` la sirve mediante el protocolo habitual de Tauri, conservando
 las rutas, el origen y la comunicación con Rust. Los audios permanecen incluidos
 y funcionan sin conexión. Windows y Linux usan el mismo proveedor; Android

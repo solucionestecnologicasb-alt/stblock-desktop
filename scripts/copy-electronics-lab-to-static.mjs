@@ -1,4 +1,4 @@
-// Copia el build de Electronics Lab (dist/) a scratch-gui/static/electronics-lab/
+// Copia el build de Electronics Lab (dist/) a apps/gui/static/electronics-lab/
 import { cp, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const srcRoot = "C:\\Users\\bello\\OneDrive\\Desktop\\prueba\\electronics-lab\\dist";
-const destRoot = join(root, "scratch-gui", "static", "electronics-lab");
+const destRoot = join(root, "apps", "gui", "static", "electronics-lab");
 
 if (!existsSync(srcRoot)) {
   console.error(`[copy-electronics-lab] Build no encontrado en ${srcRoot}. Ejecuta 'npm run build' en electronics-lab.`);

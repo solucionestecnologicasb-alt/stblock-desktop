@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {collectKidsVoiceCatalog, voiceOutput} from './kids-voice-catalog.mjs';
-import {KIDS_VOICE_LOCALES} from '../scratch-gui/src/lib/kids-voice-locales.js';
+import {KIDS_VOICE_LOCALES} from '../apps/gui/src/lib/kids-voice-locales.js';
 
 export async function verifyKidsVoiceAssets() {
     const catalog = await collectKidsVoiceCatalog();

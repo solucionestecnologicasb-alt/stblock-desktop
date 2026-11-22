@@ -1,13 +1,13 @@
 const assert = require('assert/strict');
 const fs = require('fs');
 const path = require('path');
-const Generator = require('../scratch-vm/src/generators/arduino');
-const Runtime = require('../scratch-vm/src/engine/runtime');
-const catalog = require('../scratch-vm/src/devices/extension-catalog.json');
-const manifests = require('../scratch-vm/src/devices/device-manifests');
-const {buildExtensionCategoryInfo} = require('../scratch-vm/src/devices/device-extensions');
-const compatible = require('../scratch-vm/src/devices/extension-compatibility');
-const sb3 = require('../scratch-vm/src/serialization/sb3');
+const Generator = require('../apps/vm/src/generators/arduino');
+const Runtime = require('../apps/vm/src/engine/runtime');
+const catalog = require('../apps/vm/src/devices/extension-catalog.json');
+const manifests = require('../apps/vm/src/devices/device-manifests');
+const {buildExtensionCategoryInfo} = require('../apps/vm/src/devices/device-extensions');
+const compatible = require('../apps/vm/src/devices/extension-compatibility');
+const sb3 = require('../apps/vm/src/serialization/sb3');
 const root = path.resolve(__dirname,'..');
 const output = path.join(root,'test-results/electronics');
 fs.mkdirSync(output,{recursive:true});
@@ -47,7 +47,7 @@ for(const ext of catalog) {
     const folder=path.join(output,ext.extensionId);fs.mkdirSync(folder,{recursive:true});
     fs.writeFileSync(path.join(folder,`${ext.extensionId}.ino`),g.buildFinalCode());
 }
-const correctedTypes=new Set(Object.keys(require('../scratch-vm/src/generators/arduino/board-fixes')).concat([
+const correctedTypes=new Set(Object.keys(require('../apps/vm/src/generators/arduino/board-fixes')).concat([
     'arduino_motores_desactivarTodosLosTriggers','arduino_motores_tipoMotoresSeleccionado',
     'arduino_motores_motoresConfigurados','arduino_motores_diametroRuedaConfigurado',
     'arduino_motores_rpmMaxConfigurado','arduino_motores_anchoEntreRuedasConfigurado',

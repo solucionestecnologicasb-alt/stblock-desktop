@@ -4,17 +4,17 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import vm from 'node:vm';
-import {getStoryChallenge} from '../scratch-gui/src/components/kids-experience/story-challenges.js';
-import {KIDS_BLOCK_INSTRUCTIONS, KIDS_DIRECTION_INSTRUCTIONS, normalizeKidsVoiceText} from '../scratch-gui/src/lib/kids-voice-text.js';
+import {getStoryChallenge} from '../apps/gui/src/components/kids-experience/story-challenges.js';
+import {KIDS_BLOCK_INSTRUCTIONS, KIDS_DIRECTION_INSTRUCTIONS, normalizeKidsVoiceText} from '../apps/gui/src/lib/kids-voice-text.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const require = createRequire(new URL('../sketchforge/package.json', import.meta.url));
+const require = createRequire(new URL('../apps/electronics/package.json', import.meta.url));
 const ts = require('typescript');
-export const voiceOutput = resolve(root, 'scratch-gui/static/kids/voice/es');
+export const voiceOutput = resolve(root, 'apps/gui/static/kids/voice/es');
 export const voiceSources = [
-    'scratch-gui/src/components/kids-experience/scratchjr-kids-workspace.jsx',
-    'scratch-gui/src/components/kids-experience/story-challenges.js',
-    'scratch-gui/static/kids/stblock-kids-bridge.js'
+    'apps/gui/src/components/kids-experience/scratchjr-kids-workspace.jsx',
+    'apps/gui/src/components/kids-experience/story-challenges.js',
+    'apps/gui/static/kids/stblock-kids-bridge.js'
 ];
 const ruleSources = [
     'vendor/scratchjr-reborn/src/app/src/editor/ui/Palette.ts',

@@ -11,7 +11,7 @@ if(process.argv[2]==='install') {
     const result=run(['lib','install',...libraries]);console.log(result.output);process.exit(result.status||0);
 } else if(process.argv[2]==='cores') {console.log(run(['core','list']).output);}
 else {
-    const catalog=require('../scratch-vm/src/devices/extension-catalog.json');
+    const catalog=require('../apps/vm/src/devices/extension-catalog.json');
     const selected=process.argv[2] ? process.argv.slice(2) : catalog.map(e=>e.extensionId);
     const results=[];
     for(const id of selected){

@@ -343,7 +343,7 @@ if (!buildDist && !Array.isArray(finalConfig)) {
             publicPath: '/sketchforge'
         },
         {
-            directory: path.resolve(__dirname, '../sketchforge/apps/web/.next-export'),
+            directory: path.resolve(__dirname, '../electronics/apps/web/.next-export'),
             publicPath: '/sketchforge'
         },
         {

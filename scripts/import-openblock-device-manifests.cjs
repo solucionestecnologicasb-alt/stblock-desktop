@@ -1,11 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const normalizeCategory = require('../scratch-vm/src/devices/normalize-manifest');
+const normalizeCategory = require('../apps/vm/src/devices/normalize-manifest');
 
 const root = path.resolve(__dirname, '..');
 const sourceRoot = path.resolve(root, '..', '..', 'openblock-desktop-main', 'openblock-desktop-main');
 const vmEntry = path.join(sourceRoot, 'node_modules', 'openblock-vm', 'src', 'index.js');
-const outputDir = path.join(root, 'scratch-vm', 'src', 'devices', 'manifests');
+const outputDir = path.join(root, 'apps', 'vm', 'src', 'devices', 'manifests');
 
 const devices = [
     ['arduinoUno', 'arduino'],

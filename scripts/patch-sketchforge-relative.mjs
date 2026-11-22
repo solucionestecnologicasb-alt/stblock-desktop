@@ -102,6 +102,6 @@ export async function patchSketchforgeDirectory(sketchforgeDir) {
 
 // Si se ejecuta directamente desde CLI:
 if (process.argv[1] && process.argv[1].endsWith('patch-sketchforge-relative.mjs')) {
-  const targetDir = process.argv[2] || 'C:/stb/scratch-gui/build/sketchforge';
+  const targetDir = process.argv[2] || 'C:/stb/apps/gui/build/sketchforge';
   await patchSketchforgeDirectory(targetDir);
 }

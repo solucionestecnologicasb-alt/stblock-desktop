@@ -3,8 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const root = path.resolve(__dirname, '..');
-const manifests = require('../scratch-vm/src/devices/device-manifests');
-const Generator = require('../scratch-vm/src/generators/arduino');
+const manifests = require('../apps/vm/src/devices/device-manifests');
+const Generator = require('../apps/vm/src/generators/arduino');
 const generator = new Generator();
 function coverage(opcode) {
     if (generator.generators[opcode]) return 'handler';
@@ -46,7 +46,7 @@ const boards = Object.entries(manifests).map(([id, manifest]) => {
     return {id, type: manifest.type, blocks: blocks.length, categories: manifest.categories.length,
         arduinoCoverageApplicable: manifest.type === 'arduino', unsupported, argumentIssues: issues};
 });
-const extensions = require('../scratch-vm/src/devices/extension-catalog.json');
+const extensions = require('../apps/vm/src/devices/extension-catalog.json');
 const result = {
     note: 'Static handler coverage only: does not prove correct generated code, compilation or hardware behavior. micro:bit uses a separate generator.',
     activeGenerator: 'scratch-vm/src/generators/arduino (shared by GUI and VM)',

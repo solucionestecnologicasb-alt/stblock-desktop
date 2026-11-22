@@ -48,6 +48,6 @@ La previsualización crea un objeto temporal independiente de la colección pers
 - 305 pruebas unitarias aprobadas en 44 archivos durante esta intervención.
 - 11 comprobaciones de navegador del modo normal: previsualización/cancelación, colocación y deshacer/rehacer, rotación numérica real y pivote, órbita, redimensionamiento, ejes, interfaz contextual, tamaño del SVG, creación de sólido desde Boceto y extrusión desde Crear 2D.
 - 25 comprobaciones de regresión de Malla aprobadas con el nuevo paso de colocación.
-- Compilación de producción, comprobación de tipos, exportación y copia a `scratch-gui/build/sketchforge` completadas. Persiste la advertencia de dependencia dinámica de brepjs.
+- Compilación de producción, comprobación de tipos, exportación y copia a `apps/gui/build/sketchforge` completadas. Persiste la advertencia de dependencia dinámica de brepjs.
 
 No se reconstruyó un instalador ni se validaron físicamente todos los dispositivos gráficos o todos los tipos de modelos. Los problemas de precisión enumerados como pendientes no se consideran solucionados por reorganizar la interfaz.

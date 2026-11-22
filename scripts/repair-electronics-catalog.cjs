@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const root = path.resolve(__dirname,'..');
-const normalize = require('../scratch-vm/src/devices/normalize-manifest');
-const directory=path.join(root,'scratch-vm/src/devices/manifests');
+const normalize = require('../apps/vm/src/devices/normalize-manifest');
+const directory=path.join(root,'apps/vm/src/devices/manifests');
 for (const file of fs.readdirSync(directory)) {
     if (!file.endsWith('.json') || file === 'summary.json') continue;
     const target=path.join(directory,file), before=fs.readFileSync(target,'utf8');
@@ -10,7 +10,7 @@ for (const file of fs.readdirSync(directory)) {
     manifest.categories.forEach(normalize);
     if (JSON.stringify(JSON.parse(before)) !== JSON.stringify(manifest)) fs.writeFileSync(target,JSON.stringify(manifest)+'\n');
 }
-const file=path.join(root,'scratch-vm/src/devices/extension-catalog.json');
+const file=path.join(root,'apps/vm/src/devices/extension-catalog.json');
 const catalog=JSON.parse(fs.readFileSync(file));
 const add=(id,opcode,text,args)=> {
     const extension=catalog.find(e=>e.extensionId===id);
@@ -26,7 +26,7 @@ const oled=catalog.find(e=>e.extensionId==='oled').blocks.find(b=>b.opcode==='ol
 if(!oled.arguments.ADDR){oled.text+=' direccion [ADDR]'; oled.arguments.ADDR={type:'string',defaultValue:'0x3C'};}
 fs.writeFileSync(file,JSON.stringify(catalog,null,2)+'\n');
 // GUI delegates metadata construction to the same implementation as the VM.
-const activator=path.join(root,'scratch-gui/src/lib/device-extension-activator.js');
+const activator=path.join(root,'apps/gui/src/lib/device-extension-activator.js');
 let source=fs.readFileSync(activator,'utf8');
 const start=source.indexOf('const EXTENSION_COLORS =');
 const end=source.indexOf('const activateDeviceExtension =');

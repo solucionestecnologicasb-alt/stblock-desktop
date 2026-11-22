@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import test from 'node:test';
 import {parse} from 'acorn';
 
-const source=await readFile(new URL('../scratch-gui/src/lib/sketchforge-url.js',import.meta.url),'utf8');
+const source=await readFile(new URL('../apps/gui/src/lib/sketchforge-url.js',import.meta.url),'utf8');
 const tree=parse(source,{ecmaVersion:'latest',sourceType:'module'});
 const executable=tree.body.map(node=>node.type==='ImportDeclaration'?'':source.slice(node.type==='ExportNamedDeclaration'?node.declaration.start:node.start,node.end)).join('\n')+'\nSTBLOCK_SKETCHFORGE_URL';
 function editorUrl({origin='http://localhost:8601',mode='development',search='',stored=null,mobile=false,storageError=false}={}) {
@@ -37,12 +37,12 @@ test('mobile mode works with both the live and the bundled editor',()=>{
   assert.ok(editorUrl({mode:'production',mobile:true}).endsWith('&mobile=1'));
 });
 test('webpack serves the current 3D export before the historical public snapshot',async()=>{
-  const source=await readFile(new URL('../scratch-gui/webpack.config.js',import.meta.url),'utf8');
+  const source=await readFile(new URL('../apps/gui/webpack.config.js',import.meta.url),'utf8');
   const ast=parse(source,{ecmaVersion:'latest'});let array;
   const visit=node=>{if(!node||typeof node!=='object')return;if(node.type==='AssignmentExpression'&&node.left.property?.name==='static'&&node.left.object?.property?.name==='devServer')array=node.right;
     for(const value of Object.values(node)){if(Array.isArray(value))value.forEach(visit);else if(value&&typeof value==='object')visit(value);}};
   visit(ast);assert.ok(array);
-  const guiRoot=fileURLToPath(new URL('../scratch-gui/',import.meta.url));
+  const guiRoot=fileURLToPath(new URL('../apps/gui/',import.meta.url));
   const entries=vm.runInNewContext('('+source.slice(array.start,array.end)+')',{path,__dirname:guiRoot});
   const current=entries.findIndex(entry=>entry.directory===path.join(guiRoot,'build','sketchforge'));
   const historical=entries.findIndex(entry=>entry.directory===path.join(guiRoot,'public'));

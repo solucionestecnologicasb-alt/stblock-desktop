@@ -5,8 +5,8 @@ import { patchSketchforgeDirectory } from "./patch-sketchforge-relative.mjs";
 import { transpileChrome68 } from "./transpile-chrome68.mjs";
 
 const rootDir = resolve(process.cwd());
-const sourceDir = resolve(rootDir, "scratch-gui/build");
-const targetDir = resolve(rootDir, "scratch-gui/build-android");
+const sourceDir = resolve(rootDir, "apps/gui/build");
+const targetDir = resolve(rootDir, "apps/gui/build-android");
 const androidRootDir = resolve(rootDir, "src-tauri/gen/android");
 const assetPackModuleDir = resolve(androidRootDir, "models3d_pack");
 const assetPackDir = resolve(assetPackModuleDir, "src/main/assets");

@@ -12,11 +12,11 @@ import {fileURLToPath} from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
-const LIBRARIES_DIR = path.join(REPO_ROOT, 'scratch-gui', 'src', 'lib', 'libraries');
+const LIBRARIES_DIR = path.join(REPO_ROOT, 'apps', 'gui', 'src', 'lib', 'libraries');
 
 const dirArg = process.argv.indexOf('--dir');
 const ASSETS_DIR = dirArg === -1 ?
-    path.join(REPO_ROOT, 'scratch-gui', 'build', 'static', 'scratch-assets') :
+    path.join(REPO_ROOT, 'apps', 'gui', 'build', 'static', 'scratch-assets') :
     path.resolve(process.argv[dirArg + 1]);
 
 const LIBRARY_FILES = ['sprites.json', 'costumes.json', 'sounds.json', 'backdrops.json'];

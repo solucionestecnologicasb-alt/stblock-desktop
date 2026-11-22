@@ -20,7 +20,7 @@ args = parser.parse_args()
 PROFILE = 'clear-phrases-v2'
 root = pathlib.Path(__file__).resolve().parent.parent
 catalog = json.loads(subprocess.check_output(['node', str(root/'scripts'/'kids-voice-catalog.mjs')], cwd=root, text=True, encoding='utf-8'))
-output = root/'scratch-gui'/'static'/'kids'/'voice'/args.locale
+output = root/'apps'/'gui'/'static'/'kids'/'voice'/args.locale
 output.mkdir(parents=True, exist_ok=True)
 model_hash = hashlib.sha256(pathlib.Path(args.model).read_bytes()).hexdigest()
 previous = json.loads((output/'manifest.json').read_text(encoding='utf-8')) if (output/'manifest.json').exists() else {}

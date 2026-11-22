@@ -5,7 +5,7 @@ const assert = require('assert/strict');
 const root = path.resolve(__dirname, '..');
 const {JSDOM} = require('../node_modules/.pnpm/jsdom@28.1.0_supports-color@4.4.0/node_modules/jsdom');
 const window = new JSDOM('').window;
-const source = fs.readFileSync(path.join(root, 'scratch-gui/src/lib/block-search-index.js'), 'utf8')
+const source = fs.readFileSync(path.join(root, 'apps/gui/src/lib/block-search-index.js'), 'utf8')
     .replace(/export function /g, 'function ');
 const api = vm.runInNewContext(source + '\n({buildSearchIndex, searchBlocks, buildSearchToolboxXML})', {
     DOMParser: window.DOMParser, XMLSerializer: window.XMLSerializer
@@ -25,7 +25,7 @@ assert.equal(doc.querySelector('mutation').getAttribute('mode'), 'analog');
 const fallback = api.buildSearchIndex(null, {Msg: {BOARD_READ: 'leer pin %1'}}, xml);
 assert.equal(api.searchBlocks(fallback, 'leer')[0].name, 'leer pin');
 assert.equal(api.searchBlocks(fallback, '   ').length, 0);
-const manifests = require('../scratch-vm/src/devices/device-manifests');
+const manifests = require('../apps/vm/src/devices/device-manifests');
 for (const [id, manifest] of Object.entries(manifests)) {
     const toolbox = '<xml>' + manifest.categories.map((category, i) =>
         `<category id="c${i}" name="Category">` + category.blocks.map(block => block.xml || '').join('') +

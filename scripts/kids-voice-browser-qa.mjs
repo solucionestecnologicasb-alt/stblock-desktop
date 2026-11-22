@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {connect} from '../sketchforge/scripts/mesh-edit-cdp.mjs';
+import {connect} from '../apps/electronics/scripts/mesh-edit-cdp.mjs';
 const c=await connect();
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const wait=async(expression,timeout=30000)=>{const end=Date.now()+timeout;while(Date.now()<end){if(await c.evaluate(expression))return;await delay(150);}throw Error('Timeout: '+expression);};

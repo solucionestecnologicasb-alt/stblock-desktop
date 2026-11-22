@@ -4,7 +4,7 @@
     "version":  "0.1.65",
     "identifier":  "stblock.app",
     "build":  {
-                  "frontendDist":  "../scratch-gui/build",
+                  "frontendDist":  "../apps/gui/build",
                   "devUrl":  "http://localhost:8601",
                   "beforeDevCommand":  "pnpm run dev:servers",
                   "beforeBuildCommand":  "pnpm run build:app"
@@ -54,7 +54,7 @@
                    "resources":  {
                                      "drivers/":  "drivers/",
                                      "tools/Arduino/":  "tools/Arduino/",
-                                     "../scratch-gui/build/":  "frontend/"
+                                     "../apps/gui/build/":  "frontend/"
                                  },
                    "createUpdaterArtifacts":  false,
                    "windows":  {

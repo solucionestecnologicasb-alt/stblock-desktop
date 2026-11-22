@@ -15,7 +15,7 @@ Se conserva el registro de los bloques anteriores al cambiar de tarjeta, incluid
 - **Búsqueda:** mantiene XML, valores y mutaciones; encuentra nombres en español sin tildes; incluye variables, listas y procedimientos con sus IDs y argumentos; se actualiza cuando cambian. La biblioteca filtra compatibilidad y aclara que las extensiones se ejecutan mediante carga del programa.
 - **Pruebas:** adaptador Babel 7 y resolución de enlaces pnpm para el Jest existente, sin actualizar sus dependencias ni el lockfile. El test de electrónica funciona con el Node local.
 
-El archivo legado `scratch-gui/src/lib/arduino-generator/index.js` se conserva por compatibilidad, pero ya no alimenta el editor de electrónica. La auditoría automatizada comprueba la ruta activa compartida.
+El archivo legado `apps/gui/src/lib/arduino-generator/index.js` se conserva por compatibilidad, pero ya no alimenta el editor de electrónica. La auditoría automatizada comprueba la ruta activa compartida.
 
 ## Validación realizada
 
@@ -38,8 +38,8 @@ Comandos principales:
 ```powershell
 pnpm --dir C:\stb exec node scripts/test-electronics-fixes.cjs
 pnpm --dir C:\stb exec node scripts/test-electronics-search.cjs
-pnpm --dir C:\stb\scratch-gui exec jest --runInBand electronics-search
-pnpm --dir C:\stb\scratch-vm exec tap --no-coverage test/unit/generators_arduino_procedures.js
+pnpm --dir C:\stb\apps\gui exec jest --runInBand electronics-search
+pnpm --dir C:\stb\apps\vm exec tap --no-coverage test/unit/generators_arduino_procedures.js
 pnpm --dir C:\stb exec node scripts/audit-electronics-blocks.cjs
 ```
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readKidsWave,writeKidsWave,joinKidsWave,createKidsNarrationAudio} from '../scratch-gui/src/lib/kids-voice-audio.js';
-import {planKidsNarration} from '../scratch-gui/src/lib/kids-voice-text.js';
+import {readKidsWave,writeKidsWave,joinKidsWave,createKidsNarrationAudio} from '../apps/gui/src/lib/kids-voice-audio.js';
+import {planKidsNarration} from '../apps/gui/src/lib/kids-voice-text.js';
 
 const tone = () => {
     const data=new Int16Array(22050*2);

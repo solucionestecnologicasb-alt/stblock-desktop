@@ -51,7 +51,7 @@ function loadPostcss() {
 }
 
 const postcss = loadPostcss();
-const chrome68LegacyCss = require(join(rootDir, "scratch-gui", "scripts", "postcss-chrome68-legacy.cjs"));
+const chrome68LegacyCss = require(join(rootDir, "apps", "gui", "scripts", "postcss-chrome68-legacy.cjs"));
 
 // Tailwind v4 (Electronics Lab y SketchForge) emite sintaxis que Chrome 68 no
 // entiende. Un at-rule o un selector desconocido hace que el navegador
@@ -269,7 +269,7 @@ async function installShim(directory, pages) {
   }
 }
 
-export async function transpileChrome68(buildDir = resolve(rootDir, "scratch-gui", "build")) {
+export async function transpileChrome68(buildDir = resolve(rootDir, "apps", "gui", "build")) {
   if (!existsSync(join(buildDir, "index.html"))) {
     console.warn(`[chrome68] No existe ${buildDir}/index.html; se omite la compatibilidad de iframes.`);
     return;

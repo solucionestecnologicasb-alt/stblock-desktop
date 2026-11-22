@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Descarga la biblioteca de Scratch (sprites, disfraces, fondos y sonidos)
- * desde cdn.assets.scratch.mit.edu hacia scratch-gui/static/scratch-assets/.
+ * desde cdn.assets.scratch.mit.edu hacia apps/gui/static/scratch-assets/.
  *
  * Una vez ejecutado, STBlock resuelve la biblioteca sin internet: webpack copia
  * `static/` a `build/static/` (webpack.config.js) y storage.js registra este
@@ -24,8 +24,8 @@ import {fileURLToPath} from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
-const LIBRARIES_DIR = path.join(REPO_ROOT, 'scratch-gui', 'src', 'lib', 'libraries');
-const OUTPUT_DIR = path.join(REPO_ROOT, 'scratch-gui', 'static', 'scratch-assets');
+const LIBRARIES_DIR = path.join(REPO_ROOT, 'apps', 'gui', 'src', 'lib', 'libraries');
+const OUTPUT_DIR = path.join(REPO_ROOT, 'apps', 'gui', 'static', 'scratch-assets');
 
 const ASSET_HOST = 'https://cdn.assets.scratch.mit.edu';
 const LIBRARY_FILES = ['sprites.json', 'costumes.json', 'sounds.json', 'backdrops.json'];

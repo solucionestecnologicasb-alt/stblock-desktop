@@ -3,7 +3,7 @@ const {spawnSync} = require('child_process');
 const root = path.resolve(__dirname, '..');
 const qa = path.join(root, 'test-results/board-sdk');
 fs.mkdirSync(qa, {recursive: true});
-const source = fs.readFileSync(path.join(root, 'scratch-gui/src/lib/device-profiles.js'), 'utf8');
+const source = fs.readFileSync(path.join(root, 'apps/gui/src/lib/device-profiles.js'), 'utf8');
 const profiles = vm.runInNewContext(source.split('const getDeviceProfile')[0] + '\nDEVICE_PROFILES;');
 const selected = process.argv.slice(2);
 const results = [];

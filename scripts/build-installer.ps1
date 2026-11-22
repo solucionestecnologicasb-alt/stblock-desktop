@@ -31,7 +31,7 @@ param(
 $ErrorActionPreference = "Stop"
 $RootDir   = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $TauriDir  = Join-Path $RootDir "src-tauri"
-$GuiDir    = Join-Path $RootDir "scratch-gui"
+$GuiDir    = Join-Path $RootDir "apps\gui"
 $SigningKeyPath = Join-Path $env:USERPROFILE ".tauri\stblock-update-dev.key"
 
 # IMPORTANTE: Limpiar variables de firma para evitar error RC2102 (string literal too long)
@@ -104,7 +104,7 @@ if (-not $SkipFrontend) {
     } finally {
         Pop-Location
     }
-    Write-OK "Frontend construido en scratch-gui/build/"
+    Write-OK "Frontend construido en apps/gui/build/"
 } else {
     Write-Step "PASO 1: SALTADO"
 }

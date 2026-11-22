@@ -1,10 +1,10 @@
 const assert = require('node:assert/strict');
 const {EventEmitter} = require('node:events');
 const test = require('node:test');
-const Runtime = require('../scratch-vm/src/engine/runtime');
-const {loadCostumeFromAsset} = require('../scratch-vm/src/import/load-costume');
-const VirtualMachine = require('../scratch-vm/src/virtual-machine');
-const trackSkinRedraw = require('../scratch-vm/src/util/track-skin-redraw');
+const Runtime = require('../apps/vm/src/engine/runtime');
+const {loadCostumeFromAsset} = require('../apps/vm/src/import/load-costume');
+const VirtualMachine = require('../apps/vm/src/virtual-machine');
+const trackSkinRedraw = require('../apps/vm/src/util/track-skin-redraw');
 
 for (const kind of ['sprite', 'backdrop']) {
     test(`delayed SVG decoding redraws a newly loaded ${kind}`, async () => {
