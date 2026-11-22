@@ -60,7 +60,6 @@ jobs:
       - name: Instalar dependencias de Node/pnpm
         run: |
           pnpm install
-          pnpm --dir backend install
           # build:gui compila el submódulo vendor/scratchjr-reborn, que necesita
           # sus propias dependencias (esbuild).
           npm --prefix vendor/scratchjr-reborn ci
@@ -69,11 +68,6 @@ jobs:
         run: |
           chmod +x scripts/prepare-arduino-bundle.sh
           ./scripts/prepare-arduino-bundle.sh
-
-      - name: Compilar backend Node SEA para Linux
-        run: |
-          chmod +x scripts/build-backends-linux.sh
-          ./scripts/build-backends-linux.sh
 
       - name: Compilar Frontend (Scratch GUI + SketchForge)
         run: |

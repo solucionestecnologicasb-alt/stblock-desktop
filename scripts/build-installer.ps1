@@ -3,9 +3,8 @@
     STBlock - Script maestro de compilacion del instalador completo.
 .DESCRIPTION
     Orquesta todos los pasos para generar el instalador final de STBlock:
-    Paso 1: Compilar backends Node.js a EXEs (esbuild + SEA)
-    Paso 2: Construir el frontend (webpack / pnpm build)
-    Paso 3: Compilar la app Tauri + empaquetar instalador (NSIS/MSI)
+    Paso 1: Construir el frontend (webpack / pnpm build)
+    Paso 2: Compilar la app Tauri + empaquetar instalador (NSIS/MSI)
 
     Requisitos:
       - Node.js v20.12+ (v24.14.0 recomendado)
@@ -19,7 +18,6 @@
     Uso:
       .\scripts\build-installer.ps1              # Build release
       .\scripts\build-installer.ps1 -DebugBuild   # Build debug
-      .\scripts\build-installer.ps1 -SkipBackends # Solo Tauri
 .EXAMPLE
       .\scripts\build-installer.ps1
       # Produce: src-tauri/target/release/bundle/nsis/STBlock_0.1.0_x64-setup.exe
@@ -27,7 +25,6 @@
 
 param(
     [switch]$DebugBuild,
-    [switch]$SkipBackends,
     [switch]$SkipFrontend
 )
 
@@ -91,28 +88,9 @@ Write-OK "$tauriVer"
 
 & (Join-Path $RootDir 'scripts\ensure-webview2-installer.ps1')
 
-# === PASO 1: Compilar backends Node.js a EXEs ===
-if (-not $SkipBackends) {
-    Write-Step "PASO 1: Compilando backends Node.js a EXEs..."
-    $buildScript = Join-Path $RootDir "scripts\build-backends.ps1"
-    if (-not (Test-Path $buildScript)) {
-        Write-Fail "Script no encontrado: $buildScript"
-    }
-    $pwshCmd = Get-Command pwsh -ErrorAction SilentlyContinue
-    if ($pwshCmd) {
-        & $pwshCmd.Source -ExecutionPolicy Bypass -File $buildScript
-    } else {
-        & $buildScript
-    }
-    if ($LASTEXITCODE -ne 0) { Write-Fail "Error compilando backends" }
-    Write-OK "Backends compilados"
-} else {
-    Write-Step "PASO 1: SALTADO"
-}
-
-# === PASO 2: Construir frontend (scratch-gui) ===
+# === PASO 1: Construir frontend (scratch-gui) ===
 if (-not $SkipFrontend) {
-    Write-Step "PASO 2: Construyendo frontend (scratch-gui)..."
+    Write-Step "PASO 1: Construyendo frontend (scratch-gui)..."
     Push-Location $GuiDir
     try {
         if (-not (Test-Path "node_modules")) {
@@ -128,11 +106,11 @@ if (-not $SkipFrontend) {
     }
     Write-OK "Frontend construido en scratch-gui/build/"
 } else {
-    Write-Step "PASO 2: SALTADO"
+    Write-Step "PASO 1: SALTADO"
 }
 
-# === PASO 3: Compilar app Tauri + generar instalador ===
-Write-Step "PASO 3: Compilando app Tauri y generando instalador..."
+# === PASO 2: Compilar app Tauri + generar instalador ===
+Write-Step "PASO 2: Compilando app Tauri y generando instalador..."
 
 Push-Location $RootDir
 try {

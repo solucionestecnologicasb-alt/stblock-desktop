@@ -31,26 +31,22 @@ fi
 # 2. Preparar arduino-cli + core AVR + librerías dentro del bundle
 bash "$ROOT_DIR/scripts/prepare-arduino-bundle.sh"
 
-# 3. Compilar backend Node.js
-bash "$ROOT_DIR/scripts/build-backends-linux.sh"
-
-# 4. Instalar dependencias npm/pnpm si faltan
+# 3. Instalar dependencias npm/pnpm si faltan
 if [ ! -d "$ROOT_DIR/node_modules" ]; then
     echo "Instalando dependencias de pnpm..."
     pnpm install
 fi
 pnpm --filter scratch-gui run prepublish
-pnpm --dir backend install
 
-# 5. Compilar frontend (Scratch GUI + SketchForge)
+# 4. Compilar frontend (Scratch GUI + SketchForge)
 echo "Compilando frontend (Scratch GUI + SketchForge)..."
 pnpm run build:app
 
-# 6. Compilar paquete Tauri .deb
+# 5. Compilar paquete Tauri .deb
 echo "Compilando paquete Tauri para Linux (.deb)..."
 pnpm exec tauri build --bundles deb
 
-# 7. Localizar y mostrar instalador generado
+# 6. Localizar y mostrar instalador generado
 DEB_DIR="$ROOT_DIR/src-tauri/target/release/bundle/deb"
 DEB_FILE=$(find "$DEB_DIR" -name "*.deb" -type f 2>/dev/null | head -n 1)
 

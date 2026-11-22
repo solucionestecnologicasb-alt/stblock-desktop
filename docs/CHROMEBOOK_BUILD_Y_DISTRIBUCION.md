@@ -104,7 +104,6 @@ C:\stb
 ├── .github/workflows/
 │   └── build-chromebook.yml       # Compilación automática del .deb en GitHub
 ├── scripts/
-│   ├── build-backends-linux.sh    # Compilador de Node SEA backend para Linux
 │   └── build-chromebook.sh        # Script maestro de compilación Linux
 ├── src-tauri/
 │   ├── linux/

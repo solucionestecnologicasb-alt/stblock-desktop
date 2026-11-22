@@ -15,8 +15,8 @@ fallida de 0.1.64, `lib.rmeta` ocupaba 4.991.077.930 bytes dentro de un `.rlib` 
 como recursos evita ese crecimiento de los metadatos; borrar la caché no resuelve
 por sí solo la causa.
 
-`bundle.resources` usa un mapa para mantener las carpetas `drivers`,
-`tools/Arduino` y `backends` en sus destinos anteriores y agregar `frontend`.
+`bundle.resources` usa un mapa para mantener las carpetas `drivers` y
+`tools/Arduino` en sus destinos anteriores y agregar `frontend`.
 El instalador debe distribuir la carpeta completa; copiar solo el EXE no basta.
 El proveedor solo permite leer archivos dentro de la carpeta de recursos y
 no genera hashes CSP porque la aplicación configura `security.csp = null`.

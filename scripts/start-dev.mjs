@@ -32,9 +32,8 @@ if (existsSync(electronicsLabDir)) {
 const children = [];
 
 // Detiene procesos huérfanos que quedaron vivos de una sesión anterior de
-// `tauri dev`. Al cerrar con Ctrl+C o taskkill, `kill_all_backends` (Rust) no
-// siempre corre y sobreviven el backend `stblock-backend-server.exe` y los
-// demonios `python3` que Arduino lanza para `pluggable_discovery.py`. Mantienen
+// `tauri dev`. Al cerrar con Ctrl+C o taskkill los demonios `python3` que
+// Arduino lanza para `pluggable_discovery.py` pueden sobrevivir. Mantienen
 // bloqueados archivos bajo `src-tauri/target/...` y el siguiente build falla con
 // "os error 32":
 //   El proceso no tiene acceso al archivo porque está siendo utilizado por otro proceso.

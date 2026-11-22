@@ -25,7 +25,13 @@
                                 }
                             ],
                 "security":  {
-                                 "csp":  null
+                                 "csp":  null,
+                                 "assetProtocol":  {
+                                                       "enable":  true,
+                                                       "scope":  [
+                                                                     "$APPLOCALDATA/gears/**"
+                                                                 ]
+                                                   }
                              }
             },
     "bundle":  {
@@ -48,7 +54,6 @@
                    "resources":  {
                                      "drivers/":  "drivers/",
                                      "tools/Arduino/":  "tools/Arduino/",
-                                     "backends/":  "backends/",
                                      "../scratch-gui/build/":  "frontend/"
                                  },
                    "createUpdaterArtifacts":  false,

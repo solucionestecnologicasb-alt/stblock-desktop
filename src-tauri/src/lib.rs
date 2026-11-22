@@ -1,18 +1,12 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::process::{Child, Command};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serialport::{SerialPort, SerialPortInfo};
 use tauri::Manager;
-
-// Windows: para ocultar ventanas de consola de los backends
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-#[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // Arduino CLI integration module
 mod arduino_cli;
@@ -30,91 +24,9 @@ use classroom_server::*;
 static SERIAL_PORTS: Lazy<Mutex<HashMap<String, Box<dyn SerialPort>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
-// ── Backend process management ──
-static BACKEND_PROCESSES: Lazy<Mutex<Vec<Child>>> = Lazy::new(|| Mutex::new(Vec::new()));
-
-/// Launches a backend process from the Tauri resources directory.
-/// Falls back to dev-mode paths if not running from a Tauri bundle.
-fn launch_backend(
-    app_handle: &tauri::AppHandle,
-    name: &str,
-    exe_name: &str,
-    port: u16,
-    extra_env: Vec<(&str, String)>,
-) {
-    // Resolve the executable path
-    let exe_path = app_handle
-        .path()
-        .resource_dir()
-        .ok()
-        .map(|d| d.join("backends").join(exe_name))
-        .filter(|p| p.exists());
-
-    let mut cmd = if let Some(ref path) = exe_path {
-        println!("[launcher] {} encontrado en: {:?}", name, path);
-        Command::new(path)
-    } else {
-        // Dev-mode fallback: look in src-tauri/backends/ relative to current dir
-        let dev_path = std::env::current_dir()
-            .ok()
-            .map(|d| d.join("backends").join(exe_name))
-            .filter(|p| p.exists());
-        if let Some(ref dp) = dev_path {
-            println!("[launcher] {} (dev): {:?}", name, dp);
-            Command::new(dp)
-        } else {
-            println!("[launcher] {} no encontrado — saltando", name);
-            return;
-        }
-    };
-
-    // Set BUNDLE_RESOURCES_DIR so subprocesses can find tools (arduino-cli, etc.)
-    if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        let res_str = resource_dir.to_string_lossy().to_string();
-        cmd.env("BUNDLE_RESOURCES_DIR", &res_str);
-        // For server.js: set STBLOCK_APP_DIR so it finds backend/data/gears/
-        cmd.env("STBLOCK_APP_DIR", &res_str);
-    }
-
-    // Set extra environment variables
-    for (key, val) in extra_env {
-        cmd.env(key, val);
-    }
-
-    // Windows: ocultar la ventana de consola del proceso
-    #[cfg(windows)]
-    cmd.creation_flags(CREATE_NO_WINDOW);
-
-    // Spawn the process
-    match cmd.spawn() {
-        Ok(child) => {
-            if let Ok(mut guard) = BACKEND_PROCESSES.lock() {
-                guard.push(child);
-            }
-            println!("[launcher] {} iniciado en puerto {}", name, port);
-        }
-        Err(e) => {
-            eprintln!("[launcher] Error al iniciar {}: {}", name, e);
-        }
-    }
-}
-
-/// Kills all tracked backend processes.
-fn kill_all_backends() {
-    if let Ok(mut guard) = BACKEND_PROCESSES.lock() {
-        for child in guard.iter_mut() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        guard.clear();
-    }
-    println!("[launcher] Procesos backend finalizados.");
-}
-
 #[tauri::command]
 fn prepare_for_update() {
     println!("[updater] Preparando para actualizar: cerrando procesos secundarios...");
-    kill_all_backends();
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -297,6 +209,193 @@ fn save_file(path: String, content: Vec<u8>) -> Result<(), String> {
     Ok(())
 }
 
+// ── Gearbot CRUD (replaces the removed Node backend /api/gears/*) ──
+
+/// Rejects names that could escape the Gearbot data directories.
+fn safe_file_name(value: &str) -> Result<&str, String> {
+    let name = value.trim();
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains('\0')
+    {
+        return Err("Nombre de archivo inválido".to_string());
+    }
+    Ok(name)
+}
+
+fn gears_base_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let base = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("No se pudo obtener el directorio de datos: {}", e))?;
+    let gears_dir = base.join("gears");
+    std::fs::create_dir_all(gears_dir.join("maps")).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(gears_dir.join("robots")).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(gears_dir.join("assets")).map_err(|e| e.to_string())?;
+    Ok(gears_dir)
+}
+
+fn read_json_dir(dir: &std::path::Path) -> Result<Vec<serde_json::Value>, String> {
+    let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
+    let mut items = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    items.push(json);
+                }
+            }
+        }
+    }
+    Ok(items)
+}
+
+fn read_json_file(path: &std::path::Path, not_found: &str) -> Result<serde_json::Value, String> {
+    if !path.exists() {
+        return Err(not_found.to_string());
+    }
+    let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| e.to_string())
+}
+
+fn write_json_file(path: &std::path::Path, data: &serde_json::Value) -> Result<(), String> {
+    let content = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
+    std::fs::write(path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn gears_maps_list(app_handle: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+    let maps_dir = gears_base_dir(&app_handle)?.join("maps");
+    read_json_dir(&maps_dir)
+}
+
+#[tauri::command]
+fn gears_maps_get(app_handle: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = safe_file_name(&id)?;
+    let file_path = gears_base_dir(&app_handle)?
+        .join("maps")
+        .join(format!("{}.json", id));
+    read_json_file(&file_path, "Mapa no encontrado")
+}
+
+#[tauri::command]
+fn gears_maps_save(
+    app_handle: tauri::AppHandle,
+    id: String,
+    data: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let id = safe_file_name(&id)?;
+    let file_path = gears_base_dir(&app_handle)?
+        .join("maps")
+        .join(format!("{}.json", id));
+    write_json_file(&file_path, &data)?;
+    Ok(serde_json::json!({"success": true, "id": id}))
+}
+
+#[tauri::command]
+fn gears_maps_delete(app_handle: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = safe_file_name(&id)?;
+    let file_path = gears_base_dir(&app_handle)?
+        .join("maps")
+        .join(format!("{}.json", id));
+    if !file_path.exists() {
+        return Err("Mapa no encontrado".to_string());
+    }
+    std::fs::remove_file(&file_path).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({"success": true}))
+}
+
+#[tauri::command]
+fn gears_robots_list(app_handle: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+    let robots_dir = gears_base_dir(&app_handle)?.join("robots");
+    read_json_dir(&robots_dir)
+}
+
+#[tauri::command]
+fn gears_robots_get(app_handle: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = safe_file_name(&id)?;
+    let file_path = gears_base_dir(&app_handle)?
+        .join("robots")
+        .join(format!("{}.json", id));
+    read_json_file(&file_path, "Robot no encontrado")
+}
+
+#[tauri::command]
+fn gears_robots_save(
+    app_handle: tauri::AppHandle,
+    id: String,
+    data: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let id = safe_file_name(&id)?;
+    let file_path = gears_base_dir(&app_handle)?
+        .join("robots")
+        .join(format!("{}.json", id));
+    write_json_file(&file_path, &data)?;
+    Ok(serde_json::json!({"success": true, "id": id}))
+}
+
+#[tauri::command]
+fn gears_robots_delete(app_handle: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = safe_file_name(&id)?;
+    let file_path = gears_base_dir(&app_handle)?
+        .join("robots")
+        .join(format!("{}.json", id));
+    if !file_path.exists() {
+        return Err("Robot no encontrado".to_string());
+    }
+    std::fs::remove_file(&file_path).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({"success": true}))
+}
+
+#[tauri::command]
+fn gears_assets_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let assets_dir = gears_base_dir(&app_handle)?.join("assets");
+    Ok(assets_dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn gears_assets_get(app_handle: tauri::AppHandle, filename: String) -> Result<Vec<u8>, String> {
+    let filename = safe_file_name(&filename)?;
+    let file_path = gears_base_dir(&app_handle)?.join("assets").join(filename);
+    if !file_path.exists() {
+        return Err("Archivo no encontrado".to_string());
+    }
+    std::fs::read(&file_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn gears_assets_save(
+    app_handle: tauri::AppHandle,
+    filename: String,
+    content: Vec<u8>,
+) -> Result<serde_json::Value, String> {
+    let filename = safe_file_name(&filename)?;
+    let file_path = gears_base_dir(&app_handle)?.join("assets").join(filename);
+    std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "success": true,
+        "filename": filename,
+        "path": file_path.to_string_lossy()
+    }))
+}
+
+#[tauri::command]
+fn gears_assets_list(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let assets_dir = gears_base_dir(&app_handle)?.join("assets");
+    let entries = std::fs::read_dir(&assets_dir).map_err(|e| e.to_string())?;
+    let mut files = Vec::new();
+    for entry in entries.flatten() {
+        if let Some(name) = entry.file_name().to_str() {
+            files.push(name.to_string());
+        }
+    }
+    Ok(files)
+}
+
 #[tauri::command]
 fn install_drivers(app_handle: tauri::AppHandle) -> Result<String, String> {
     #[cfg(windows)]
@@ -400,6 +499,19 @@ pub fn run() {
     let app = builder
         .invoke_handler(tauri::generate_handler![
             save_file,
+            // Gearbot CRUD
+            gears_maps_list,
+            gears_maps_get,
+            gears_maps_save,
+            gears_maps_delete,
+            gears_robots_list,
+            gears_robots_get,
+            gears_robots_save,
+            gears_robots_delete,
+            gears_assets_dir,
+            gears_assets_get,
+            gears_assets_save,
+            gears_assets_list,
             list_serial_ports,
             open_serial_port,
             close_serial_port,
@@ -434,37 +546,10 @@ pub fn run() {
                 )?;
             }
 
-            // ── Launch backend processes (Desktop only: Windows / Linux / macOS) ──
-            #[cfg(not(target_os = "android"))]
-            {
-                let handle = app.handle();
-                let backend_exe = if cfg!(windows) {
-                    "stblock-backend-server.exe"
-                } else {
-                    "stblock-backend-server"
-                };
-                launch_backend(
-                    handle,
-                    "Backend Server",
-                    backend_exe,
-                    3001,
-                    vec![("PORT", "3001".to_string())],
-                );
-                println!("[launcher] Backend lanzado. La app puede tardar unos segundos en estar lista.");
-            }
-
             Ok(())
         })
         .build(context)
         .expect("error while building tauri application");
 
-    // Event loop with cleanup on exit or exit requested
-    app.run(|_app_handle, event| {
-        match event {
-            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-                kill_all_backends();
-            }
-            _ => {}
-        }
-    });
+    app.run(|_app_handle, _event| {});
 }

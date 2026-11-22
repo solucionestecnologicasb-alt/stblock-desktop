@@ -13,6 +13,147 @@
 
   var API_BASE = resolveApiBase();
 
+  function tauriCore() {
+    var tauri = window.__TAURI__;
+    return tauri && tauri.core ? tauri.core : null;
+  }
+
+  function isTauri() {
+    return !!tauriCore();
+  }
+
+  function jsonResponse(data, status) {
+    return new Response(JSON.stringify(data), {
+      status: status || 200,
+      headers: {'Content-Type': 'application/json'}
+    });
+  }
+
+  // Directory where Gearbot assets live on desktop, resolved once at startup.
+  var gearsAssetsDir = '';
+  var gearsAssetsDirPromise = null;
+
+  function getGearsAssetsDir() {
+    if (!isTauri()) return Promise.resolve('');
+    if (gearsAssetsDir) return Promise.resolve(gearsAssetsDir);
+    if (!gearsAssetsDirPromise) {
+      gearsAssetsDirPromise = tauriCore().invoke('gears_assets_dir')
+        .then(function (dir) {
+          gearsAssetsDir = dir || '';
+          return gearsAssetsDir;
+        })
+        .catch(function (err) {
+          console.warn('[Gearbot] No se pudo obtener el directorio de assets:', err);
+          return '';
+        });
+    }
+    return gearsAssetsDirPromise;
+  }
+
+  // Turn an asset filename into a URL usable by the webview.
+  function gearsAssetUrl(filename) {
+    if (!isTauri() || !gearsAssetsDir) {
+      return API_BASE + '/api/gears/assets/' + encodeURIComponent(filename);
+    }
+    var separator = gearsAssetsDir.indexOf('\\') !== -1 ? '\\' : '/';
+    var fullPath = gearsAssetsDir.replace(/[\\/]+$/, '') + separator + filename;
+    var convertFileSrc = tauriCore().convertFileSrc;
+    return typeof convertFileSrc === 'function' ? convertFileSrc(fullPath) : fullPath;
+  }
+
+  // Rewrite legacy /api/gears/assets/<file> URLs stored inside saved projects.
+  function normalizeGearAssetUrls(value) {
+    if (!isTauri() || !gearsAssetsDir) return value;
+    if (typeof value === 'string') {
+      var match = value.match(/(?:^|\/)api\/gears\/assets\/([^/?#]+)/);
+      return match ? gearsAssetUrl(decodeURIComponent(match[1])) : value;
+    }
+    if (Array.isArray(value)) {
+      for (var i = 0; i < value.length; i++) value[i] = normalizeGearAssetUrls(value[i]);
+      return value;
+    }
+    if (value && typeof value === 'object') {
+      for (var key in value) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          value[key] = normalizeGearAssetUrls(value[key]);
+        }
+      }
+    }
+    return value;
+  }
+
+  // Route Gearbot CRUD through Tauri commands on desktop and HTTP on the web.
+  // Always resolves to a Response so callers can use .ok/.json()/.text().
+  async function gearsApi(path, options) {
+    var method = ((options && options.method) || 'GET').toUpperCase();
+    var body = options && options.body;
+
+    if (!isTauri()) {
+      return fetch(API_BASE + path, options);
+    }
+
+    var cleanPath = String(path).split('?')[0];
+    var mapsMatch = cleanPath.match(/^\/api\/gears\/maps(?:\/(.+))?$/);
+    var robotsMatch = cleanPath.match(/^\/api\/gears\/robots\/admin(?:\/(.+))?$/);
+    var assetsMatch = cleanPath.match(/^\/api\/gears\/assets\/(.+)$/);
+    var invoke = tauriCore().invoke;
+
+    try {
+      if (mapsMatch) {
+        var mapId = mapsMatch[1] ? decodeURIComponent(mapsMatch[1]) : null;
+        if (method === 'GET' && mapId) return jsonResponse(await invoke('gears_maps_get', {id: mapId}));
+        if (method === 'GET') return jsonResponse(await invoke('gears_maps_list'));
+        if (method === 'PUT' && mapId) {
+          var mapData = typeof body === 'string' ? JSON.parse(body) : body;
+          return jsonResponse(await invoke('gears_maps_save', {id: mapId, data: mapData}));
+        }
+        if (method === 'DELETE' && mapId) return jsonResponse(await invoke('gears_maps_delete', {id: mapId}));
+      }
+
+      if (robotsMatch) {
+        var robotId = robotsMatch[1] ? decodeURIComponent(robotsMatch[1]) : null;
+        if (method === 'GET' && robotId) return jsonResponse(await invoke('gears_robots_get', {id: robotId}));
+        if (method === 'GET') return jsonResponse(await invoke('gears_robots_list'));
+        if (method === 'PUT' && robotId) {
+          var robotData = typeof body === 'string' ? JSON.parse(body) : body;
+          return jsonResponse(await invoke('gears_robots_save', {id: robotId, data: robotData}));
+        }
+        if (method === 'DELETE' && robotId) return jsonResponse(await invoke('gears_robots_delete', {id: robotId}));
+      }
+
+      if (assetsMatch) {
+        var filename = decodeURIComponent(assetsMatch[1]);
+        if (method === 'GET') {
+          var bytes = await invoke('gears_assets_get', {filename: filename});
+          return new Response(new Uint8Array(bytes), {status: 200});
+        }
+        if (method === 'PUT') {
+          var arrayBuffer;
+          if (body && typeof body.arrayBuffer === 'function') {
+            arrayBuffer = await body.arrayBuffer();
+          } else if (body instanceof ArrayBuffer) {
+            arrayBuffer = body;
+          } else if (body && body.buffer instanceof ArrayBuffer) {
+            arrayBuffer = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength);
+          } else {
+            arrayBuffer = new ArrayBuffer(0);
+          }
+          var content = Array.from(new Uint8Array(arrayBuffer));
+          return jsonResponse(await invoke('gears_assets_save', {filename: filename, content: content}));
+        }
+      }
+    } catch (err) {
+      var message = err && err.message ? err.message : String(err);
+      console.error('[Gearbot] ' + method + ' ' + path + ' falló:', err);
+      return jsonResponse({error: message}, /no encontrado|not found/i.test(message) ? 404 : 500);
+    }
+
+    throw new Error('Ruta de API no soportada en escritorio: ' + path);
+  }
+
+  // Resolve the assets directory early so stored URLs can be normalized.
+  if (isTauri()) getGearsAssetsDir();
+
   var $ = function (id) { return document.getElementById(id); };
   var canvas = $('editorCanvas');
   var ctx = canvas.getContext('2d');
@@ -1521,7 +1662,7 @@
 
   async function saveMap() {
     var payload = mapPayload();
-    var response = await fetch(API_BASE + '/api/gears/maps/' + encodeURIComponent(payload.metadata.id), {
+    var response = await gearsApi('/api/gears/maps/' + encodeURIComponent(payload.metadata.id), {
       method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
     });
     if (!response.ok) throw new Error(await response.text());
@@ -1532,19 +1673,20 @@
 
   async function refreshMaps() {
     try {
-      var maps = await fetch(API_BASE + '/api/gears/maps').then(function (response) { return response.json(); });
+      var maps = await gearsApi('/api/gears/maps').then(function (response) { return response.json(); });
       $('savedMaps').innerHTML = '';
       maps.forEach(function (map) {
         var row = document.createElement('div');
         row.className = 'saved-map';
         var load = document.createElement('button');
-        load.textContent = map.name;
-        load.onclick = function () { loadMapUrl(map.url); };
+        load.textContent = map.name || (map.metadata && map.metadata.name) || 'Escenario';
+        var mapId = (map.metadata && map.metadata.id) || map.id;
+        load.onclick = function () { loadMapUrl(map.url || gearbotEntityUrl('map', mapId)); };
         var remove = document.createElement('button');
         remove.textContent = 'X';
         remove.className = 'danger';
         remove.onclick = async function () {
-          await fetch(API_BASE + '/api/gears/maps/' + encodeURIComponent(map.id), {method: 'DELETE'});
+          await gearsApi('/api/gears/maps/' + encodeURIComponent(mapId), {method: 'DELETE'});
           refreshMaps();
         };
         row.append(load, remove);
@@ -1554,7 +1696,14 @@
   }
 
   async function loadMapUrl(url) {
-    var payload = await fetch(withCacheBuster(url)).then(function (response) { return response.json(); });
+    var response;
+    if (typeof url === 'string' && url.indexOf('/api/gears/') !== -1) {
+      response = await gearsApi(url.slice(url.indexOf('/api/gears/')));
+    } else {
+      response = await fetch(withCacheBuster(url));
+    }
+    await getGearsAssetsDir();
+    var payload = normalizeGearAssetUrls(await response.json());
     applyPayload(payload);
     toast('Escenario cargado');
   }
@@ -1590,14 +1739,15 @@
 
   async function uploadAsset(file) {
     var filename = safeAssetName(file.name);
-    var response = await fetch(API_BASE + '/api/gears/assets/' + encodeURIComponent(filename), {
+    var response = await gearsApi('/api/gears/assets/' + encodeURIComponent(filename), {
       method: 'PUT', headers: {'Content-Type': file.type || 'application/octet-stream'}, body: file
     });
     if (!response.ok) throw new Error(await response.text());
     var asset = await response.json();
     asset.filename = asset.filename || filename;
     asset.originalName = file.name;
-    asset.url = asset.url || (API_BASE + '/api/gears/assets/' + encodeURIComponent(asset.filename));
+    await getGearsAssetsDir();
+    asset.url = asset.url || gearsAssetUrl(asset.filename);
     return asset;
   }
 
@@ -5181,7 +5331,7 @@
     if (selectedRobotPartId) syncRobotPartFromForm(activePartConnectionBoard);
     syncRobotStateFromForm();
     normalizeCustomPresetRobotParts();
-    var response = await fetch(API_BASE + '/api/gears/robots/admin/' + encodeURIComponent(robotState.id), {
+    var response = await gearsApi('/api/gears/robots/admin/' + encodeURIComponent(robotState.id), {
       method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(robotState)
     });
     if (!response.ok) throw new Error(await response.text());
@@ -5192,7 +5342,7 @@
 
   async function refreshAdminRobots() {
     try {
-      var list = await fetch(API_BASE + '/api/gears/robots/admin').then(function(r) { return r.json(); });
+      var list = await gearsApi('/api/gears/robots/admin').then(function(r) { return r.json(); });
       var container = $('savedAdminRobots');
       if (!container) return;
       container.innerHTML = '';
@@ -5201,14 +5351,14 @@
         row.className = 'saved-map';
 
         var load = document.createElement('button');
-        load.textContent = robot.name;
-        load.onclick = function() { loadRobotUrl(robot.url); };
+        load.textContent = robot.name || 'Robot';
+        load.onclick = function() { loadRobotUrl(robot.url || gearbotEntityUrl('robot', robot.id)); };
 
         var remove = document.createElement('button');
         remove.textContent = 'X';
         remove.className = 'danger';
         remove.onclick = async function() {
-          await fetch(API_BASE + '/api/gears/robots/admin/' + encodeURIComponent(robot.id), {method: 'DELETE'});
+          await gearsApi('/api/gears/robots/admin/' + encodeURIComponent(robot.id), {method: 'DELETE'});
           refreshAdminRobots();
         };
 
@@ -5351,7 +5501,14 @@
 
   async function loadRobotUrl(url) {
     try {
-      var data = await fetch(withCacheBuster(url)).then(function(r) { return r.json(); });
+      var response;
+      if (typeof url === 'string' && url.indexOf('/api/gears/') !== -1) {
+        response = await gearsApi(url.slice(url.indexOf('/api/gears/')));
+      } else {
+        response = await fetch(withCacheBuster(url));
+      }
+      await getGearsAssetsDir();
+      var data = normalizeGearAssetUrls(await response.json());
       robotState = data;
       loadRobotForm();
       if (robotScene) renderRobot3D();
