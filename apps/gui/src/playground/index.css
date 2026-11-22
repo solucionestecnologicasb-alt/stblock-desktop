@@ -6,6 +6,9 @@ body,
     height: 100%;
     margin: 0;
 
+    /* Prevent browser/webview pinch-to-zoom gestures */
+    touch-action: pan-x pan-y;
+
     /* Setting min height/width makes the UI scroll below those sizes */
     min-width: 1024px;
     min-height: 640px; /* Min height to fit sprite/backdrop button */

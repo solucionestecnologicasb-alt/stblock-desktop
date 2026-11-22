@@ -3,6 +3,10 @@ import 'es6-object-assign/auto';
 import 'core-js/fn/array/includes';
 import 'core-js/fn/promise/finally';
 import 'intl'; // For Safari 9
+import {disablePinchZoom} from '../lib/touch-gesture-control';
+
+// Disable touchscreen pinch-to-zoom gestures
+disablePinchZoom();
 
 // Silence development console warnings and browser extension issues
 if (typeof window !== 'undefined') {

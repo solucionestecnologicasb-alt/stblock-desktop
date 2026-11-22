@@ -21,7 +21,8 @@
                                     "center":  true,
                                     "resizable":  true,
                                     "fullscreen":  false,
-                                    "additionalBrowserArgs":  "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-renderer-backgrounding --enable-gpu-rasterization --enable-zero-copy"
+                                    "decorations":  false,
+                                    "additionalBrowserArgs":  "--disable-pinch --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-renderer-backgrounding --enable-gpu-rasterization --enable-zero-copy"
                                 }
                             ],
                 "security":  {

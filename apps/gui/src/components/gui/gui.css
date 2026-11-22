@@ -2,6 +2,27 @@
 @import "../../css/colors.css";
 @import "../../css/z-index.css";
 
+.app-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.app-content-wrapper {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.app-wrapper.has-title-bar .app-content-wrapper {
+    height: calc(100% - 30px);
+}
+
 .page-wrapper {
     height: 100%;
 }

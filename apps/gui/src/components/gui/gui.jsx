@@ -38,6 +38,7 @@ import UpdateModal from '../update-modal/update-modal.jsx';
 import StudentEvaluacionPlayer from '../student-evaluacion/student-evaluacion.jsx';
 import { save } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
+import TitleBar, {isTauriApp} from '../title-bar/title-bar.jsx';
 
 import layout, {STAGE_SIZE_MODES, STAGE_DISPLAY_SIZES} from '../../lib/layout-constants';
 import {resolveStageSize} from '../../lib/screen-utils';
@@ -4354,52 +4355,59 @@ const GUIComponent = props => {
 
     // isPythonEditMode ya está calculado más arriba en el componente
 
-    if (!isPlayerOnly && !classroomState.active && selectedExperience === null && !loading) {
-        return <ExperienceSelector onSelect={experience => {
-            setSelectedExperience(experience);
-            if (experience === 'jr' && isMobileDevice()) setMobileHubOpen(true);
-        }} />;
-    }
-    if (!isPlayerOnly && !classroomState.active && selectedExperience === 'kids') {
-        return (
-            <React.Fragment>
-                <KidsExperience
-                    basePath={basePath}
-                    onExit={() => setSelectedExperience(null)}
-                    onConnectRobot={() => setKidsBluetoothModalOpen(true)}
-                    vm={vm}
-                    bluetoothConnected={bluetoothConnected}
-                    bluetoothPortName={bluetoothPortName}
-                />
-                {kidsBluetoothModalOpen ? (
-                    <BluetoothModal vm={vm} onClose={() => setKidsBluetoothModalOpen(false)} />
-                ) : null}
-            </React.Fragment>
-        );
-    }
+    const isTauri = isTauriApp();
 
-    return isPlayerOnly ? (
-        <StageWrapper
-            isFullScreen={isFullScreen}
-            isRendererSupported={isRendererSupported}
-            isRtl={isRtl}
-            loading={loading}
-            stageSize={STAGE_SIZE_MODES.large}
-            vm={vm}
-        >
-            {alertsVisible ? (
-                <Alerts className={styles.alertsContainer} />
-            ) : null}
-        </StageWrapper>
-    ) : (
-        <Box
-            className={classNames(styles.pageWrapper, {
-                [styles.pythonEditMode]: isPythonEditMode,
-                'is-mobile-app': isMobileDevice()
-            })}
-            dir={isRtl ? 'rtl' : 'ltr'}
-            {...componentProps}
-        >
+    const renderContent = () => {
+        if (!isPlayerOnly && !classroomState.active && selectedExperience === null && !loading) {
+            return (
+                <ExperienceSelector
+                    onSelect={experience => {
+                        setSelectedExperience(experience);
+                        if (experience === 'jr' && isMobileDevice()) setMobileHubOpen(true);
+                    }}
+                />
+            );
+        }
+        if (!isPlayerOnly && !classroomState.active && selectedExperience === 'kids') {
+            return (
+                <React.Fragment>
+                    <KidsExperience
+                        basePath={basePath}
+                        onExit={() => setSelectedExperience(null)}
+                        onConnectRobot={() => setKidsBluetoothModalOpen(true)}
+                        vm={vm}
+                        bluetoothConnected={bluetoothConnected}
+                        bluetoothPortName={bluetoothPortName}
+                    />
+                    {kidsBluetoothModalOpen ? (
+                        <BluetoothModal vm={vm} onClose={() => setKidsBluetoothModalOpen(false)} />
+                    ) : null}
+                </React.Fragment>
+            );
+        }
+
+        return isPlayerOnly ? (
+            <StageWrapper
+                isFullScreen={isFullScreen}
+                isRendererSupported={isRendererSupported}
+                isRtl={isRtl}
+                loading={loading}
+                stageSize={STAGE_SIZE_MODES.large}
+                vm={vm}
+            >
+                {alertsVisible ? (
+                    <Alerts className={styles.alertsContainer} />
+                ) : null}
+            </StageWrapper>
+        ) : (
+            <Box
+                className={classNames(styles.pageWrapper, {
+                    [styles.pythonEditMode]: isPythonEditMode,
+                    'is-mobile-app': isMobileDevice()
+                })}
+                dir={isRtl ? 'rtl' : 'ltr'}
+                {...componentProps}
+            >
             {classroomState.active && classroomState.role === ROLES.CLIENTE && classroomReadOnlyBlocks && (
                 <div className={styles.classroomReadOnlyBanner}>
                     <span className={styles.classroomReadOnlyBannerIcon}>🔒</span>
@@ -5108,6 +5116,20 @@ const GUIComponent = props => {
                 </div>
             )}
         </Box>
+    );
+};
+
+    return (
+        <div
+            className={classNames(styles.appWrapper, {
+                [styles.hasTitleBar]: isTauri
+            })}
+        >
+            {isTauri && <TitleBar projectTitle={projectTitle} />}
+            <div className={styles.appContentWrapper}>
+                {renderContent()}
+            </div>
+        </div>
     );
 };
 

@@ -1,0 +1,124 @@
+.title-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    box-sizing: border-box;
+    height: 30px;
+    width: 100%;
+    background-color: #124a2c;
+    color: #e6f4ea;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    z-index: 10000;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+    flex-shrink: 0;
+    position: relative;
+}
+
+.title-bar-left {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding-left: 10px;
+    height: 100%;
+    pointer-events: none;
+    flex-shrink: 0;
+}
+
+.title-bar-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+    display: block;
+}
+
+.title-bar-brand {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: #ffffff;
+    opacity: 0.95;
+    line-height: 1;
+}
+
+.title-bar-center {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 16px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.72);
+    pointer-events: none;
+}
+
+.title-bar-project-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 480px;
+    display: inline-block;
+    line-height: 1;
+}
+
+.title-bar-controls {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 100%;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.title-bar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 30px;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #ffffff;
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    transition: background-color 0.12s ease, color 0.12s ease;
+    padding: 0;
+    margin: 0;
+}
+
+.title-bar-btn:hover {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.title-bar-btn:active {
+    background-color: rgba(255, 255, 255, 0.28);
+}
+
+.title-bar-btn-close:hover {
+    background-color: #e81123 !important;
+    color: #ffffff !important;
+}
+
+.title-bar-btn-close:active {
+    background-color: #bf0f1d !important;
+    color: #ffffff !important;
+}
+
+.title-bar-btn svg {
+    pointer-events: none;
+    display: block;
+}
