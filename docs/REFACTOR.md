@@ -1,4 +1,4 @@
-# Reorganización de arquitectura (v2)
+# Reorganización de arquitectura
 
 Esta rama recrea sobre `main` el trabajo de refactorización que quedó sin
 fusionar en las ramas antiguas:
