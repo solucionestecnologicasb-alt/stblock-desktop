@@ -2,10 +2,6 @@
     "name":  "stblock",
     "description":  "STBlock - Programacion visual, electronica, robotica y creacion de juegos.",
     "version":  "0.1.65",
-    "workspaces":  [
-                       "scratch-gui",
-                       "scratch-vm"
-                   ],
     "scripts":  {
                     "install:all":  "git submodule update --init --recursive \u0026\u0026 pnpm install \u0026\u0026 pnpm --filter scratch-gui run prepublish \u0026\u0026 pnpm --dir backend install \u0026\u0026 npm --prefix vendor/scratchjr-reborn ci",
                     "start:gui":  "pnpm run prepare:scratchjr-web \u0026\u0026 pnpm --filter scratch-gui start",
