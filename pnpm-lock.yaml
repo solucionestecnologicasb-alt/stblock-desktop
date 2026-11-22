@@ -99,6 +99,9 @@ importers:
       core-js:
         specifier: ^2.5.7
         version: 2.6.12
+      cross-fetch:
+        specifier: ^4.1.0
+        version: 4.1.0
       css-loader:
         specifier: 5.2.7
         version: 5.2.7(webpack@5.107.2)

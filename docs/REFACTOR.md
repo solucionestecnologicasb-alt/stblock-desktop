@@ -84,8 +84,13 @@ Se mantuvieron los nombres de paquete (`scratch-gui`, `scratch-vm`,
 los enlaces del workspace. Se actualizaron las rutas de filesystem, el
 lockfile, Tauri, scripts y documentación.
 
-## Cambios de `chore/toolchain-setup` no aplicados
+## Cambios de `chore/toolchain-setup`
 
+### Aplicados
+- **`cross-fetch`**: agregado a `apps/gui/package.json` ya que `apps/gui/scripts/prepublish.mjs` lo utiliza para descargar los artefactos de Micro:bit.
+- **`pnpm-workspace.yaml`**: se eliminó la directiva residual `chromedriver: set this to true or false`.
+
+### No aplicados
 - **Nix flake / `.envrc` / `setup-linux.sh`**: el proyecto ya se compila y
   ejecuta en Linux con el toolchain del sistema. No aportan nada al flujo
   actual y agregan mantenimiento.
@@ -94,7 +99,6 @@ lockfile, Tauri, scripts y documentación.
   más completa.
 - **Normalización de finales de línea**: el repositorio tiene muy pocos
   archivos de texto con CRLF y el cambio generaría ruido sin beneficio claro.
-- **`cross-fetch`**: la rama lo agregaba pero el código actual no lo usa.
 
 ## Notas
 
