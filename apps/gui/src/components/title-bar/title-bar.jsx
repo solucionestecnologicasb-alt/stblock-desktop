@@ -177,20 +177,6 @@ const TitleBar = ({projectTitle, className}) => {
             onTouchStart={handleTouchStart}
             onDoubleClick={handleDoubleClick}
         >
-            <div className={styles.titleBarLeft}>
-                <img
-                    src="static/favicon.png"
-                    className={styles.titleBarIcon}
-                    alt=""
-                    draggable={false}
-                />
-                <span className={styles.titleBarBrand}>STBlock</span>
-            </div>
-
-            <div className={styles.titleBarCenter} data-tauri-drag-region>
-                <span className={styles.titleBarProjectTitle}>{displayTitle}</span>
-            </div>
-
             <div className={styles.titleBarControls} data-no-drag="true">
                 <button
                     type="button"
