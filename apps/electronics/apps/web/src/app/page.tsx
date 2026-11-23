@@ -10,6 +10,7 @@ import { createLocalId } from "@/lib/localIds";
 import { attachProjectAsset, dedupeProjectAssets, projectAssetFromBytes, sourceFormatForFileName } from "@/lib/projectAssets";
 import { hydrateProjectShapeState, type ImportedMeshResource } from "@/lib/projectShapePersistence";
 import { exportSkfProject, importSkfProject, SKF_CREATED_WITH_VERSION, SKF_MEDIA_TYPE } from "@/lib/skfProject";
+import { disableBrowserPinchZoom } from "@/lib/touchGestureControl";
 import { DEFAULT_SNAP_GRID, DEFAULT_WORKPLANE_WORKSPACE, normalizeSnapGrid, normalizeWorkspaceSettings, workplaneSettingsFingerprint } from "@/lib/workplaneSettings";
 import type { CapDocument, GridSize, ProjectAsset, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
 
@@ -528,6 +529,11 @@ export default function Home() {
       setSharedProjectsLoading(false);
     }
   }, []);
+
+  // El visor 3D usa gestos de dos dedos (pinch/pan) mediante pointer events.
+  // Cancelamos el zoom de página nativo del navegador para que no compita con
+  // OrbitControls dentro del iframe de STBlock (WebKitGTK / WebView2).
+  useEffect(() => disableBrowserPinchZoom(), []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

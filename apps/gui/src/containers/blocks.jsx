@@ -523,6 +523,7 @@ class Blocks extends React.Component {
         const toolbox = this.workspace.toolbox_;
         if (flyout && toolbox) {
             const self = this;
+            this.installCategoryTouchHandling(toolbox);
             const origSetSelected = toolbox.setSelectedItem.bind(toolbox);
             toolbox.setSelectedItem = (item, shouldScroll) => {
                 if (item && item.id_ === 'advancedBlocksToggle') {
@@ -1681,6 +1682,135 @@ class Blocks extends React.Component {
                 }
             }
         });
+    }
+    /*
+     * scratch-blocks only listens for `mouseup` (plus `touchend` when the
+     * runtime reports touch support) on category items. In WebKitGTK the
+     * touch listeners exist but the tap can also produce a second, emulated
+     * activation, and the custom "toggle off selected category" logic turns
+     * that into a select-then-deselect. The result: tapping a coloured circle
+     * appears to do nothing. Handle touch/pen gestures here, stop the native
+     * handlers from running twice, and always select on touch.
+     */
+    installCategoryTouchHandling (toolbox) {
+        const container = this.blocks ? this.blocks.querySelector('.blocklyToolboxDiv') : null;
+        if (!container || container.__stblockCategoryTouchHandling) return;
+        container.__stblockCategoryTouchHandling = true;
+
+        const TOUCH_TAP_MOVE_LIMIT_SQUARED = 12 * 12;
+        const TOUCH_DEDUPE_MS = 600;
+        let start = null;
+
+        const findCategoryItem = target => {
+            let node = target;
+            while (node && node !== container) {
+                if (node.classList && node.classList.contains('scratchCategoryMenuItem')) {
+                    return node;
+                }
+                node = node.parentNode;
+            }
+            return null;
+        };
+
+        const findCategory = item => {
+            if (!item || !toolbox.categoryMenu_ || !toolbox.categoryMenu_.categories_) return null;
+            return toolbox.categoryMenu_.categories_.find(category => category.item_ === item) || null;
+        };
+
+        const isMousePointer = event => event.pointerType === 'mouse';
+
+        const recordTouchStart = event => {
+            if (event.type === 'pointerdown' && isMousePointer(event)) {
+                start = null;
+                return;
+            }
+            if (event.touches && event.touches.length > 1) {
+                start = null;
+                return;
+            }
+            const item = findCategoryItem(event.target);
+            if (!item) {
+                start = null;
+                return;
+            }
+            const point = (event.touches && event.touches[0]) || event;
+            start = {item: item, x: point.clientX, y: point.clientY};
+        };
+
+        const activateCategory = event => {
+            if (event.type === 'pointerup' && isMousePointer(event)) return;
+
+            const item = findCategoryItem(event.target);
+            const category = findCategory(item);
+
+            // A tap can arrive as pointerup + touchend (+ emulated mouseup).
+            // Only select once, but always stop native handlers on duplicates.
+            const now = Date.now();
+            if (category && this._lastCategoryTouchId === category.id_ &&
+                (now - this._lastCategoryTouchTime) < TOUCH_DEDUPE_MS) {
+                if (event.cancelable) event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
+            // Require a valid single-finger start on the same item. This rejects
+            // multi-touch gestures and taps which began outside the category.
+            if (!start || !item || !category) return;
+            if (event.touches && event.touches.length > 0) return;
+            if (event.changedTouches && event.changedTouches.length > 1) {
+                start = null;
+                return;
+            }
+
+            const point = (event.changedTouches && event.changedTouches[0]) || event;
+            const dx = point.clientX - start.x;
+            const dy = point.clientY - start.y;
+            const isTap = ((dx * dx) + (dy * dy)) <= TOUCH_TAP_MOVE_LIMIT_SQUARED;
+            const sameItem = start.item === item;
+            start = null;
+            if (!isTap || !sameItem) return;
+
+            this._lastCategoryTouchId = category.id_;
+            this._lastCategoryTouchTime = now;
+
+            // Prevent scratch-blocks from also running its mouseup/touchend
+            // handler for this same gesture.
+            if (event.cancelable) event.preventDefault();
+            event.stopPropagation();
+
+            // Touch should always open the category, never toggle it closed.
+            const wasRestoring = this._restoringToolboxSelection;
+            this._restoringToolboxSelection = true;
+            try {
+                toolbox.setSelectedItem(category, false);
+            } finally {
+                this._restoringToolboxSelection = wasRestoring;
+            }
+        };
+
+        const suppressEmulatedMouseUp = event => {
+            if (!this._lastCategoryTouchTime) return;
+            if ((Date.now() - this._lastCategoryTouchTime) >= TOUCH_DEDUPE_MS) return;
+            const category = findCategory(findCategoryItem(event.target));
+            if (category && category.id_ === this._lastCategoryTouchId) {
+                if (event.cancelable) event.preventDefault();
+                event.stopPropagation();
+            }
+        };
+
+        container.addEventListener('pointerdown', recordTouchStart, true);
+        container.addEventListener('touchstart', recordTouchStart, {capture: true, passive: true});
+        container.addEventListener('pointerup', activateCategory, true);
+        container.addEventListener('touchend', activateCategory, {capture: true, passive: false});
+        container.addEventListener('pointercancel', () => {
+            start = null;
+        }, true);
+        container.addEventListener('touchcancel', () => {
+            start = null;
+        }, {capture: true});
+        // If the browser still emits a compatibility mouse event after a touch,
+        // keep it from reaching scratch-blocks and toggling the category off.
+        container.addEventListener('mouseup', suppressEmulatedMouseUp, true);
     }
     animateFlyoutBlocks (flyout) {
         if (this.props.reducedMotion) return;

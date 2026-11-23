@@ -4543,6 +4543,9 @@ html[data-theme="dark"] .sketch-vector-summary {
   inset: 0;
   overflow: hidden;
   background: #f8fbfc;
+  /* El visor gestiona el pinch con pointer events (OrbitControls); evita que
+     el navegador haga zoom de página también sobre los overlays del visor. */
+  touch-action: none;
 }
 
 .workplane-plane::before {
