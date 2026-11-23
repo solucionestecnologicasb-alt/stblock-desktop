@@ -21,6 +21,12 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 const ScratchWebpackConfigBuilder = require('scratch-webpack-configuration');
 
+// `webpack serve` (npm start) sirve `static/` directamente desde disco mediante
+// `devServer.static`, así que copiarlo a memfs con CopyWebpackPlugin es
+// redundante y muy costoso: `static/` pesa ~1.1 GB (narración y assets de Kids)
+// y webpack lo mantenía entero en memoria. En builds de producción sí se copia.
+const isDevServer = process.argv.includes('serve');
+
 // const STATIC_PATH = process.env.STATIC_PATH || '/static';
 
 const commonHtmlWebpackPluginOptions = {
@@ -229,16 +235,13 @@ const buildConfig = baseConfig.clone()
     }))
     .addPlugin(new CopyWebpackPlugin({
         patterns: [
-            {
+            // En dev server no copiamos `static/`: devServer.static lo sirve desde
+            // disco (ver más abajo), con lo que se ahorra ~1.1 GB de memfs y los
+            // cambios en static/ se ven al recargar sin reiniciar webpack.
+            ...(isDevServer ? [] : [{
                 from: 'static',
-                to: 'static',
-                // En `webpack serve`, CopyWebpackPlugin copia static/ a memfs una
-                // sola vez al arrancar, de modo que los cambios posteriores en
-                // static/scratchjr (npm run prepare:scratchjr-web) nunca llegaban
-                // al navegador. Excluimos scratchjr del copiado en dev para que
-                // `devServer.static` lo sirva directamente desde disco.
-                globOptions: process.argv.includes('serve') ? {ignore: ['**/scratchjr/**']} : undefined
-            },
+                to: 'static'
+            }]),
             {
                 from: 'extensions/**',
                 to: 'static',
